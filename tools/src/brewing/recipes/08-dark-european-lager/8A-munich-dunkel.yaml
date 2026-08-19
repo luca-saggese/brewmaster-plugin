@@ -1,0 +1,99 @@
+nome: "Munich Dunkel"
+stile: "Munich Dunkel"
+codice_bjcp: "8A"
+descrizione: |
+  Dunkel maltata e tostata con base Pilsner e note di crystal/chocolate. Lagering
+  lungo per un profilo pulito.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/munich-dunkel-2/"
+  autore: "Keith Yager"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.053
+  fg: 1.013
+  abv_percent: 5.3
+  ibu: 23
+  ebc: 32
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "German Pilsner malt"
+    kg: 4.31
+    percent: 84.5
+    note: "Malto base"
+  - malto: "German crystal malt (40°L)"
+    kg: 0.45
+    percent: 8.8
+    note: "Caramello"
+  - malto: "Caramel Vienne malt"
+    kg: 0.23
+    percent: 4.5
+    note: "Caramello"
+  - malto: "Chocolate malt"
+    kg: 0.11
+    percent: 2.2
+    note: "Tostatura"
+
+luppolatura:
+  - varieta: "Hallertau Mittelfrüh"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Hallertau Mittelfrüh"
+    grammi: 14
+    tempo_min: 20
+    uso: boil
+    note: "Sapore"
+  - varieta: "Saaz"
+    grammi: 7
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 2206 / Wyeast 2308 / White Labs WLP920 / Mangrove Jack's M76"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "13°C"
+  note: "Lievito lager pulito"
+
+mash:
+  temperatura_c: 65
+  durata_min: 75
+  spessore_l_kg: 3.0
+  note: "Step: 50°C/30, 69°C/45, mash-out 76°C"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 13
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "Lagering 60 giorni"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Lagering lungo per profilo pulito"
+  - "Chocolate solo per tostatura leggera"
+
+alternative:
+  - descrizione: "Versione più tostata"
+    cambiamenti: "Aumentare chocolate malt"
+    impatto: "Note tostate più decise"

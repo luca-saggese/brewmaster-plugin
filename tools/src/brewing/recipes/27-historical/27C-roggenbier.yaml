@@ -1,0 +1,98 @@
+nome: "JC's Roggenbier"
+stile: "Roggenbier"
+codice_bjcp: "27C"
+descrizione: |
+  Roggenbier equilibrata sul modello della Schierlinger originale, con segale
+  speziata, corpo da weizen e note di banana/chiodi di garofano dal lievito
+  weizen; finitura secca e pulita.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/jcs-roggenbier/"
+  autore: "Jamil Zainasheff"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.054
+  fg: 1.014
+  abv_percent: 5.3
+  ibu: 17
+  ebc: 32
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Malto di segale (rye malt, 3.5°L)"
+    kg: 2.72
+    percent: 47.8
+    note: "Segale"
+  - malto: "Pilsner malt (1.8°L)"
+    kg: 1.25
+    percent: 22.0
+    note: "Malto base"
+  - malto: "Munich malt (8°L)"
+    kg: 1.25
+    percent: 22.0
+    note: "Corpo maltato"
+  - malto: "CaraMunich (60°L)"
+    kg: 0.41
+    percent: 7.2
+    note: "Caramello"
+  - malto: "Carafa Special II (430°L, huskless)"
+    kg: 0.06
+    percent: 1.0
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Tettnang"
+    grammi: 24
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Czech Saaz"
+    grammi: 7
+    tempo_min: 15
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 3068 (Weihenstephan Weizen) / White Labs WLP300"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "17°C"
+  note: "Lievito weizen"
+
+mash:
+  temperatura_c: 68
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion fino a conversione completa, mashout 76°C"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 17
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.8
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Segale speziata"
+  - "Lievito weizen per banana/chiodi di garofano"
+
+alternative:
+  - descrizione: "Versione più speziata"
+    cambiamenti: "Aumentare la segale a 55%"
+    impatto: "Speziatura più marcata"

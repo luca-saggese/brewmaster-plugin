@@ -1,0 +1,93 @@
+nome: "Gordon Strong's Scottish Export"
+stile: "Scottish Export"
+codice_bjcp: "14C"
+descrizione: |
+  Scottish export maltato con Golden Promise, luppolatura moderata e lievito
+  scozzese per un profilo pulito e rotondo.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-scottish-export/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.042
+  fg: 1.011
+  abv_percent: 4.1
+  ibu: 22
+  ebc: 32
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Golden Promise"
+    kg: 3.5
+    percent: 87
+    note: "Malto base"
+  - malto: "Torrified wheat"
+    kg: 0.227
+    percent: 6
+    note: "Corpo"
+  - malto: "Dark crystal 60-80L"
+    kg: 0.227
+    percent: 6
+    note: "Caramello"
+  - malto: "Roasted barley"
+    kg: 0.085
+    percent: 2
+    note: "Colore"
+
+luppolatura:
+  - varieta: "British Golding"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "British Golding"
+    grammi: 14
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 1728 / White Labs WLP028 / SafAle S-04"
+  forma: liquido
+  attenuazione_percent: 74
+  temperatura_fermentazione: "15°C"
+  note: "Lievito scozzese"
+
+mash:
+  temperatura_c: 70
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 15
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 7
+
+note_critiche:
+  - "Golden Promise come base"
+  - "Luppolatura moderata"
+
+alternative:
+  - descrizione: "Versione più corposa"
+    cambiamenti: "Mash a 72°C"
+    impatto: "Corpo più pieno"

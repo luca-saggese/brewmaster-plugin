@@ -1,0 +1,90 @@
+nome: "Pizza Port Brewing Co.'s Mo' Betta Bretta clone"
+stile: "Brett Beer"
+codice_bjcp: "28A"
+descrizione: |
+  Golden ale fermentata al 100% con Brettanomyces, pulita e funky, con corpo da
+  fiocchi d'avena e bassa amarezza (12 IBU) che lascia spazio al carattere del
+  lievito selvatico.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/pizza-port-brewing-co-s-mo-betta-bretta-clone/"
+  autore: "Tomme Arthur (Pizza Port)"
+  verifica: "Clone commerciale pubblicato da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.060
+  fg: 1.011
+  abv_percent: 6.3
+  ibu: 12
+  ebc: 14
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "2-row pale malt"
+    kg: 4.44
+    percent: 76.3
+    note: "Malto base"
+  - malto: "Munich malt (10°L)"
+    kg: 0.49
+    percent: 8.4
+    note: "Corpo maltato"
+  - malto: "Carapils malt"
+    kg: 0.44
+    percent: 7.6
+    note: "Schiuma e corpo"
+  - malto: "Flaked oats"
+    kg: 0.44
+    percent: 7.6
+    note: "Corpo morbido"
+
+luppolatura:
+  - varieta: "Magnum"
+    grammi: 5.7
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "Brettanomyces anomalus (da bottiglia) / White Labs WLP645 (B. claussenii)"
+  forma: liquido
+  attenuazione_percent: 80
+  temperatura_fermentazione: "20°C"
+  note: "Starter da ~4L, condizionamento almeno 4 settimane"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+  note: "Condizionamento almeno 4 settimane"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "100% Brettanomyces"
+  - "Bassa amarezza per lasciare spazio al lievito"
+
+alternative:
+  - descrizione: "Versione più funky"
+    cambiamenti: "Aumentare il tempo di condizionamento"
+    impatto: "Carattere Brett più marcato"

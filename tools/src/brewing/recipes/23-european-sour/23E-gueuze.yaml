@@ -1,0 +1,82 @@
+nome: "Gilligan's Gueuze (Blended Lambic)"
+stile: "Gueuze"
+codice_bjcp: "23E"
+descrizione: |
+  Gueuze ottenuta da mash turbido a step e blend di lambic di tre annate diverse.
+  Luppoli invecchiati per conservazione, acidità e complessità da fermentazione mista.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gilligans-gueuze-blended-lambic/"
+  autore: "BYO Staff"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.052
+  fg: 1.003
+  abv_percent: 5.0
+  ibu: 0
+  ebc: 8
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Dingemans Pilsen malt"
+    kg: 3.1
+    percent: 64.6
+    note: "Malto base"
+  - malto: "Unmalted wheat"
+    kg: 1.7
+    percent: 35.4
+    note: "Frumento non maltato"
+
+luppolatura:
+  - varieta: "Aged (debittered) hops"
+    grammi: 84
+    tempo_min: 90
+    uso: boil
+    note: "Luppoli invecchiati per conservazione"
+
+lievito:
+  ceppo: "Wyeast 3278 (Lambic Blend, lieviti + batteri)"
+  forma: liquido
+  attenuazione_percent: 90
+  temperatura_fermentazione: "21°C"
+  note: "Condizionamento 21-27°C per 3 mesi, blend di 3 annate"
+
+mash:
+  temperatura_c: 65
+  durata_min: 85
+  spessore_l_kg: 3.0
+  note: "Step: 45°C/10, 55°C/15, 65°C/45, 72°C/15, mashout 76°C"
+
+bollitura:
+  durata_min: 120
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 30
+  temperatura_c: 21
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+  note: "Blend di 3 annate di lambic"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 3.0
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Mash turbido a step"
+  - "Blend di 3 annate"
+  - "Luppoli invecchiati per conservazione"
+
+alternative:
+  - descrizione: "Versione più acida"
+    cambiamenti: "Aumentare la quota di lambic vecchio"
+    impatto: "Acidità più marcata"

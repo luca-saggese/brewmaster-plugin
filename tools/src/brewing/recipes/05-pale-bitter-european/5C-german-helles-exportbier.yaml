@@ -1,0 +1,99 @@
+nome: "Gordon Strong's German Helles Exportbier"
+stile: "German Helles Exportbier"
+codice_bjcp: "5C"
+descrizione: |
+  Exportbier tedesco più corposo e maltato di una helles, con luppolatura nobile
+  Tettnanger/Spalt e lunga lagering.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-german-helles-exportbier/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.053
+  fg: 1.011
+  abv_percent: 5.5
+  ibu: 27
+  ebc: 10
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner malt"
+    kg: 4.3
+    percent: 88
+    note: "Malto base"
+  - malto: "Vienna malt"
+    kg: 0.34
+    percent: 7
+    note: "Corpo maltato"
+  - malto: "Munich malt"
+    kg: 0.17
+    percent: 3
+    note: "Corpo maltato"
+  - malto: "Caramunich III (55°L)"
+    kg: 0.09
+    percent: 2
+    note: "Caramello"
+
+luppolatura:
+  - varieta: "Tettnanger"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Tettnanger"
+    grammi: 28
+    tempo_min: 15
+    uso: boil
+    note: "Aroma"
+  - varieta: "Spalt"
+    grammi: 28
+    tempo_min: 2
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 2042 (Danish) / White Labs WLP830 / SafLager W-34/70"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "11°C"
+  note: "Lievito lager"
+
+mash:
+  temperatura_c: 68
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 11
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "Lunga lagering"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Più corposo di una helles"
+  - "Luppoli nobili Tettnanger/Spalt"
+
+alternative:
+  - descrizione: "Versione più leggera"
+    cambiamenti: "Ridurre OG a 1.048"
+    impatto: "Meno corposa"

@@ -1,0 +1,88 @@
+nome: "Traditional Bock"
+stile: "Dunkels Bock"
+codice_bjcp: "6C"
+descrizione: |
+  Bock scuro tradizionale dominato da Munich malt (60%) per ricchezza maltata,
+  con bassa luppolatura e bilanciamento verso il dolce.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/articles/traditional-bock-beer-style-profile/"
+  autore: "Jamil Zainasheff"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.070
+  fg: 1.018
+  abv_percent: 7.0
+  ibu: 23
+  ebc: 33
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Continental Pilsner malt (2°L)"
+    kg: 2.0
+    percent: 30
+    note: "Malto base"
+  - malto: "Munich malt (8°L)"
+    kg: 4.0
+    percent: 60
+    note: "Malto dominante"
+  - malto: "Weyermann Caramunich III (57°L)"
+    kg: 0.4
+    percent: 6
+    note: "Caramello"
+  - malto: "Melanoidin malt (28°L)"
+    kg: 0.25
+    percent: 4
+    note: "Profondità maltata"
+
+luppolatura:
+  - varieta: "Magnum"
+    grammi: 11
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "White Labs WLP833 (German Bock) / Wyeast 2206 (Bavarian)"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "10°C"
+  note: "Lievito lager"
+
+mash:
+  temperatura_c: 68
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 10
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Munich 60% per ricchezza maltata"
+  - "Bilanciamento verso il dolce"
+
+alternative:
+  - descrizione: "Versione più secca"
+    cambiamenti: "Aumentare IBU a 28"
+    impatto: "Più bilanciata"

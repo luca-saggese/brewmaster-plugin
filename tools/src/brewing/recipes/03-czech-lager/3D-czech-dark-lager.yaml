@@ -1,0 +1,99 @@
+nome: "Czech Dark Lager"
+stile: "Czech Dark Lager"
+codice_bjcp: "3D"
+descrizione: |
+  Dark lager ceco con malti scuri decorticati per colore senza astringenza;
+  luppolatura Saaz e lunga lagering.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/czech-dark-lager/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.052
+  fg: 1.014
+  abv_percent: 5.0
+  ibu: 30
+  ebc: 53
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Czech Pilsner malt"
+    kg: 2.6
+    percent: 51
+    note: "Malto base"
+  - malto: "Czech Munich-type malt"
+    kg: 1.5
+    percent: 30
+    note: "Corpo maltato"
+  - malto: "Czech crystal malt (60-70°L)"
+    kg: 0.75
+    percent: 15
+    note: "Caramello"
+  - malto: "Czech debittered black malt"
+    kg: 0.23
+    percent: 4
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Czech Saaz"
+    grammi: 28
+    tempo_min: 0
+    uso: first_wort
+    note: "Amaro"
+  - varieta: "Czech Saaz"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Czech Saaz"
+    grammi: 28
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "White Labs WLP802 / Wyeast 2000-PC (Budvar) / Mangrove Jack's M84"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "10°C"
+  note: "Lievito lager ceco"
+
+mash:
+  temperatura_c: 66
+  durata_min: 90
+  spessore_l_kg: 3.0
+  note: "Doppia decozione: 37°C/10, 53°C/15, 63°C, 73°C, mashout 77°C"
+
+bollitura:
+  durata_min: 90
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 10
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "Lunga lagering"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.6
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Malti scuri decorticati per colore senza astringenza"
+  - "Lunga lagering"
+
+alternative:
+  - descrizione: "Versione più tostata"
+    cambiamenti: "Aumentare black malt"
+    impatto: "Tostatura più decisa"

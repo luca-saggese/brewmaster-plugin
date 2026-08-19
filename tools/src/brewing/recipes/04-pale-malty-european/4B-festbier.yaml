@@ -1,0 +1,86 @@
+nome: "Festbier Is the Best Bier"
+stile: "Festbier"
+codice_bjcp: "4B"
+descrizione: |
+  Festbier tradizionale da bere al litro durante l'Oktoberfest. Grist 50/50
+  Pilsner-Munich per un profilo maltato ma asciutto.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/festbier-is-the-best-bier/"
+  autore: "Franz D. Hofer"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.057
+  fg: 1.012
+  abv_percent: 5.9
+  ibu: 28
+  ebc: 14
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner malt"
+    kg: 2.72
+    percent: 50
+    note: "Malto base"
+  - malto: "German Munich I malt"
+    kg: 2.72
+    percent: 50
+    note: "Corpo maltato"
+
+luppolatura:
+  - varieta: "Perle"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Hallertauer Tradition"
+    grammi: 14
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "White Labs WLP830 / Wyeast 2124 / SafLager W-34/70"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "9°C"
+  note: "Lievito lager pulito"
+
+mash:
+  temperatura_c: 66
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Step: 60-62°C/30 (beta), 70-72°C/30 (alpha)"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 9
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "Lagering 0°C per 4 settimane"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.6
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Grist 50/50 Pilsner-Munich"
+  - "Mash step per corpo maltato ma asciutto"
+
+alternative:
+  - descrizione: "Versione più maltata"
+    cambiamenti: "Aumentare Munich a 60%"
+    impatto: "Corpo più pieno"

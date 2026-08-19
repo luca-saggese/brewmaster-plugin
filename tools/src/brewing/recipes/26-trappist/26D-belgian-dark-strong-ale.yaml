@@ -1,0 +1,118 @@
+nome: "Gordon Strong's Belgian Dark Strong Ale"
+stile: "Belgian Dark Strong Ale"
+codice_bjcp: "26D"
+descrizione: |
+  Quad scura, ricca e complessa, con frutta secca, caramello scuro e zucchero
+  candito, alta gradazione e finale secco.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/articles/belgian-dark-strong-ale-a-quad-by-any-other-name/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.091
+  fg: 1.015
+  abv_percent: 10.2
+  ibu: 24
+  ebc: 52
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner malt"
+    kg: 3.18
+    percent: 31
+    note: "Malto base"
+  - malto: "Pale ale malt"
+    kg: 1.36
+    percent: 13
+    note: "Malto base"
+  - malto: "Munich malt"
+    kg: 0.91
+    percent: 9
+    note: "Corpo maltato"
+  - malto: "Dark Munich malt"
+    kg: 0.91
+    percent: 9
+    note: "Profondità"
+  - malto: "Aromatic malt"
+    kg: 0.45
+    percent: 4
+    note: "Aroma maltato"
+  - malto: "Crystal malt (40°L)"
+    kg: 0.45
+    percent: 4
+    note: "Caramello"
+  - malto: "Chocolate malt"
+    kg: 0.06
+    percent: 1
+    note: "Colore"
+  - malto: "Dark candi syrup"
+    kg: 0.45
+    percent: 4
+    note: "Caramello scuro"
+  - malto: "Amber (brown) sugar"
+    kg: 0.45
+    percent: 4
+    note: "Attenuazione"
+
+luppolatura:
+  - varieta: "Saaz"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Styrian Goldings"
+    grammi: 28
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+  - varieta: "Saaz"
+    grammi: 14
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 3787 (Trappist High Gravity) / WLP500 / LalBrew Abbaye"
+  forma: liquido
+  attenuazione_percent: 82
+  temperatura_fermentazione: "18°C"
+  note: "Lievito trappista, free rise"
+
+mash:
+  temperatura_c: 66
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Step: 62°C/45, 70°C/15"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 18
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.6
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Zucchero candito per caramello scuro e attenuazione"
+  - "Alta gradazione, pitch rate elevato"
+
+alternative:
+  - descrizione: "Versione meno alcolica"
+    cambiamenti: "Ridurre OG a 1.080"
+    impatto: "Meno alcolica"

@@ -1,0 +1,103 @@
+nome: "Irish Extra Stout (Homebrew Example)"
+stile: "Irish Extra Stout"
+codice_bjcp: "15C"
+descrizione: |
+  Stout nero ispirato alla O'Hara's Leann Folláin di Carlow Brewing, con un'alta
+  percentuale di chocolate malt (13.7%) al posto di roasted barley per un profilo
+  di tostatura profonda. Corpo medio-pieno dato dal flaked barley.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/articles/irish-extra-stout/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.059
+  fg: 1.014
+  abv_percent: 6.0
+  ibu: 40
+  ebc: 98
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "UK Golden Promise"
+    kg: 3.63
+    percent: 62.7
+    note: "Malto base"
+  - malto: "Flaked barley"
+    kg: 0.91
+    percent: 15.7
+    note: "Corpo"
+  - malto: "UK chocolate malt (425°L)"
+    kg: 0.79
+    percent: 13.7
+    note: "Tostatura profonda"
+  - malto: "Torrified wheat"
+    kg: 0.23
+    percent: 3.9
+    note: "Corpo"
+  - malto: "UK brown malt"
+    kg: 0.23
+    percent: 3.9
+    note: "Tostatura"
+
+luppolatura:
+  - varieta: "UK Northdown (8% AA)"
+    grammi: 21
+    tempo_min: 90
+    uso: boil
+    note: "Amaro"
+  - varieta: "UK Fuggle (4.5% AA)"
+    grammi: 28
+    tempo_min: 30
+    uso: boil
+    note: "Aroma"
+  - varieta: "UK Fuggle"
+    grammi: 14
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 1084 (Irish Ale) / White Labs WLP004 (Irish Ale)"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale irlandese"
+
+mash:
+  temperatura_c: 66
+  durata_min: 90
+  spessore_l_kg: 3.0
+  note: "64°C/60, poi 68°C/30, mashout 76°C"
+
+bollitura:
+  durata_min: 90
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.4
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Chocolate malt al posto di roasted barley per tostatura profonda"
+  - "Flaked barley per corpo medio-pieno"
+
+alternative:
+  - descrizione: "Versione più secca"
+    cambiamenti: "Mash a 64°C"
+    impatto: "Finale più asciutto"

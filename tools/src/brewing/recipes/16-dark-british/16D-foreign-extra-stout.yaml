@@ -1,0 +1,84 @@
+nome: "Guinness Foreign Extra Stout clone"
+stile: "Foreign Extra Stout"
+codice_bjcp: "16D"
+descrizione: |
+  Clone della Guinness FES, robusto e tostato con amaro deciso e corpo pieno da
+  fiocchi d'orzo.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/guinness-foreign-extra-stout-clone/"
+  autore: "BYO Staff"
+  verifica: "Clone commerciale pubblicato da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.075
+  fg: 1.021
+  abv_percent: 7.5
+  ibu: 40
+  ebc: 79
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pale ale malt"
+    kg: 5.7
+    percent: 79
+    note: "Malto base"
+  - malto: "Flaked barley"
+    kg: 1.0
+    percent: 14
+    note: "Corpo"
+  - malto: "Roasted barley 500L"
+    kg: 0.5
+    percent: 7
+    note: "Tostatura"
+
+luppolatura:
+  - varieta: "Challenger"
+    grammi: 48
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "Wyeast 1084 / White Labs WLP004 (Irish Ale)"
+  forma: liquido
+  attenuazione_percent: 74
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale irlandese"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.4
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Fiocchi d'orzo per corpo pieno"
+  - "Amaro deciso"
+
+alternative:
+  - descrizione: "Versione più secca"
+    cambiamenti: "Mash a 64°C"
+    impatto: "Finale più asciutto"

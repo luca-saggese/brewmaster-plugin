@@ -1,0 +1,111 @@
+nome: "Czech Amber Lager"
+stile: "Czech Amber Lager"
+codice_bjcp: "3C"
+descrizione: |
+  Amber lager ceco moderno a bassa gravità, bilanciato verso l'amaro con
+  luppolatura Saaz in tarda bollitura; doppia decozione per ricchezza maltata.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/articles/czech-amber-lager/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.045
+  fg: 1.013
+  abv_percent: 4.2
+  ibu: 24
+  ebc: 24
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "German/Czech Pilsner malt"
+    kg: 1.8
+    percent: 43
+    note: "Malto base"
+  - malto: "German Vienna malt"
+    kg: 1.6
+    percent: 38
+    note: "Corpo maltato"
+  - malto: "German Munich malt (6°L)"
+    kg: 0.34
+    percent: 8
+    note: "Corpo maltato"
+  - malto: "Weyermann Caramunich II (45°L)"
+    kg: 0.23
+    percent: 5
+    note: "Caramello"
+  - malto: "Weyermann Carared (20°L)"
+    kg: 0.17
+    percent: 4
+    note: "Colore rosso"
+  - malto: "Weyermann Carafa Special II (430°L)"
+    kg: 0.06
+    percent: 1
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Czech Saaz"
+    grammi: 21
+    tempo_min: 0
+    uso: first_wort
+    note: "Amaro"
+  - varieta: "Czech Saaz"
+    grammi: 28
+    tempo_min: 30
+    uso: boil
+    note: "Amaro"
+  - varieta: "Czech Saaz"
+    grammi: 21
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+  - varieta: "Czech Saaz"
+    grammi: 28
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "White Labs WLP802 (Czech Budejovice) / Wyeast 2278 (Czech Pils)"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "9°C"
+  note: "Lievito lager ceco"
+
+mash:
+  temperatura_c: 66
+  durata_min: 90
+  spessore_l_kg: 3.0
+  note: "Doppia decozione: 55°C/10, 63°C, 70°C, mashout 77°C"
+
+bollitura:
+  durata_min: 90
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 9
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.6
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Doppia decozione per ricchezza maltata"
+  - "Luppolatura Saaz in tarda bollitura"
+
+alternative:
+  - descrizione: "Versione più maltata"
+    cambiamenti: "Aumentare Munich"
+    impatto: "Corpo più pieno"

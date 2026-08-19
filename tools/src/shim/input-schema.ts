@@ -1,0 +1,38 @@
+/**
+ * Same JSON Schema rendering rule agent-core-v2 uses for tool parameters
+ * (`io: 'input'`, closed objects) — duplicated here so the ported brewing
+ * tools compile unchanged outside the agent-core-v2 workspace.
+ */
+
+import { z } from 'zod';
+
+export function toInputJsonSchema(schema: z.ZodType): Record<string, unknown> {
+  const jsonSchema = z.toJSONSchema(schema, {
+    target: 'draft-7',
+    io: 'input',
+  });
+  closeObjectNodes(jsonSchema);
+  // The MCP host validates every tool inputSchema as a JSON object schema and
+  // rejects roots without `type: "object"`. zod renders a `discriminatedUnion`
+  // as a bare `{ "oneOf": [...] }` with no root type, so force the root type
+  // through when every branch is an object.
+  if ((jsonSchema['oneOf'] !== undefined || jsonSchema['anyOf'] !== undefined) && jsonSchema['type'] === undefined) {
+    jsonSchema['type'] = 'object';
+  }
+  return jsonSchema;
+}
+
+function closeObjectNodes(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) closeObjectNodes(item);
+    return;
+  }
+  if (typeof value !== 'object' || value === null) return;
+  const node = value as Record<string, unknown>;
+  if (node['type'] === 'object' && node['additionalProperties'] === undefined) {
+    node['additionalProperties'] = false;
+  }
+  for (const child of Object.values(node)) {
+    closeObjectNodes(child);
+  }
+}

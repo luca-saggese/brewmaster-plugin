@@ -1,0 +1,94 @@
+nome: "Ordinary Bitter (Jamil Zainasheff)"
+stile: "Ordinary Bitter"
+codice_bjcp: "11A"
+descrizione: |
+  Bitter inglese da cask, bassa gradazione e carbonazione, con luppolo EKG e
+  lievito inglese pulito.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/ordinary-bitter-2/"
+  autore: "Jamil Zainasheff"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.038
+  fg: 1.011
+  abv_percent: 3.5
+  ibu: 30
+  ebc: 22
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "English pale ale malt"
+    kg: 3.2
+    percent: 90
+    note: "Malto base"
+  - malto: "Crystal 120L"
+    kg: 0.23
+    percent: 6.5
+    note: "Caramello"
+  - malto: "Special Roast 50L"
+    kg: 0.113
+    percent: 3
+    note: "Tostatura"
+
+luppolatura:
+  - varieta: "EKG"
+    grammi: 33
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "EKG"
+    grammi: 14
+    tempo_min: 30
+    uso: boil
+    note: "Aroma"
+  - varieta: "EKG"
+    grammi: 14
+    tempo_min: 1
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "White Labs WLP002 / Wyeast 1968 / Lallemand London ESB"
+  forma: liquido
+  attenuazione_percent: 74
+  temperatura_fermentazione: "19°C"
+  note: "Lievito ale inglese"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 19
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.2
+  temperatura_servizio_c: 8
+
+note_critiche:
+  - "Bassa gradazione e carbonazione (cask)"
+  - "Luppolo EKG"
+
+alternative:
+  - descrizione: "Versione più corposa"
+    cambiamenti: "Mash a 69°C"
+    impatto: "Corpo più pieno"

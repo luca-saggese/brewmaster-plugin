@@ -1,0 +1,102 @@
+nome: "Peachtree IPA"
+stile: "American IPA"
+codice_bjcp: "21A"
+descrizione: |
+  IPA americana semplice e premiata (1° posto War of the Worts), con base maltata
+  pulita e luppolatura Nugget/Simcoe/Amarillo/Citra per aroma intenso.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/articles/awardwinning-ipa-recipes/"
+  autore: "Josh Weikert"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Vincitrice 1° posto War of the Worts (dichiarato dalla fonte)."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.063
+  fg: 1.012
+  abv_percent: 6.7
+  ibu: 66
+  ebc: 18
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "US 2-row pale malt"
+    kg: 5.3
+    percent: 80.9
+    note: "Malto base"
+  - malto: "Munich 9L"
+    kg: 0.64
+    percent: 9.8
+    note: "Corpo maltato"
+  - malto: "Crystal 20L"
+    kg: 0.36
+    percent: 5.5
+    note: "Caramello"
+  - malto: "Crystal 40L"
+    kg: 0.25
+    percent: 3.8
+    note: "Caramello"
+
+luppolatura:
+  - varieta: "Nugget"
+    grammi: 35
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Simcoe"
+    grammi: 35
+    tempo_min: 5
+    uso: boil
+    note: "Sapore"
+  - varieta: "Amarillo"
+    grammi: 35
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+  - varieta: "Citra"
+    grammi: 35
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+
+lievito:
+  ceppo: "Wyeast 1056 / White Labs WLP001 / Fermentis US-05"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale americano pulito"
+
+mash:
+  temperatura_c: 68
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 20
+  dry_hop_giorno: 5
+  dry_hop_temperatura_c: 20
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Luppolatura intensa Nugget/Simcoe/Amarillo/Citra"
+  - "Base maltata pulita"
+
+alternative:
+  - descrizione: "Versione più luppolata"
+    cambiamenti: "Aggiungere dry hop aggiuntivo"
+    impatto: "Aroma più intenso"

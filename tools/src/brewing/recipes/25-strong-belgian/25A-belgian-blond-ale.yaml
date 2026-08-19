@@ -1,0 +1,98 @@
+nome: "Gordon Strong's Belgian Blond Ale"
+stile: "Belgian Blond Ale"
+codice_bjcp: "25A"
+descrizione: |
+  Belgian blond dorata e secca, con esteri fruttati del lievito trappista, corpo
+  medio e finale pulito.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-belgian-blond-ale/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.063
+  fg: 1.013
+  abv_percent: 6.6
+  ibu: 25
+  ebc: 14
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Belgian Pilsner malt"
+    kg: 4.76
+    percent: 78
+    note: "Malto base"
+  - malto: "Aromatic malt"
+    kg: 0.34
+    percent: 6
+    note: "Aroma maltato"
+  - malto: "Flaked maize"
+    kg: 0.45
+    percent: 7
+    note: "Corpo"
+  - malto: "Caravienne / caramel (20°L)"
+    kg: 0.34
+    percent: 6
+    note: "Caramello"
+
+luppolatura:
+  - varieta: "Saaz"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Hallertauer"
+    grammi: 28
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+  - varieta: "Styrian Goldings"
+    grammi: 28
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 3787 (Trappist High Gravity) / WLP530 / Safbrew BE-256"
+  forma: liquido
+  attenuazione_percent: 78
+  temperatura_fermentazione: "19°C"
+  note: "Lievito trappista"
+
+mash:
+  temperatura_c: 63
+  durata_min: 70
+  spessore_l_kg: 3.0
+  note: "Step: 55°C/15, 63°C/40, 70°C/15"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 19
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.6
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Lievito trappista per esteri fruttati"
+  - "Finale secco e pulito"
+
+alternative:
+  - descrizione: "Versione più secca"
+    cambiamenti: "Aumentare l'attenuazione"
+    impatto: "Finale più asciutto"

@@ -1,0 +1,80 @@
+nome: "Gordon Strong's English IPA"
+stile: "English IPA"
+codice_bjcp: "12C"
+descrizione: |
+  IPA inglese minimale: un solo malto, un solo luppolo (EKG) per un profilo pulito
+  e tradizionale.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-english-ipa/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.061
+  fg: 1.012
+  abv_percent: 6.5
+  ibu: 58
+  ebc: 12
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pale ale malt britannico"
+    kg: 5.7
+    percent: 100
+    note: "Malto base"
+
+luppolatura:
+  - varieta: "East Kent Goldings"
+    grammi: 85
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "East Kent Goldings"
+    grammi: 57
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+
+lievito:
+  ceppo: "Wyeast 1028 (London Ale) / WLP007 / SafAle S-04 / LalBrew Nottingham"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "18°C"
+  note: "Lievito ale inglese, max 21°C"
+
+mash:
+  temperatura_c: 65
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 18
+  dry_hop_giorno: 5
+  dry_hop_temperatura_c: 18
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.4
+  temperatura_servizio_c: 7
+
+note_critiche:
+  - "Un solo malto, un solo luppolo"
+  - "Dry hop EKG per aroma tradizionale"
+
+alternative:
+  - descrizione: "Versione più luppolata"
+    cambiamenti: "Aggiungere dry hop aggiuntivo"
+    impatto: "Aroma più intenso"

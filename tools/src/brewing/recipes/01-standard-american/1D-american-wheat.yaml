@@ -1,0 +1,103 @@
+nome: "Gordon Strong's American Wheat"
+stile: "American Wheat Beer"
+codice_bjcp: "1D"
+descrizione: |
+  American wheat equilibrata con frumento tedesco e luppoli nobili, dry-hopped
+  con Cascade per un tocco americano.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/american-wheat/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.054
+  fg: 1.013
+  abv_percent: 5.3
+  ibu: 21
+  ebc: 10
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Malto di frumento tedesco"
+    kg: 2.5
+    percent: 50
+    note: "Frumento"
+  - malto: "2-row Nord America"
+    kg: 1.8
+    percent: 36.4
+    note: "Malto base"
+  - malto: "Munich"
+    kg: 0.45
+    percent: 9.1
+    note: "Corpo"
+  - malto: "Caravienne (o caramel 20L)"
+    kg: 0.23
+    percent: 4.5
+    note: "Dolcezza leggera"
+
+luppolatura:
+  - varieta: "Czech Saaz"
+    grammi: 21
+    tempo_min: 0
+    uso: first_wort
+  - varieta: "Hallertauer"
+    grammi: 21
+    tempo_min: 20
+    uso: boil
+  - varieta: "Hallertauer"
+    grammi: 21
+    tempo_min: 10
+    uso: boil
+  - varieta: "Czech Saaz"
+    grammi: 28
+    tempo_min: 5
+    uso: boil
+  - varieta: "Cascade"
+    grammi: 28
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop 3 giorni"
+
+lievito:
+  ceppo: "Wyeast 1272 (American Ale II) / White Labs WLP051"
+  forma: liquido
+  attenuazione_percent: 75
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale americano"
+
+mash:
+  temperatura_c: 68
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Decozione: 55°C 10min, step fino a 70°C 20min, mash out 76°C"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 20
+  dry_hop_giorno: 7
+  dry_hop_temperatura_c: 20
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.6
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Dry hop con Cascade per carattere americano"
+  - "Frumento tedesco per corpo morbido"
+
+alternative:
+  - descrizione: "Versione senza dry hop"
+    cambiamenti: "Omettere il dry hop Cascade"
+    impatto: "Profilo più pulito e tradizionale"

@@ -1,0 +1,104 @@
+nome: "Abysmal Stout (Bourbon 'Barrel' Aged)"
+stile: "Wood-Aged Beer (imperial stout su quercia/bourbon)"
+codice_bjcp: "33A"
+descrizione: |
+  Imperial stout ad alta gravità che ottiene il carattere di legno da cubetti di
+  quercia carbonizzati imbevuti in bourbon o rye, aggiunti in secondario.
+  Invecchiamento di almeno 2 mesi per fondere legno e alcol.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/abysmal-stout-bourbon-barrel-aged/"
+  autore: "Andrew Reudink"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.096
+  fg: 1.020
+  abv_percent: 11.5
+  ibu: 40
+  ebc: 132
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Golden Promise malt"
+    kg: 6.8
+    percent: 76.0
+    note: "Malto base"
+  - malto: "Kiln coffee malt (150°L)"
+    kg: 0.68
+    percent: 7.6
+    note: "Tostatura"
+  - malto: "Briess Midnight Wheat malt"
+    kg: 0.45
+    percent: 5.0
+    note: "Colore"
+  - malto: "Crystal rye malt (75°L)"
+    kg: 0.45
+    percent: 5.0
+    note: "Caramello"
+  - malto: "Crystal malt (60°L)"
+    kg: 0.34
+    percent: 3.8
+    note: "Caramello"
+  - malto: "Victory malt"
+    kg: 0.23
+    percent: 2.6
+    note: "Tostatura"
+
+luppolatura:
+  - varieta: "Nugget (13% AA)"
+    grammi: 14
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Nugget (13% AA)"
+    grammi: 14
+    tempo_min: 30
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "Wyeast 1084 (Irish Ale) / Lallemand Nottingham"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale"
+
+mash:
+  temperatura_c: 66
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 21
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+  note: "Cubetti di quercia carbonizzati imbevuti in bourbon/rye (57g) in secondario 3-4 settimane"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Extra dark candi syrup 0.9kg in fermentazione primaria"
+  - "Licorice root 28g a 15 min, vanilla bean 1 in primaria"
+  - "Cubetti di quercia carbonizzati in secondario, invecchiamento minimo 2 mesi"
+
+alternative:
+  - descrizione: "Versione meno alcolica"
+    cambiamenti: "Ridurre OG a 1.085"
+    impatto: "Meno alcolica"

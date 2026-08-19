@@ -1,0 +1,98 @@
+nome: "Gordon Strong's Schwarzbier"
+stile: "Schwarzbier"
+codice_bjcp: "8B"
+descrizione: |
+  Schwarzbier scura ma pulita, con Carafa dehusked per colore senza astringenza.
+  Amaro moderato (30 IBU).
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-schwarzbier/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.048
+  fg: 1.012
+  abv_percent: 4.7
+  ibu: 30
+  ebc: 62
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner malt"
+    kg: 2.72
+    percent: 60.0
+    note: "Malto base"
+  - malto: "Dark Munich malt"
+    kg: 1.36
+    percent: 30.0
+    note: "Corpo maltato"
+  - malto: "Weyermann Carafa Special I"
+    kg: 0.34
+    percent: 7.5
+    note: "Colore e tostatura"
+  - malto: "Weyermann Carafa Special III"
+    kg: 0.11
+    percent: 2.5
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Hallertauer"
+    grammi: 14
+    tempo_min: 0
+    uso: first_wort
+  - varieta: "Magnum"
+    grammi: 14
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Hallertauer"
+    grammi: 14
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 2124 / White Labs WLP830 / SafLager W-34/70"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "10°C"
+  note: "Lievito lager pulito"
+
+mash:
+  temperatura_c: 65
+  durata_min: 90
+  spessore_l_kg: 3.0
+  note: "Step: 62°C/60, 70°C/15, 76°C/15"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 10
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "Lagering 0°C per 3 mesi"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Carafa dehusked per colore senza astringenza"
+  - "Lagering lungo per pulizia"
+
+alternative:
+  - descrizione: "Versione più tostata"
+    cambiamenti: "Aumentare Carafa I"
+    impatto: "Tostatura più decisa"

@@ -1,0 +1,104 @@
+nome: "Gordon Strong's International Amber Lager"
+stile: "International Amber Lager"
+codice_bjcp: "2B"
+descrizione: |
+  Amber lager internazionale con note caramello/toast, malto scuro solo per colore,
+  amarezza contenuta e finitura pulita.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/articles/style-profile-9/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.052
+  fg: 1.011
+  abv_percent: 5.4
+  ibu: 17
+  ebc: 32
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "2-row USA"
+    kg: 2.0
+    percent: 41.7
+    note: "Malto base"
+  - malto: "Pilsner"
+    kg: 1.8
+    percent: 37.1
+    note: "Malto base"
+  - malto: "Munich"
+    kg: 0.45
+    percent: 9.3
+    note: "Corpo maltato"
+  - malto: "Crystal UK (45L)"
+    kg: 0.34
+    percent: 7.0
+    note: "Caramello"
+  - malto: "Chocolate malt"
+    kg: 0.11
+    percent: 2.3
+    note: "Colore"
+  - malto: "Weyermann Carared"
+    kg: 0.11
+    percent: 2.3
+    note: "Colore rosso"
+  - malto: "Weyermann Carafa Special II"
+    kg: 0.014
+    percent: 0.3
+    note: "Colore scuro"
+
+luppolatura:
+  - varieta: "Crystal"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+  - varieta: "Crystal"
+    grammi: 14
+    tempo_min: 10
+    uso: boil
+
+lievito:
+  ceppo: "SafLager W-34/70 / Wyeast 2124 (Bohemian Lager)"
+  forma: secco
+  attenuazione_percent: 75
+  temperatura_fermentazione: "10°C"
+  note: "Lievito lager pulito"
+
+mash:
+  temperatura_c: 66
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 10
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "Lagering 12 settimane a 0°C"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Malto scuro solo per colore, non per sapore"
+  - "Lagering lungo per finitura pulita"
+
+alternative:
+  - descrizione: "Versione più chiara"
+    cambiamenti: "Ridurre Carafa e chocolate"
+    impatto: "Colore più ambrato chiaro"

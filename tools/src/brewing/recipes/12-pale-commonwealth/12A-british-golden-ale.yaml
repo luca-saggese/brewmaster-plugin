@@ -1,0 +1,114 @@
+nome: "British Golden Ale"
+stile: "British Golden Ale"
+codice_bjcp: "12A"
+descrizione: |
+  Golden ale sessionabile con Vienna e luppoli tipo ceco per un profilo fruttato
+  e rinfrescante.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/british-golden-ale/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.044
+  fg: 1.011
+  abv_percent: 4.3
+  ibu: 34
+  ebc: 12
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Golden Promise"
+    kg: 2.3
+    percent: 55
+    note: "Malto base"
+  - malto: "Vienna"
+    kg: 0.9
+    percent: 22
+    note: "Corpo maltato"
+  - malto: "Fiocchi di mais"
+    kg: 0.45
+    percent: 11
+    note: "Corpo"
+  - malto: "Frumento torrefatto"
+    kg: 0.227
+    percent: 5
+    note: "Schiuma"
+  - malto: "Caramel belga (45°L)"
+    kg: 0.17
+    percent: 4
+    note: "Caramello"
+  - malto: "Carapils"
+    kg: 0.113
+    percent: 3
+    note: "Schiuma e corpo"
+
+luppolatura:
+  - varieta: "First Gold"
+    grammi: 21
+    tempo_min: 0
+    uso: first_wort
+  - varieta: "Sterling"
+    grammi: 28
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+  - varieta: "Sterling"
+    grammi: 21
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+  - varieta: "Sterling"
+    grammi: 35
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+  - varieta: "First Gold"
+    grammi: 7
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+
+lievito:
+  ceppo: "Wyeast 1335 (British Ale II) / WLP022"
+  forma: liquido
+  attenuazione_percent: 75
+  temperatura_fermentazione: "19°C"
+  note: "Lievito ale inglese"
+
+mash:
+  temperatura_c: 68
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 19
+  dry_hop_giorno: 5
+  dry_hop_temperatura_c: 19
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.4
+  temperatura_servizio_c: 7
+
+note_critiche:
+  - "Dry hop per carattere fruttato"
+  - "Vienna per corpo maltato"
+
+alternative:
+  - descrizione: "Versione più secca"
+    cambiamenti: "Aumentare i fiocchi di mais"
+    impatto: "Finale più asciutto"

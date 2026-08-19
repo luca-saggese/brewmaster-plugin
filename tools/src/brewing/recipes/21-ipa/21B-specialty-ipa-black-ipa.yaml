@@ -1,0 +1,113 @@
+nome: "Black IPA (NHC 2017 Gold)"
+stile: "Specialty IPA — Black IPA"
+codice_bjcp: "21B"
+descrizione: |
+  Ricetta medaglia d'oro NHC 2017 nella categoria Specialty IPA. IPA americana
+  scurita con malti tostati che aggiungono note di cioccolato a una base molto
+  luppolata.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/black-ipa-nhc-2017-gold/"
+  autore: "Nicholas McCoy & Father Jefferey Poirot"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Medaglia d'oro NHC 2017 (dichiarato dalla fonte)."
+
+parametri:
+  batch_size_litri: 51
+  og: 1.080
+  fg: 1.016
+  abv_percent: 8.4
+  ibu: 79
+  ebc: 82
+  efficienza_percent: 75
+  impianto: "All grain 51L"
+  volume_fermentatore: 51
+
+grist:
+  - malto: "2-row pale malt"
+    kg: 15.88
+    percent: 83.4
+    note: "Malto base"
+  - malto: "Caramunich III"
+    kg: 1.36
+    percent: 7.1
+    note: "Caramello"
+  - malto: "Midnight Wheat"
+    kg: 1.18
+    percent: 6.2
+    note: "Colore scuro"
+  - malto: "Table sugar (sucrose)"
+    kg: 0.61
+    percent: 3.2
+    note: "Attenuazione"
+
+luppolatura:
+  - varieta: "Hallertau Magnum"
+    grammi: 56.7
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Chinook"
+    grammi: 70.9
+    tempo_min: 20
+    uso: boil
+    note: "Sapore"
+  - varieta: "Centennial"
+    grammi: 42.5
+    tempo_min: 20
+    uso: boil
+    note: "Sapore"
+  - varieta: "Centennial"
+    grammi: 113.4
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+  - varieta: "Centennial"
+    grammi: 85
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+  - varieta: "Citra"
+    grammi: 85
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+
+lievito:
+  ceppo: "Wyeast 1056 (American Ale), 4 pacchetti"
+  forma: liquido
+  attenuazione_percent: 78
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale americano"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 60
+  volume_post_boil_litri: 51
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 20
+  dry_hop_giorno: 5
+  dry_hop_temperatura_c: 20
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Malti tostati per note di cioccolato"
+  - "Luppolatura intensa"
+
+alternative:
+  - descrizione: "Versione 19L"
+    cambiamenti: "Scalare le quantità a 1/3"
+    impianto: "Batch più piccolo"

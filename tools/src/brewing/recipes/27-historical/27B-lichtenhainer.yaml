@@ -1,0 +1,85 @@
+nome: "Smoky Grove Lichtenhainer"
+stile: "Lichtenhainer"
+codice_bjcp: "27B"
+descrizione: |
+  Birra di frumento affumicata, leggera e leggermente acidula, con parti uguali
+  di pilsner, Vienna e malto di frumento affumicato alla quercia. Da consumare
+  giovane, con acidità moderata data dal Lactobacillus.
+
+fonte:
+  nome: "Craft Beer & Brewing Magazine"
+  url: "https://www.beerandbrewing.com/recipe-smoky-grove-lichtenhainer/"
+  autore: "Josh Weikert"
+  verifica: "Ricetta pubblicata da Craft Beer & Brewing, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.040
+  fg: 1.009
+  abv_percent: 3.9
+  ibu: 9
+  ebc: 10
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner"
+    kg: 1.13
+    percent: 33.3
+    note: "Malto base"
+  - malto: "Vienna"
+    kg: 1.13
+    percent: 33.3
+    note: "Corpo maltato"
+  - malto: "Oak-smoked wheat malt"
+    kg: 1.13
+    percent: 33.3
+    note: "Frumento affumicato"
+
+luppolatura:
+  - varieta: "Hallertauer Mittelfrüh"
+    grammi: 28
+    tempo_min: 15
+    uso: boil
+    note: "Amaro (9 IBU)"
+
+lievito:
+  ceppo: "Wyeast 1007 (German Ale) + Wyeast 5335 (Lactobacillus)"
+  forma: liquido
+  attenuazione_percent: 78
+  temperatura_fermentazione: "20°C"
+  note: "Co-pitch con Lactobacillus per acidità moderata"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.8
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Acidità moderata da Lactobacillus"
+  - "Da consumare giovane"
+
+alternative:
+  - descrizione: "Versione più acida"
+    cambiamenti: "Aumentare il tempo di acidificazione"
+    impatto: "Acidità più marcata"

@@ -1,0 +1,101 @@
+nome: "Gordon Strong's Irish Stout"
+stile: "Irish Stout (Dry Stout)"
+codice_bjcp: "15B"
+descrizione: |
+  Dry stout secca e tostata, più simile a Beamish che a Guinness, con grist
+  complesso e bassa amarezza relativa.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-irish-stout/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.039
+  fg: 1.008
+  abv_percent: 4.1
+  ibu: 38
+  ebc: 79
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pale ale malt"
+    kg: 2.5
+    percent: 63
+    note: "Malto base"
+  - malto: "Fiocchi d'orzo"
+    kg: 0.567
+    percent: 14
+    note: "Corpo"
+  - malto: "Orzo tostato"
+    kg: 0.454
+    percent: 11
+    note: "Tostatura"
+  - malto: "Chocolate malt"
+    kg: 0.227
+    percent: 6
+    note: "Tostatura"
+  - malto: "Crystal (80°L)"
+    kg: 0.113
+    percent: 3
+    note: "Caramello"
+  - malto: "Black malt decorticato"
+    kg: 0.113
+    percent: 3
+    note: "Colore"
+
+luppolatura:
+  - varieta: "UK Goldings"
+    grammi: 50
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "UK Goldings"
+    grammi: 7
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 1028 (London Ale) / WLP013 / SafAle S-04"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "18°C"
+  note: "Lievito ale inglese"
+
+mash:
+  temperatura_c: 62
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion a bassa temperatura per secchezza"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 18
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 7
+
+note_critiche:
+  - "Mash a 62°C per secchezza"
+  - "Orzo tostato per carattere tostato"
+
+alternative:
+  - descrizione: "Versione più secca"
+    cambiamenti: "Mash a 60°C"
+    impatto: "Finale più asciutto"

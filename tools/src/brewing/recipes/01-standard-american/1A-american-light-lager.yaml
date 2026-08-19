@@ -1,0 +1,107 @@
+nome: "Comrade John & Tim's American Light"
+stile: "American Light Lager"
+codice_bjcp: "1A"
+descrizione: |
+  Light lager americana premiata (Best of Show, 21st Dixie Cup), molto attenuata e
+  pulita, con base di Pilsner e cereali in fiocchi per un profilo secco e croccante.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/comrade-john-tims-american-light/"
+  autore: "BYO Staff"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.042
+  fg: 1.007
+  abv_percent: 4.5
+  ibu: 19
+  ebc: 12
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner tedesco"
+    kg: 2.04
+    percent: 51.4
+    note: "Malto base"
+  - malto: "Pilsner belga"
+    kg: 1.13
+    percent: 28.6
+    note: "Malto base"
+  - malto: "Fiocchi di mais"
+    kg: 0.46
+    percent: 11.4
+    note: "Secchezza e corpo leggero"
+  - malto: "Fiocchi di riso"
+    kg: 0.34
+    percent: 8.6
+    note: "Secchezza"
+
+luppolatura:
+  - varieta: "UK First Gold"
+    grammi: 7.8
+    tempo_min: 50
+    uso: boil
+  - varieta: "UK First Gold"
+    grammi: 7.8
+    tempo_min: 40
+    uso: boil
+  - varieta: "E. Kent Goldings"
+    grammi: 7.8
+    tempo_min: 30
+    uso: boil
+  - varieta: "E. Kent Goldings"
+    grammi: 7.8
+    tempo_min: 20
+    uso: boil
+  - varieta: "Mount Hood"
+    grammi: 14.2
+    tempo_min: 15
+    uso: boil
+  - varieta: "Hallertauer"
+    grammi: 4.3
+    tempo_min: 5
+    uso: boil
+
+lievito:
+  ceppo: "Wyeast 2007 (Pilsen Lager)"
+  forma: liquido
+  attenuazione_percent: 75
+  temperatura_fermentazione: "12°C"
+  note: "Lievito lager pulito"
+
+mash:
+  temperatura_c: 68
+  durata_min: 90
+  spessore_l_kg: 3.0
+  note: "Infusione semplice 67-70°C"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 12
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 1
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Lagering lungo per un profilo molto pulito"
+  - "Cereali in fiocchi per corpo leggero e secco"
+
+alternative:
+  - descrizione: "Versione più attenuata"
+    cambiamenti: "Aumentare i fiocchi di mais a 15%"
+    impatto: "Corpo ancora più leggero e secco"

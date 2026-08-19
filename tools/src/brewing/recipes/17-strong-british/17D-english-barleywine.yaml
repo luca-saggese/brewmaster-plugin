@@ -1,0 +1,92 @@
+nome: "Gordon Strong's English Barleywine"
+stile: "English Barley Wine"
+codice_bjcp: "17D"
+descrizione: |
+  Barley wine inglese ricco e maltato, con Golden Promise e doppio crystal, ideale
+  per l'invecchiamento.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-english-barleywine/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.100
+  fg: 1.029
+  abv_percent: 9.5
+  ibu: 45
+  ebc: 35
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Golden Promise"
+    kg: 8.2
+    percent: 86
+    note: "Malto base"
+  - malto: "Frumento torrefatto"
+    kg: 0.68
+    percent: 7
+    note: "Corpo"
+  - malto: "Crystal medium (45°L)"
+    kg: 0.34
+    percent: 4
+    note: "Caramello"
+  - malto: "Dark crystal (135°L)"
+    kg: 0.227
+    percent: 2
+    note: "Caramello scuro"
+  - malto: "Pale chocolate (225°L)"
+    kg: 0.057
+    percent: 1
+    note: "Tostatura"
+
+luppolatura:
+  - varieta: "Challenger"
+    grammi: 57
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "Wyeast 1968 (London ESB) / WLP002 / SafAle S-04"
+  forma: liquido
+  attenuazione_percent: 72
+  temperatura_fermentazione: "18°C"
+  note: "Lievito ale inglese"
+
+mash:
+  temperatura_c: 65
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 90
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 18
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 8
+
+note_critiche:
+  - "Alta gravità, pitch rate elevato"
+  - "Ideale per invecchiamento"
+
+alternative:
+  - descrizione: "Versione più leggera"
+    cambiamenti: "Ridurre OG a 1.090"
+    impatto: "Meno alcolica"

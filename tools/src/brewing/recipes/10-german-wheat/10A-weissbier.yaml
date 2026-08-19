@@ -1,0 +1,80 @@
+nome: "Harold-is-Weizen (German Hefeweizen)"
+stile: "Weissbier (Hefeweizen)"
+codice_bjcp: "10A"
+descrizione: |
+  Hefeweizen classico bavarese con 50% frumento, luppolatura minima e lievito
+  weizen per i tipici esteri di banana e chiodi di garofano.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/german-hefeweizen/"
+  autore: "Jamil Zainasheff"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.049
+  fg: 1.012
+  abv_percent: 4.8
+  ibu: 13
+  ebc: 6
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Malto di frumento (wheat malt)"
+    kg: 2.2
+    percent: 50
+    note: "Frumento"
+  - malto: "Malto Pilsner"
+    kg: 2.2
+    percent: 50
+    note: "Malto base"
+
+luppolatura:
+  - varieta: "Hallertau"
+    grammi: 19
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "Wyeast 3068 (Weihenstephan Weizen) / White Labs WLP300 / Lallemand Munich Classic"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "17°C"
+  note: "Lievito weizen per esteri di banana e chiodi di garofano"
+
+mash:
+  temperatura_c: 66
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Step: 43°C/20, poi 67°C; oppure single infusion 66°C/60"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 17
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 3.0
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Lievito weizen per esteri caratteristici"
+  - "Luppolatura minima"
+
+alternative:
+  - descrizione: "Versione più speziata"
+    cambiamenti: "Fermentare a 18°C"
+    impatto: "Più chiodi di garofano"

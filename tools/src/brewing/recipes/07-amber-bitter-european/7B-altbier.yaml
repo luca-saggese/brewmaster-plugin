@@ -1,0 +1,103 @@
+nome: "Gordon Strong's Altbier"
+stile: "Altbier"
+codice_bjcp: "7B"
+descrizione: |
+  Altbier di Düsseldorf con decozione, amaro deciso (51 IBU) e luppolatura nobile;
+  fermentato a temperatura ale poi lagering.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-altbier/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.051
+  fg: 1.012
+  abv_percent: 5.1
+  ibu: 51
+  ebc: 30
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner malt"
+    kg: 2.7
+    percent: 57
+    note: "Malto base"
+  - malto: "Munich malt"
+    kg: 1.6
+    percent: 34
+    note: "Corpo maltato"
+  - malto: "Wheat malt"
+    kg: 0.23
+    percent: 5
+    note: "Corpo"
+  - malto: "Caramunich II"
+    kg: 0.14
+    percent: 3
+    note: "Caramello"
+  - malto: "Carafa Special III"
+    kg: 0.09
+    percent: 2
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Perle"
+    grammi: 35
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Spalt"
+    grammi: 14
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+  - varieta: "Spalt"
+    grammi: 14
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "White Labs WLP036 (Düsseldorf Alt) / Wyeast 1007 / Safale K-97"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "16°C"
+  note: "Lievito alt, 3 giorni a 16°C poi 20°C"
+
+mash:
+  temperatura_c: 65
+  durata_min: 65
+  spessore_l_kg: 3.0
+  note: "Decozione: 62°C/20, 68°C/45, mashout 76°C"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 16
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+  note: "Lagering dopo fermentazione ale"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Amaro deciso (51 IBU)"
+  - "Decozione per ricchezza maltata"
+
+alternative:
+  - descrizione: "Versione meno amara"
+    cambiamenti: "Ridurre IBU a 40"
+    impatto: "Più bilanciata"

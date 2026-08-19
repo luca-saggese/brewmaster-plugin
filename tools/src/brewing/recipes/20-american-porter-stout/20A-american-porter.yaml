@@ -1,0 +1,98 @@
+nome: "Gordon Strong's Classic American Porter"
+stile: "American Porter"
+codice_bjcp: "20A"
+descrizione: |
+  Porter "lagered" in stile nordest americano (tipo Yuengling), con note di
+  liquirizia ma senza eccessiva tostatura.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-classic-american-porter/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.049
+  fg: 1.014
+  abv_percent: 4.7
+  ibu: 23
+  ebc: 60
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "US 2-row pale malt"
+    kg: 3.0
+    percent: 62.4
+    note: "Malto base"
+  - malto: "US mild malt"
+    kg: 0.68
+    percent: 14.1
+    note: "Corpo dextrinoso"
+  - malto: "Flaked maize"
+    kg: 0.45
+    percent: 9.4
+    note: "Corpo"
+  - malto: "Crystal 50L"
+    kg: 0.34
+    percent: 7.1
+    note: "Caramello"
+  - malto: "Weyermann Carafa Special II"
+    kg: 0.34
+    percent: 7.1
+    note: "Colore e tostatura"
+
+luppolatura:
+  - varieta: "Cluster"
+    grammi: 19
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Cascade"
+    grammi: 7
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 2206 (Bavarian Lager)"
+  forma: liquido
+  attenuazione_percent: 75
+  temperatura_fermentazione: "10°C"
+  note: "Lievito lager, lagering a 1°C per 8 settimane"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 10
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 1
+  note: "Lagering 1°C per 8 settimane"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Fermentazione lager per profilo pulito"
+  - "Carafa per colore senza eccessiva tostatura"
+
+alternative:
+  - descrizione: "Versione ale"
+    cambiamenti: "Usare lievito ale americano"
+    impatto: "Profilo più fruttato"

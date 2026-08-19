@@ -1,0 +1,89 @@
+nome: "Table Saison"
+stile: "Saison"
+codice_bjcp: "25B"
+descrizione: |
+  Saison da tavola leggera e molto secca, con carattere di lievito farmhouse
+  pepato e fruttato, altamente attenuata.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/table-saison-recipe/"
+  autore: "Drew Beechum"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.039
+  fg: 1.004
+  abv_percent: 4.5
+  ibu: 20
+  ebc: 6
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Belgian Pilsner malt"
+    kg: 2.72
+    percent: 79
+    note: "Malto base"
+  - malto: "Caravienne malt"
+    kg: 0.2
+    percent: 6
+    note: "Caramello"
+  - malto: "Cane sugar"
+    kg: 0.36
+    percent: 10
+    note: "Attenuazione"
+
+luppolatura:
+  - varieta: "Magnum"
+    grammi: 11
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Willamette"
+    grammi: 14
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 3726 (Farmhouse) / Imperial B56 (Rustic) / LalBrew Farmhouse"
+  forma: liquido
+  attenuazione_percent: 85
+  temperatura_fermentazione: "20°C"
+  note: "Lievito farmhouse, free rise 18-24°C"
+
+mash:
+  temperatura_c: 64
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.8
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Alta attenuazione per finale secco"
+  - "Lievito farmhouse per carattere pepato"
+
+alternative:
+  - descrizione: "Versione più corposa"
+    cambiamenti: "Ridurre lo zucchero"
+    impatto: "Corpo più pieno"

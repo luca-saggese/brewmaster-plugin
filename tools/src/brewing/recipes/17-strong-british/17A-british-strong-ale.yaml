@@ -1,0 +1,102 @@
+nome: "Wolf & Workman Strong Ale"
+stile: "British Strong Ale"
+codice_bjcp: "17A"
+descrizione: |
+  Strong ale maltato e corposo con carattere di luppolo inglese, ispirato alla
+  Fuller's 1845. Grande percentuale di malti crystal per corpo e dolcezza
+  "zuccherina".
+
+fonte:
+  nome: "Craft Beer & Brewing Magazine"
+  url: "https://www.beerandbrewing.com/recipe-wolf-and-workman-strong-ale/"
+  autore: "Josh Weikert"
+  verifica: "Ricetta pubblicata da Craft Beer & Brewing, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.070
+  fg: 1.018
+  abv_percent: 6.9
+  ibu: 46
+  ebc: 30
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Maris Otter"
+    kg: 4.54
+    percent: 76.9
+    note: "Malto base"
+  - malto: "British amber"
+    kg: 0.45
+    percent: 7.7
+    note: "Tostatura"
+  - malto: "British crystal 45L"
+    kg: 0.23
+    percent: 3.8
+    note: "Caramello"
+  - malto: "British crystal 90L"
+    kg: 0.23
+    percent: 3.8
+    note: "Caramello scuro"
+  - malto: "Special B"
+    kg: 0.23
+    percent: 3.8
+    note: "Frutta secca"
+  - malto: "Aromatic"
+    kg: 0.23
+    percent: 3.8
+    note: "Aroma maltato"
+
+luppolatura:
+  - varieta: "East Kent Goldings"
+    grammi: 78
+    tempo_min: 60
+    uso: boil
+    note: "Amaro (41 IBU)"
+  - varieta: "East Kent Goldings"
+    grammi: 28
+    tempo_min: 0
+    uso: whirlpool
+    note: "Aroma (5 IBU)"
+
+lievito:
+  ceppo: "Wyeast 1318 (London Ale III)"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "16°C"
+  note: "Partenza 16°C, salita a 18°C dopo 5 giorni, poi 21°C fino a fine fermentazione"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 16
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 7
+
+note_critiche:
+  - "Malti crystal per corpo e dolcezza"
+  - "Luppolo inglese EKG"
+
+alternative:
+  - descrizione: "Versione più secca"
+    cambiamenti: "Ridurre i malti crystal"
+    impatto: "Finale più asciutto"

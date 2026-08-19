@@ -1,0 +1,90 @@
+nome: "Apricot American Wheat (All-Grain)"
+stile: "Fruit Beer (American Wheat con albicocca)"
+codice_bjcp: "29A"
+descrizione: |
+  American wheat ale di base pulita e leggera, con l'albicocca che emerge in
+  primo piano grazie all'estratto aggiunto a fine fermentazione. Base versatile:
+  l'autore suggerisce che anche la pesca funziona altrettanto bene.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/apricot-american-wheat-all-grain/"
+  autore: "Gordon Strong (ricetta di Todd Donnelly)"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.051
+  fg: 1.013
+  abv_percent: 5.0
+  ibu: 19
+  ebc: 8
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Wheat malt"
+    kg: 2.72
+    percent: 54.5
+    note: "Frumento"
+  - malto: "2-row pale malt"
+    kg: 1.81
+    percent: 36.4
+    note: "Malto base"
+  - malto: "Munich malt"
+    kg: 0.45
+    percent: 9.1
+    note: "Corpo maltato"
+
+luppolatura:
+  - varieta: "Willamette"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Hallertauer"
+    grammi: 14
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 1056 / White Labs WLP001 / SafAle US-05"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale americano pulito"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Estratto di albicocca Amoretti 3mL aggiunto al racking, prima dell'imbottigliamento"
+  - "Base versatile, funziona anche con pesca"
+
+alternative:
+  - descrizione: "Versione con pesca"
+    cambiamenti: "Sostituire l'estratto di albicocca con pesca"
+    impatto: "Sapore di pesca"

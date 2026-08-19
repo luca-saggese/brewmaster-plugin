@@ -1,0 +1,96 @@
+nome: "Gordon Strong's Cream Ale"
+stile: "Cream Ale"
+codice_bjcp: "1C"
+descrizione: |
+  Cream ale liscia e rinfrescante con mais in fiocchi e zucchero, fermentata con
+  lievito ale ma lagering a freddo per un profilo pulito.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-cream-ale/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.052
+  fg: 1.010
+  abv_percent: 5.6
+  ibu: 14
+  ebc: 6
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner tedesco"
+    kg: 1.6
+    percent: 35
+    note: "Malto base"
+  - malto: "2-row USA"
+    kg: 1.6
+    percent: 35
+    note: "Malto base"
+  - malto: "Mais in fiocchi"
+    kg: 0.91
+    percent: 20
+    note: "Secchezza e corpo"
+  - malto: "Zucchero di mais"
+    kg: 0.45
+    percent: 10
+    note: "Attenuazione"
+
+luppolatura:
+  - varieta: "Vanguard"
+    grammi: 7
+    tempo_min: 0
+    uso: first_wort
+  - varieta: "Vanguard"
+    grammi: 14
+    tempo_min: 60
+    uso: boil
+  - varieta: "Vanguard"
+    grammi: 7
+    tempo_min: 5
+    uso: boil
+
+lievito:
+  ceppo: "Wyeast 1056 / White Labs WLP001 / SafAle US-05"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "17-18°C"
+  note: "Lievito ale pulito, lagering a freddo"
+
+mash:
+  temperatura_c: 66
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 18
+  cold_crash: true
+  cold_crash_giorni: 4
+  cold_crash_temp_c: 1
+  note: "Lagering 4 settimane a 0-1°C"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.6
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Fermentare con lievito ale ma lagering a freddo"
+  - "Zucchero di mais per attenuazione elevata"
+
+alternative:
+  - descrizione: "Versione più secca"
+    cambiamenti: "Aumentare lo zucchero di mais"
+    impatto: "Finale più asciutto"

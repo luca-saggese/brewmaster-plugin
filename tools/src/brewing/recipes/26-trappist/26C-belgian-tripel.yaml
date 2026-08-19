@@ -1,0 +1,94 @@
+nome: "Gordon Strong's Belgian Tripel"
+stile: "Belgian Tripel"
+codice_bjcp: "26C"
+descrizione: |
+  Tripel dorata, secca e alcolica, con zucchero per attenuazione elevata, esteri
+  fruttati e finale asciutto.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-belgian-tripel/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.072
+  fg: 1.010
+  abv_percent: 8.3
+  ibu: 34
+  ebc: 8
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner malt"
+    kg: 4.08
+    percent: 62
+    note: "Malto base"
+  - malto: "Vienna malt"
+    kg: 0.45
+    percent: 7
+    note: "Corpo maltato"
+  - malto: "White sugar"
+    kg: 1.13
+    percent: 17
+    note: "Attenuazione"
+
+luppolatura:
+  - varieta: "Sterling"
+    grammi: 21
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Amarillo"
+    grammi: 28
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+  - varieta: "Styrian Goldings"
+    grammi: 28
+    tempo_min: 2
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "White Labs WLP510 (Bastogne) / Wyeast 3787 / SafAle T-58"
+  forma: liquido
+  attenuazione_percent: 84
+  temperatura_fermentazione: "17°C"
+  note: "Lievito trappista, free rise"
+
+mash:
+  temperatura_c: 63
+  durata_min: 80
+  spessore_l_kg: 3.0
+  note: "Step: 55°C/10, 60°C/10, 63°C/40, 70°C/20"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 17
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.8
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Zucchero per attenuazione elevata"
+  - "Finale asciutto e alcolico"
+
+alternative:
+  - descrizione: "Versione meno alcolica"
+    cambiamenti: "Ridurre lo zucchero"
+    impatto: "Meno alcolica"

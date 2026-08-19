@@ -1,0 +1,84 @@
+nome: "Coopers Sparkling Ale clone"
+stile: "Australian Sparkling Ale"
+codice_bjcp: "12B"
+descrizione: |
+  Clone della Coopers Sparkling Ale, con zucchero di canna e luppolo Pride of
+  Ringwood per il caratteristico profilo australiano.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/coopers-sparkling-ale-clone/"
+  autore: "BYO Staff"
+  verifica: "Clone commerciale pubblicato da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.052
+  fg: 1.008
+  abv_percent: 5.8
+  ibu: 29
+  ebc: 12
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Joe White pale ale malt"
+    kg: 4.0
+    percent: 89
+    note: "Malto base"
+  - malto: "White wheat"
+    kg: 0.45
+    percent: 10
+    note: "Corpo"
+  - malto: "Extra dark crystal 180L"
+    kg: 0.045
+    percent: 1
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Pride of Ringwood"
+    grammi: 21
+    tempo_min: 90
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "White Labs WLP009 (Australian Ale) o lievito da bottiglie Coopers"
+  forma: liquido
+  attenuazione_percent: 80
+  temperatura_fermentazione: "19°C"
+  note: "Lievito ale australiano"
+
+mash:
+  temperatura_c: 65
+  durata_min: 90
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 90
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 19
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.8
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Zucchero di canna 0.20kg a 90 min"
+  - "Luppolo Pride of Ringwood"
+
+alternative:
+  - descrizione: "Versione più secca"
+    cambiamenti: "Aumentare lo zucchero"
+    impatto: "Finale più asciutto"

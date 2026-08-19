@@ -1,0 +1,81 @@
+nome: "Kölsch I"
+stile: "Kölsch"
+codice_bjcp: "5B"
+descrizione: |
+  Kölsch autentica con grist quasi interamente Pilsner e un tocco di Vienna.
+  Bollitura 90 min per ridurre i DMS.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/kolsch/"
+  autore: "Jamil Zainasheff"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.048
+  fg: 1.009
+  abv_percent: 5.1
+  ibu: 25
+  ebc: 8
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Continental Pilsner malt"
+    kg: 4.2
+    percent: 94.8
+    note: "Malto base"
+  - malto: "Weyermann Vienna malt"
+    kg: 0.23
+    percent: 5.2
+    note: "Corpo maltato"
+
+luppolatura:
+  - varieta: "Hallertau"
+    grammi: 35
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "White Labs WLP029 / Wyeast 2565"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "16°C"
+  note: "Lievito Kölsch"
+
+mash:
+  temperatura_c: 65
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion, mash-out 76°C"
+
+bollitura:
+  durata_min: 90
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 16
+  cold_crash: true
+  cold_crash_giorni: 4
+  cold_crash_temp_c: 1
+  note: "Lagering 4 settimane"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.6
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Bollitura 90 min per ridurre i DMS"
+  - "Lievito Kölsch specifico"
+
+alternative:
+  - descrizione: "Versione più maltata"
+    cambiamenti: "Aumentare Vienna a 10%"
+    impatto: "Corpo più pieno"

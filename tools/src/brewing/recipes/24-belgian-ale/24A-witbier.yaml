@@ -1,0 +1,84 @@
+nome: "Gordon Strong's Witbier"
+stile: "Witbier"
+codice_bjcp: "24A"
+descrizione: |
+  Witbier belga torbida e speziata, con grano e avena in fiocchi per corpo morbido
+  e note di agrumi e coriandolo.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-witbier/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.050
+  fg: 1.011
+  abv_percent: 5.1
+  ibu: 12
+  ebc: 7
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "German Pilsner malt"
+    kg: 2.49
+    percent: 49
+    note: "Malto base"
+  - malto: "Flaked wheat"
+    kg: 2.27
+    percent: 45
+    note: "Frumento in fiocchi"
+  - malto: "Flaked oats"
+    kg: 0.23
+    percent: 5
+    note: "Corpo morbido"
+
+luppolatura:
+  - varieta: "Sterling"
+    grammi: 14
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "Wyeast 3944 (Belgian Witbier) / WLP400 / SafAle T-58"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "18°C"
+  note: "Lievito witbier belga"
+
+mash:
+  temperatura_c: 60
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Step: 50°C/15, 64°C/45"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 18
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.8
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Coriandolo 14g, buccia d'arancia Curaçao 7g, camomilla 1.8g a fine bollitura"
+  - "Grano e avena in fiocchi per corpo morbido"
+
+alternative:
+  - descrizione: "Versione più speziata"
+    cambiamenti: "Aumentare coriandolo"
+    impatto: "Speziatura più marcata"

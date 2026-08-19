@@ -1,0 +1,101 @@
+nome: "Gluten-Free Pale Ale"
+stile: "Alternative Grain Beer (gluten-free)"
+codice_bjcp: "31A"
+descrizione: |
+  Pale ale gluten-free a base di miglio, riso e grano saraceno, con luppolo
+  Cascade per esaltare i fenoli naturali del sorgo/miglio. Ricetta collaudata,
+  ottimo punto di partenza per la birra senza glutine.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gluten-free-pale-ale/"
+  autore: "Robert Keifer"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 21
+  og: 1.058
+  fg: 1.012
+  abv_percent: 6.0
+  ibu: 36
+  ebc: 14
+  efficienza_percent: 75
+  impianto: "All grain 21L"
+  volume_fermentatore: 21
+
+grist:
+  - malto: "Pale millet malt"
+    kg: 4.1
+    percent: 64.5
+    note: "Miglio"
+  - malto: "CaraMillet malt (3°L)"
+    kg: 0.9
+    percent: 14.2
+    note: "Caramello"
+  - malto: "Biscuit rice malt"
+    kg: 0.68
+    percent: 10.7
+    note: "Riso"
+  - malto: "Pale buckwheat malt"
+    kg: 0.45
+    percent: 7.1
+    note: "Grano saraceno"
+  - malto: "Crystal rice malt"
+    kg: 0.23
+    percent: 3.6
+    note: "Caramello"
+
+luppolatura:
+  - varieta: "Cascade (5% AA)"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Cryo Cascade"
+    grammi: 28
+    tempo_min: 0
+    uso: whirlpool
+  - varieta: "Cascade"
+    grammi: 28
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+
+lievito:
+  ceppo: "SafAle S-04 / Mangrove Jack's M15 (Empire Ale)"
+  forma: secco
+  attenuazione_percent: 76
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale"
+
+mash:
+  temperatura_c: 66
+  durata_min: 105
+  spessore_l_kg: 3.0
+  note: "90-120 min fino a test iodio, si può salire a 71°C dopo 1h"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 26
+  volume_post_boil_litri: 21
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 20
+  dry_hop_giorno: 5
+  dry_hop_temperatura_c: 20
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Maltodestrina 0.45kg a 15 min"
+  - "Enzimi Termamyl + SEBamyl L in mash per conversione dei grani non-maltati"
+
+alternative:
+  - descrizione: "Versione più luppolata"
+    cambiamenti: "Aggiungere dry hop aggiuntivo"
+    impatto: "Aroma più intenso"

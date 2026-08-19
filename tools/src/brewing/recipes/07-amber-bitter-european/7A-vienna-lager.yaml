@@ -1,0 +1,98 @@
+nome: "Gordon Strong's Vienna Lager"
+stile: "Vienna Lager"
+codice_bjcp: "7A"
+descrizione: |
+  Vienna lager elegante e maltata, senza spigoli. Amaro moderato per bilanciare
+  il malto.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-vienna-lager/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.051
+  fg: 1.012
+  abv_percent: 5.2
+  ibu: 19
+  ebc: 24
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Vienna malt"
+    kg: 1.81
+    percent: 37.0
+    note: "Malto base"
+  - malto: "Pilsner malt"
+    kg: 1.59
+    percent: 32.4
+    note: "Malto base"
+  - malto: "Dark Munich malt"
+    kg: 0.79
+    percent: 16.1
+    note: "Profondità"
+  - malto: "Caravienne malt"
+    kg: 0.68
+    percent: 13.9
+    note: "Caramello"
+  - malto: "Carafa Special III"
+    kg: 0.03
+    percent: 0.6
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Styrian Golding"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Saaz"
+    grammi: 14
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 2124 / White Labs WLP830 / SafLager W-34/70"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "10°C"
+  note: "Lievito lager pulito"
+
+mash:
+  temperatura_c: 65
+  durata_min: 90
+  spessore_l_kg: 3.0
+  note: "Step: 55°C/10, 63°C/40, 70°C/20, 76°C/15"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 10
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "Lagering 0°C per 2 mesi"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Vienna come malto dominante"
+  - "Lagering lungo per eleganza"
+
+alternative:
+  - descrizione: "Versione più maltata"
+    cambiamenti: "Aumentare dark Munich"
+    impatto: "Corpo più pieno"

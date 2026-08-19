@@ -1,0 +1,89 @@
+nome: "California Common"
+stile: "California Common"
+codice_bjcp: "19B"
+descrizione: |
+  Stile "steam beer" fermentato a temperature da lager con lievito California,
+  corpo maltato e luppolatura Cluster caratteristica.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/california-common/"
+  autore: "BYO Staff"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.052
+  fg: 1.012
+  abv_percent: 5.2
+  ibu: 35
+  ebc: 20
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "American 2-row pale ale malt"
+    kg: 3.8
+    percent: 78.7
+    note: "Malto base"
+  - malto: "Munich 10-20L"
+    kg: 0.58
+    percent: 12.0
+    note: "Corpo maltato"
+  - malto: "Crystal 60L"
+    kg: 0.45
+    percent: 9.3
+    note: "Caramello"
+
+luppolatura:
+  - varieta: "Cluster"
+    grammi: 45
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Cluster"
+    grammi: 43
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 2112 (California Lager) / White Labs WLP810 (San Francisco Lager)"
+  forma: liquido
+  attenuazione_percent: 75
+  temperatura_fermentazione: "16°C"
+  note: "Lievito California, fermentazione a temperature da lager"
+
+mash:
+  temperatura_c: 65
+  durata_min: 90
+  spessore_l_kg: 3.0
+  note: "Step: 54°C/30, 67°C/60, 76°C mash-out"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 16
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Lievito California a temperature da lager"
+  - "Luppolatura Cluster caratteristica"
+
+alternative:
+  - descrizione: "Versione più maltata"
+    cambiamenti: "Aumentare Munich"
+    impatto: "Corpo più pieno"

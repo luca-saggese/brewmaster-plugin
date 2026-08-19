@@ -1,0 +1,110 @@
+nome: "Sailing Away Tropical Stout"
+stile: "Tropical Stout"
+codice_bjcp: "16C"
+descrizione: |
+  Tropical stout maltato e tostato, con lattosio per dolcezza e luppolatura
+  decisa per bilanciare.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/sailing-away-tropical-stout/"
+  autore: "Bob Peak"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.072
+  fg: 1.020
+  abv_percent: 6.8
+  ibu: 54
+  ebc: 69
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "English pale ale"
+    kg: 4.5
+    percent: 80
+    note: "Malto base"
+  - malto: "Chocolate malt"
+    kg: 0.34
+    percent: 6
+    note: "Tostatura"
+  - malto: "Wheat"
+    kg: 0.23
+    percent: 4
+    note: "Corpo"
+  - malto: "Carapils"
+    kg: 0.23
+    percent: 4
+    note: "Schiuma e corpo"
+  - malto: "Caramel 40L"
+    kg: 0.23
+    percent: 4
+    note: "Caramello"
+  - malto: "Black patent"
+    kg: 0.113
+    percent: 2
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Willamette"
+    grammi: 43
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Fuggle"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Fuggle"
+    grammi: 14
+    tempo_min: 30
+    uso: boil
+    note: "Aroma"
+  - varieta: "Willamette"
+    grammi: 14
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+
+lievito:
+  ceppo: "Wyeast 1968 (London ESB)"
+  forma: liquido
+  attenuazione_percent: 74
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale inglese"
+
+mash:
+  temperatura_c: 68
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 20
+  dry_hop_giorno: 5
+  dry_hop_temperatura_c: 20
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.4
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Lattosio 0.113kg per dolcezza"
+  - "Dried rice extract 0.45kg per attenuazione"
+
+alternative:
+  - descrizione: "Versione più dolce"
+    cambiamenti: "Aumentare lattosio"
+    impatto: "Dolcezza più marcata"

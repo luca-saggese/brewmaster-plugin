@@ -1,0 +1,88 @@
+nome: "Dunkelweizen (Jamil Zainasheff)"
+stile: "Dunkles Weissbier"
+codice_bjcp: "10B"
+descrizione: |
+  Dunkelweizen classico con 62% frumento, luppolatura minima e lievito weizen
+  per esteri di banana e chiodi di garofano.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/dunkelweizen/"
+  autore: "Jamil Zainasheff"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.050
+  fg: 1.012
+  abv_percent: 5.0
+  ibu: 15
+  ebc: 36
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Wheat malt"
+    kg: 3.0
+    percent: 62
+    note: "Frumento"
+  - malto: "Munich"
+    kg: 1.5
+    percent: 31
+    note: "Corpo maltato"
+  - malto: "Caramel Munich 60L"
+    kg: 0.25
+    percent: 5
+    note: "Caramello"
+  - malto: "Carafa Special II"
+    kg: 0.075
+    percent: 2
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Hallertau"
+    grammi: 21
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "Wyeast 3068 / White Labs WLP300 / Lallemand Munich Classic"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "17°C"
+  note: "Lievito weizen"
+
+mash:
+  temperatura_c: 68
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 17
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 3.0
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Lievito weizen per esteri caratteristici"
+  - "Munich per corpo maltato"
+
+alternative:
+  - descrizione: "Versione più chiara"
+    cambiamenti: "Ridurre Carafa"
+    impatto: "Colore più chiaro"

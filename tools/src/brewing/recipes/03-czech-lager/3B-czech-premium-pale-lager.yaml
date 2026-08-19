@@ -1,0 +1,87 @@
+nome: "Weldwerks Brewing's Weld Pilsner clone"
+stile: "Czech Premium Pale Lager"
+codice_bjcp: "3B"
+descrizione: |
+  Czech premium pale lager con luppolatura Saaz decisa (46 IBU, leggermente sopra
+  lo stile). Grist 100% Pilsner per un profilo pulito e croccante.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/weldwerks-brewings-weld-pilsner-clone/"
+  autore: "BYO Staff"
+  verifica: "Clone commerciale pubblicato da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.051
+  fg: 1.009
+  abv_percent: 5.5
+  ibu: 46
+  ebc: 6
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Gambrinus Pilsner malt"
+    kg: 4.67
+    percent: 100
+    note: "Malto base"
+
+luppolatura:
+  - varieta: "Hallertau Magnum"
+    grammi: 14
+    tempo_min: 0
+    uso: first_wort
+    note: "Amaro"
+  - varieta: "Saaz"
+    grammi: 14
+    tempo_min: 30
+    uso: boil
+    note: "Amaro"
+  - varieta: "Saaz"
+    grammi: 56
+    tempo_min: 15
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "SafLager W-34/70 / Wyeast 2124 / White Labs WLP830"
+  forma: secco
+  attenuazione_percent: 78
+  temperatura_fermentazione: "13°C"
+  note: "Lievito lager pulito"
+
+mash:
+  temperatura_c: 64
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Mash-out 76°C"
+
+bollitura:
+  durata_min: 90
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 21
+  temperatura_c: 13
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "3 settimane a 13°C, poi 3 giorni a 14°C, lagering a ~0°C"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.6
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Bollitura 90 min per ridurre i DMS"
+  - "Luppolatura Saaz decisa"
+
+alternative:
+  - descrizione: "Versione più in stile"
+    cambiamenti: "Ridurre IBU a 40"
+    impatto: "Più bilanciata nello stile"

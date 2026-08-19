@@ -1,0 +1,108 @@
+nome: "Czech Pale Lager"
+stile: "Czech Pale Lager"
+codice_bjcp: "3A"
+descrizione: |
+  Lager ceco pallido con luppolatura Saaz decisa e corpo leggermente più pieno;
+  mash a decozione per ricchezza maltata.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/czech-pale-lager/"
+  autore: "Petr Bachan"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.042
+  fg: 1.011
+  abv_percent: 4.1
+  ibu: 29
+  ebc: 7
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "German Pilsner malt"
+    kg: 3.4
+    percent: 87
+    note: "Malto base"
+  - malto: "Caravienne malt (22°L)"
+    kg: 0.2
+    percent: 5
+    note: "Caramello"
+  - malto: "German wheat malt"
+    kg: 0.17
+    percent: 4
+    note: "Corpo"
+  - malto: "German acidulated malt"
+    kg: 0.14
+    percent: 4
+    note: "pH mash"
+
+luppolatura:
+  - varieta: "Magnum"
+    grammi: 7
+    tempo_min: 0
+    uso: first_wort
+    note: "Amaro"
+  - varieta: "Czech Saaz"
+    grammi: 21
+    tempo_min: 30
+    uso: boil
+    note: "Amaro"
+  - varieta: "Czech Saaz"
+    grammi: 28
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+  - varieta: "Magnum"
+    grammi: 9
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+  - varieta: "Czech Saaz"
+    grammi: 28
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 2633 (Oktoberfest Lager Blend)"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "10°C"
+  note: "Lievito lager"
+
+mash:
+  temperatura_c: 69
+  durata_min: 40
+  spessore_l_kg: 3.0
+  note: "Decozione 30-45 min"
+
+bollitura:
+  durata_min: 90
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 10
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.6
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Mash a decozione per ricchezza maltata"
+  - "Luppolatura Saaz decisa"
+
+alternative:
+  - descrizione: "Versione più secca"
+    cambiamenti: "Mash a 66°C"
+    impatto: "Finale più asciutto"

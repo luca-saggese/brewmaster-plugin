@@ -1,0 +1,103 @@
+nome: "Bière de Garde"
+stile: "Bière de Garde"
+codice_bjcp: "24C"
+descrizione: |
+  Bière de Garde robusta (9% ABV) con malti francesi e luppoli nobili.
+  Fermentazione fresca con lievito francese e lunga maturazione per un profilo
+  maltato e pulito.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/biere-de-garde/"
+  autore: "Mikoli Weaver"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.080
+  fg: 1.012
+  abv_percent: 9.0
+  ibu: 31
+  ebc: 24
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "MFB two-row pale malt"
+    kg: 5.7
+    percent: 73.6
+    note: "Malto base"
+  - malto: "MFB Munich malt (7°L)"
+    kg: 0.91
+    percent: 11.8
+    note: "Corpo maltato"
+  - malto: "Caramel pilsen malt"
+    kg: 0.45
+    percent: 5.8
+    note: "Caramello"
+  - malto: "MFB special aromatic malt (4°L)"
+    kg: 0.34
+    percent: 4.4
+    note: "Aroma maltato"
+  - malto: "Caramel malt (20°L)"
+    kg: 0.23
+    percent: 3.0
+    note: "Caramello"
+  - malto: "Kiln coffee malt (150°L)"
+    kg: 0.11
+    percent: 1.5
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Hallertau"
+    grammi: 50
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Strisselspalt"
+    grammi: 35
+    tempo_min: 15
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 3725 (Bière de Garde) / White Labs WLP072 (French Ale)"
+  forma: liquido
+  attenuazione_percent: 80
+  temperatura_fermentazione: "20°C"
+  note: "Lievito francese, poi secondario fino a FG 1.012"
+
+mash:
+  temperatura_c: 66
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+  note: "Secondario fino a FG 1.012"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Malti francesi per profilo maltato"
+  - "Lunga maturazione"
+
+alternative:
+  - descrizione: "Versione meno alcolica"
+    cambiamenti: "Ridurre OG a 1.070"
+    impatto: "Meno alcolica"

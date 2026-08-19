@@ -1,0 +1,80 @@
+nome: "Gordon Strong's Strong Scotch Ale"
+stile: "Wee Heavy (Strong Scotch Ale)"
+codice_bjcp: "17C"
+descrizione: |
+  Wee heavy ricco e maltato, quasi interamente Golden Promise, con
+  caramellizzazione in caldaia e lievito scozzese pulito.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-strong-scotch-ale/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.083
+  fg: 1.022
+  abv_percent: 8.1
+  ibu: 24
+  ebc: 35
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Golden Promise"
+    kg: 7.8
+    percent: 98
+    note: "Malto base"
+  - malto: "Roasted barley"
+    kg: 0.142
+    percent: 2
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Golding"
+    grammi: 43
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "White Labs WLP028 / Wyeast 1728 / SafAle US-05"
+  forma: liquido
+  attenuazione_percent: 74
+  temperatura_fermentazione: "15°C"
+  note: "Lievito scozzese"
+
+mash:
+  temperatura_c: 70
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion, riduzione del primo runnings per caramellizzazione"
+
+bollitura:
+  durata_min: 90
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 15
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 7
+
+note_critiche:
+  - "Caramellizzazione in caldaia per dolcezza"
+  - "Alta gravità, pitch rate elevato"
+
+alternative:
+  - descrizione: "Versione meno alcolica"
+    cambiamenti: "Ridurre OG a 1.075"
+    impatto: "Meno alcolica"

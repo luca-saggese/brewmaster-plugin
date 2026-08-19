@@ -1,0 +1,103 @@
+nome: "American Brown Ale (ispirata a Pete's Wicked Ale)"
+stile: "American Brown Ale"
+codice_bjcp: "19C"
+descrizione: |
+  Brown ale americana con caramello e cioccolato, luppolatura Cascade/Brewers
+  Gold e dry hopping per un carattere fresco.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/articles/american-brown-ale-style-profile/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.053
+  fg: 1.015
+  abv_percent: 5.1
+  ibu: 29
+  ebc: 45
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "US pale ale malt"
+    kg: 3.7
+    percent: 73.1
+    note: "Malto base"
+  - malto: "US crystal 60L"
+    kg: 1.25
+    percent: 24.7
+    note: "Caramello"
+  - malto: "US chocolate malt"
+    kg: 0.11
+    percent: 2.2
+    note: "Tostatura"
+
+luppolatura:
+  - varieta: "Cascade"
+    grammi: 19
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Brewers Gold"
+    grammi: 9
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Brewers Gold"
+    grammi: 21
+    tempo_min: 5
+    uso: boil
+    note: "Sapore"
+  - varieta: "Cascade"
+    grammi: 14
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+  - varieta: "Brewers Gold"
+    grammi: 28
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+
+lievito:
+  ceppo: "Wyeast 1007 / White Labs WLP036 / SafAle K-97"
+  forma: liquido
+  attenuazione_percent: 74
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale tedesco/americano"
+
+mash:
+  temperatura_c: 65
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 20
+  dry_hop_giorno: 5
+  dry_hop_temperatura_c: 20
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Dry hop per carattere fresco"
+  - "Crystal elevato per dolcezza caramellata"
+
+alternative:
+  - descrizione: "Versione più tostata"
+    cambiamenti: "Aumentare chocolate malt"
+    impatto: "Note tostate più decise"

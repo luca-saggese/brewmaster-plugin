@@ -1,0 +1,80 @@
+nome: "Blondinebier"
+stile: "American Blonde Ale"
+codice_bjcp: "18A"
+descrizione: |
+  Blonde ale pulita e facile da bere, con base maltata semplice e un tocco di
+  crystal per una leggera dolcezza. Luppolatura delicata e bilanciata.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/articles/american-blonde-ale-style-profile/"
+  autore: "Jamil Zainasheff"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.049
+  fg: 1.011
+  abv_percent: 5.0
+  ibu: 20
+  ebc: 10
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "2-row pale malt"
+    kg: 4.53
+    percent: 95.2
+    note: "Malto base"
+  - malto: "Crystal 15L"
+    kg: 0.23
+    percent: 4.8
+    note: "Dolcezza leggera"
+
+luppolatura:
+  - varieta: "Willamette"
+    grammi: 23
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "Wyeast 1056 / White Labs WLP001 / Fermentis US-05"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "19°C"
+  note: "Lievito ale americano pulito"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 19
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Base maltata semplice"
+  - "Luppolatura delicata"
+
+alternative:
+  - descrizione: "Versione più luppolata"
+    cambiamenti: "Aumentare IBU a 25"
+    impatto: "Più amara"

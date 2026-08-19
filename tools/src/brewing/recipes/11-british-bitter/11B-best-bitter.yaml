@@ -1,0 +1,98 @@
+nome: "Copper Clad Best Bitter"
+stile: "Best Bitter"
+codice_bjcp: "11B"
+descrizione: |
+  Best bitter da cask ale inglese, con luppolo moderno Endeavour per un carattere
+  fruttato e rinfrescante.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/copper-clad-best-bitter/"
+  autore: "Ben Martin"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.040
+  fg: 1.008
+  abv_percent: 4.1
+  ibu: 29
+  ebc: 22
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pale ale malt britannico"
+    kg: 3.4
+    percent: 90
+    note: "Malto base"
+  - malto: "Crystal medium (60°L)"
+    kg: 0.23
+    percent: 6
+    note: "Caramello"
+  - malto: "Amber malt (27°L)"
+    kg: 0.11
+    percent: 3
+    note: "Tostatura"
+  - malto: "Chocolate malt (425°L)"
+    kg: 0.04
+    percent: 1
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Challenger"
+    grammi: 12
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Endeavour"
+    grammi: 4.3
+    tempo_min: 30
+    uso: boil
+    note: "Aroma"
+  - varieta: "Endeavour"
+    grammi: 33
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "SafAle S-04"
+  forma: secco
+  attenuazione_percent: 75
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale inglese"
+
+mash:
+  temperatura_c: 65.5
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.2
+  temperatura_servizio_c: 8
+
+note_critiche:
+  - "Carbonazione bassa (cask ale)"
+  - "Luppolo Endeavour per carattere fruttato"
+
+alternative:
+  - descrizione: "Versione tradizionale"
+    cambiamenti: "Sostituire Endeavour con EKG"
+    impatto: "Profilo più classico"

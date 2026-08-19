@@ -1,0 +1,111 @@
+nome: "Winter's Wheatwine"
+stile: "Wheatwine"
+codice_bjcp: "22D"
+descrizione: |
+  Wheatwine ad alta gravità con luppolatura moderna (Citra, Nelson Sauvin,
+  Motueka) su una base di malto di frumento tedesco; birra da invecchiamento.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/winters-wheatwine/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.102
+  fg: 1.018
+  abv_percent: 11.4
+  ibu: 51
+  ebc: 18
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "German wheat malt"
+    kg: 5.44
+    percent: 60.0
+    note: "Frumento"
+  - malto: "German Pilsner malt"
+    kg: 1.59
+    percent: 17.5
+    note: "Malto base"
+  - malto: "Flaked wheat"
+    kg: 0.45
+    percent: 5.0
+    note: "Corpo"
+  - malto: "Caramel wheat malt (~50°L)"
+    kg: 0.45
+    percent: 5.0
+    note: "Caramello"
+  - malto: "Honey malt"
+    kg: 0.23
+    percent: 2.5
+    note: "Dolcezza"
+  - malto: "White sugar"
+    kg: 0.91
+    percent: 10.0
+    note: "Attenuazione"
+
+luppolatura:
+  - varieta: "Magnum"
+    grammi: 42.5
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Citra"
+    grammi: 28.4
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+  - varieta: "Nelson Sauvin"
+    grammi: 28.4
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+  - varieta: "Motueka"
+    grammi: 28.4
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "White Labs WLP001 / Wyeast 1056 / SafAle US-05"
+  forma: liquido
+  attenuazione_percent: 80
+  temperatura_fermentazione: "19°C"
+  note: "Lievito ale americano, max 22°C"
+
+mash:
+  temperatura_c: 63
+  durata_min: 80
+  spessore_l_kg: 3.0
+  note: "Multi-step: 40°C/10, 55°C/15, 63°C/40, 70°C/15, mashout 76°C/15"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 21
+  temperatura_c: 19
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Alta gravità, pitch rate elevato"
+  - "Da invecchiare"
+
+alternative:
+  - descrizione: "Versione meno alcolica"
+    cambiamenti: "Ridurre OG a 1.090"
+    impatto: "Meno alcolica"

@@ -1,0 +1,106 @@
+nome: "Gordon Strong's Märzen"
+stile: "Märzen"
+codice_bjcp: "6A"
+descrizione: |
+  Märzen da competizione, più corposa e maltata delle versioni moderne. Grist
+  Vienna/Pilsner/Munich con melanoidin per profondità.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-marzen/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.060
+  fg: 1.014
+  abv_percent: 6.1
+  ibu: 22
+  ebc: 22
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "German Vienna malt"
+    kg: 2.04
+    percent: 35.3
+    note: "Malto base"
+  - malto: "German Pilsner malt"
+    kg: 1.36
+    percent: 23.5
+    note: "Malto base"
+  - malto: "German Munich malt"
+    kg: 1.36
+    percent: 23.5
+    note: "Corpo maltato"
+  - malto: "German dark Munich malt"
+    kg: 0.45
+    percent: 7.8
+    note: "Profondità"
+  - malto: "Melanoidin malt"
+    kg: 0.23
+    percent: 3.9
+    note: "Profondità maltata"
+  - malto: "Aromatic malt"
+    kg: 0.23
+    percent: 3.9
+    note: "Aroma maltato"
+  - malto: "Weyermann Cara-Munich III"
+    kg: 0.11
+    percent: 2.0
+    note: "Caramello"
+
+luppolatura:
+  - varieta: "German Tradition"
+    grammi: 19
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "German Hallertauer"
+    grammi: 28
+    tempo_min: 20
+    uso: boil
+    note: "Sapore"
+
+lievito:
+  ceppo: "White Labs WLP833 / Omega OYL-111 / SafLager W-34/70"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "10°C"
+  note: "Lievito lager pulito"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion, mash-out 76°C"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 10
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "Lagering 0°C per 8-12 settimane"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Melanoidin per profondità maltata"
+  - "Lagering lungo per finitura pulita"
+
+alternative:
+  - descrizione: "Versione più leggera"
+    cambiamenti: "Ridurre OG a 1.056"
+    impatto: "Meno corposa"

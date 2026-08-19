@@ -1,0 +1,105 @@
+nome: "American Imperial Stout"
+stile: "Imperial Stout"
+codice_bjcp: "20C"
+descrizione: |
+  Imperial stout massiccia con doppio mash, malti di segale e avena, e zucchero
+  di canna per raggiungere 12% ABV. Invecchiabile per anni.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/american-imperial-stout/"
+  autore: "Dan Russo"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.130
+  fg: 1.040
+  abv_percent: 12.0
+  ibu: 60
+  ebc: 170
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "2-row malted barley"
+    kg: 6.6
+    percent: 55
+    note: "Malto base"
+  - malto: "Flaked oats"
+    kg: 1.2
+    percent: 10
+    note: "Corpo"
+  - malto: "Munich dark malt"
+    kg: 0.45
+    percent: 3.5
+    note: "Corpo maltato"
+  - malto: "Carafa Special III"
+    kg: 0.77
+    percent: 6.5
+    note: "Colore"
+  - malto: "Chocolate rye malt"
+    kg: 0.77
+    percent: 6.5
+    note: "Tostatura"
+  - malto: "Roasted barley"
+    kg: 0.37
+    percent: 3
+    note: "Tostatura"
+  - malto: "Crystal rye 75L"
+    kg: 0.77
+    percent: 6.5
+    note: "Caramello"
+  - malto: "Brown sugar"
+    kg: 1.1
+    percent: 9
+    note: "Attenuazione"
+
+luppolatura:
+  - varieta: "Warrior"
+    grammi: 35
+    tempo_min: 90
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "White Labs WLP090 / SafAle US-05"
+  forma: liquido
+  attenuazione_percent: 72
+  temperatura_fermentazione: "19°C"
+  note: "Lievito ale ad alta attenuazione, poi 21°C a fine fermentazione"
+
+mash:
+  temperatura_c: 64
+  durata_min: 90
+  spessore_l_kg: 3.0
+  note: "Double mash"
+
+bollitura:
+  durata_min: 90
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 21
+  temperatura_c: 19
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Double mash per alta gravità"
+  - "Zucchero di canna per raggiungere 12% ABV"
+  - "Invecchiabile per anni"
+
+alternative:
+  - descrizione: "Versione più leggera"
+    cambiamenti: "Ridurre OG a 1.100"
+    impatto: "Meno alcolica"

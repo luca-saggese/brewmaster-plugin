@@ -1,0 +1,86 @@
+nome: "Zoc's Traditional Lambic"
+stile: "Lambic"
+codice_bjcp: "23D"
+descrizione: |
+  Lambic tradizionale con frumento non maltato e luppoli invecchiati per la sola
+  conservazione. Fermentazione spontanea/mista con invecchiamento prolungato in botte.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/zocs-traditional-lambic/"
+  autore: "Paul Zocco"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.045
+  fg: 1.008
+  abv_percent: 4.8
+  ibu: 10
+  ebc: 6
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pale malt"
+    kg: 2.7
+    percent: 60.0
+    note: "Malto base"
+  - malto: "Malted wheat"
+    kg: 0.9
+    percent: 20.0
+    note: "Frumento maltato"
+  - malto: "Unmalted wheat"
+    kg: 0.9
+    percent: 20.0
+    note: "Frumento non maltato"
+
+luppolatura:
+  - varieta: "Aged Styrian Goldings"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Luppoli invecchiati per conservazione"
+
+lievito:
+  ceppo: "Wyeast 3278 (Belgian Lambic Blend) / WLP655 (Belgian Sour Mix 1)"
+  forma: liquido
+  attenuazione_percent: 85
+  temperatura_fermentazione: "20°C"
+  note: "Lactobacillus, Pediococcus, Brettanomyces bruxellensis e claussenii"
+
+mash:
+  temperatura_c: 68
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 120
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 30
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+  note: "Invecchiamento ≥ 1 anno in botte di rovere"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.8
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Frumento non maltato"
+  - "Luppoli invecchiati per conservazione"
+  - "Invecchiamento ≥ 1 anno in botte"
+
+alternative:
+  - descrizione: "Versione più acida"
+    cambiamenti: "Aumentare il tempo in botte"
+    impatto: "Acidità più marcata"

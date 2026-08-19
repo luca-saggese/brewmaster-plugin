@@ -1,0 +1,101 @@
+nome: "Gordon Strong's American Amber Ale"
+stile: "American Amber Ale"
+codice_bjcp: "19A"
+descrizione: |
+  Amber ale bilanciata con malti caramellati e tostati, luppolatura americana
+  moderata e finitura pulita.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-american-amber-ale/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.054
+  fg: 1.012
+  abv_percent: 5.5
+  ibu: 30
+  ebc: 30
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pale ale malt"
+    kg: 4.1
+    percent: 80.9
+    note: "Malto base"
+  - malto: "Dark Munich 9L"
+    kg: 0.45
+    percent: 9.0
+    note: "Corpo maltato"
+  - malto: "Crystal 60L"
+    kg: 0.45
+    percent: 9.0
+    note: "Caramello"
+  - malto: "Chocolate malt"
+    kg: 0.06
+    percent: 1.1
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Cascade"
+    grammi: 28
+    tempo_min: 0
+    uso: first_wort
+  - varieta: "Mandarina Bavaria"
+    grammi: 14
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+  - varieta: "Hallertauer"
+    grammi: 28
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+  - varieta: "Cascade"
+    grammi: 28
+    tempo_min: 0
+    uso: hop_stand
+
+lievito:
+  ceppo: "Wyeast 1272 / White Labs WLP051 / Mangrove Jack's M36"
+  forma: liquido
+  attenuazione_percent: 75
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale americano"
+
+mash:
+  temperatura_c: 66
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Malti caramellati e tostati bilanciati"
+  - "Luppolatura americana moderata"
+
+alternative:
+  - descrizione: "Versione più maltata"
+    cambiamenti: "Aumentare Munich"
+    impatto: "Corpo più pieno"

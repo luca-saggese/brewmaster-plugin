@@ -1,0 +1,109 @@
+nome: "Flanders Red Ale"
+stile: "Flanders Red Ale"
+codice_bjcp: "23B"
+descrizione: |
+  Flanders red acida e complessa, con note di frutta rossa, legno di quercia e
+  acidità lattica/acetica, invecchiata in botte.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/flanders-red-ale/"
+  autore: "Andrew Reudink"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.061
+  fg: 1.008
+  abv_percent: 7.0
+  ibu: 5
+  ebc: 44
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner malt"
+    kg: 1.36
+    percent: 20
+    note: "Malto base"
+  - malto: "Vienna malt"
+    kg: 1.36
+    percent: 20
+    note: "Corpo maltato"
+  - malto: "Best Malz Red X malt"
+    kg: 1.36
+    percent: 20
+    note: "Colore rosso"
+  - malto: "German Munich malt (6°L)"
+    kg: 0.45
+    percent: 7
+    note: "Corpo maltato"
+  - malto: "Aromatic malt"
+    kg: 0.23
+    percent: 3
+    note: "Aroma maltato"
+  - malto: "Caramunich II malt"
+    kg: 0.23
+    percent: 3
+    note: "Caramello"
+  - malto: "Special B malt"
+    kg: 0.23
+    percent: 3
+    note: "Frutta secca"
+  - malto: "Red wheat malt"
+    kg: 0.23
+    percent: 3
+    note: "Corpo"
+  - malto: "Amber candi syrup"
+    kg: 0.45
+    percent: 7
+    note: "Attenuazione"
+
+luppolatura:
+  - varieta: "Hallertau"
+    grammi: 14
+    tempo_min: 30
+    uso: boil
+    note: "Amaro leggero"
+
+lievito:
+  ceppo: "Imperial Yeast G02 (Kaiser) / WLP036, poi blend Imperial F08 (Sour Batch Kidz) / WLP665 (Flemish Ale)"
+  forma: liquido
+  attenuazione_percent: 80
+  temperatura_fermentazione: "17°C"
+  note: "Fermentazione 10-14 giorni, poi inoculo blend acido"
+
+mash:
+  temperatura_c: 68
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 17
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+  note: "Invecchiamento in botte per acidità"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Invecchiamento in botte per acidità e legno"
+  - "Blend acido per acidità lattica/acetica"
+
+alternative:
+  - descrizione: "Versione meno acida"
+    cambiamenti: "Ridurre il tempo in botte"
+    impatto: "Acidità più contenuta"

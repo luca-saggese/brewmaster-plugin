@@ -1,0 +1,93 @@
+nome: "Jamil's American Stout"
+stile: "American Stout"
+codice_bjcp: "20B"
+descrizione: |
+  Stout americana robusta e amara, con malti tostati e neri, corpo pieno e
+  luppolatura decisa.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/american-stout/"
+  autore: "Jamil Zainasheff"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.072
+  fg: 1.017
+  abv_percent: 7.2
+  ibu: 73
+  ebc: 95
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Great Western pale malt 2L"
+    kg: 6.11
+    percent: 85.6
+    note: "Malto base"
+  - malto: "Briess black barley 500L"
+    kg: 0.41
+    percent: 5.7
+    note: "Tostatura"
+  - malto: "Crystal 40L"
+    kg: 0.31
+    percent: 4.3
+    note: "Caramello"
+  - malto: "Dark chocolate malt 420L"
+    kg: 0.31
+    percent: 4.3
+    note: "Tostatura"
+
+luppolatura:
+  - varieta: "Horizon"
+    grammi: 33
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Centennial"
+    grammi: 24
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "White Labs WLP001 / Wyeast 1056 / Safale US-05"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "19°C"
+  note: "Lievito ale americano pulito"
+
+mash:
+  temperatura_c: 68
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 19
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.4
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Amarezza decisa (73 IBU)"
+  - "Malti tostati e neri per carattere"
+
+alternative:
+  - descrizione: "Versione meno amara"
+    cambiamenti: "Ridurre IBU a 55"
+    impatto: "Più bilanciata"

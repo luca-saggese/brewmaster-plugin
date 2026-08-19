@@ -1,0 +1,119 @@
+nome: "Gordon Strong's Baltic Porter"
+stile: "Baltic Porter"
+codice_bjcp: "9C"
+descrizione: |
+  Baltic porter ricca e complessa (7.8% ABV) con grist stratificato. Versione
+  usata da Strong per vincere un oro NHC.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-baltic-porter/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Versione usata per vincere un oro NHC (dichiarato dalla fonte)."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.083
+  fg: 1.024
+  abv_percent: 7.8
+  ibu: 30
+  ebc: 108
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Maris Otter pale ale malt"
+    kg: 3.18
+    percent: 39.8
+    note: "Malto base"
+  - malto: "German dark Munich malt"
+    kg: 1.59
+    percent: 19.9
+    note: "Corpo maltato"
+  - malto: "Weyermann CaraMunich II"
+    kg: 0.79
+    percent: 9.9
+    note: "Caramello"
+  - malto: "UK brown malt"
+    kg: 0.68
+    percent: 8.5
+    note: "Tostatura"
+  - malto: "UK crystal (90°L)"
+    kg: 0.57
+    percent: 7.1
+    note: "Caramello scuro"
+  - malto: "German wheat malt"
+    kg: 0.45
+    percent: 5.6
+    note: "Corpo"
+  - malto: "UK chocolate malt"
+    kg: 0.34
+    percent: 4.3
+    note: "Tostatura"
+  - malto: "Belgian Special B"
+    kg: 0.23
+    percent: 2.9
+    note: "Frutta secca"
+  - malto: "Weyermann Carafa Special III"
+    kg: 0.17
+    percent: 2.1
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Fuggles"
+    grammi: 57
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Hallertauer"
+    grammi: 14
+    tempo_min: 10
+    uso: boil
+    note: "Sapore"
+  - varieta: "Hallertauer"
+    grammi: 14
+    tempo_min: 2
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Ceppo lager pulito (es. WLP833 / W-34/70)"
+  forma: liquido
+  attenuazione_percent: 75
+  temperatura_fermentazione: "17°C"
+  note: "Fermentazione a 17°C, lagering 1°C per 12 settimane"
+
+mash:
+  temperatura_c: 66
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion, mash-out 77°C"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 21
+  temperatura_c: 17
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 1
+  note: "Lagering 1°C per 12 settimane"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Grist stratificato per complessità"
+  - "Lagering lungo per finitura pulita"
+
+alternative:
+  - descrizione: "Versione più semplice"
+    cambiamenti: "Ridurre i malti speciali"
+    impatto: "Meno complessa"

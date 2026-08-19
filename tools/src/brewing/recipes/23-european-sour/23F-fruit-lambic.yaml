@@ -1,0 +1,82 @@
+nome: "Jolly Rancher Apple Lambic"
+stile: "Fruit Lambic"
+codice_bjcp: "23F"
+descrizione: |
+  Fruit lambic alla mela con base di malto d'orzo e frumento, luppoli invecchiati
+  e fermentazione mista. La frutta viene aggiunta in secondario dopo la
+  fermentazione primaria.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/jolly-rancher-apple-lambic/"
+  autore: "Chris Colby"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.065
+  fg: 1.006
+  abv_percent: 6.3
+  ibu: 11
+  ebc: 8
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "2-row pale malt"
+    kg: 2.3
+    percent: 62.2
+    note: "Malto base"
+  - malto: "Wheat malt"
+    kg: 1.4
+    percent: 37.8
+    note: "Frumento"
+
+luppolatura:
+  - varieta: "Saaz (aged)"
+    grammi: 85
+    tempo_min: 60
+    uso: boil
+    note: "Luppoli invecchiati per conservazione"
+
+lievito:
+  ceppo: "Wyeast 3278 (Lambic Blend, lieviti + batteri)"
+  forma: liquido
+  attenuazione_percent: 88
+  temperatura_fermentazione: "21°C"
+  note: "Condizionamento 21-24°C per ≥ 3 mesi"
+
+mash:
+  temperatura_c: 66
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 120
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 30
+  temperatura_c: 21
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+  note: "Frutta (1.8kg caramelle di mela) aggiunta in secondario"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.8
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Frutta aggiunta in secondario"
+  - "Luppoli invecchiati per conservazione"
+
+alternative:
+  - descrizione: "Versione con frutta fresca"
+    cambiamenti: "Usare 2kg di mele fresche"
+    impatto: "Sapore di frutta più naturale"

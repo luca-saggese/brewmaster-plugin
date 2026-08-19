@@ -1,0 +1,119 @@
+nome: "New England IPA"
+stile: "New England IPA (Hazy IPA)"
+codice_bjcp: "21B1"
+descrizione: |
+  NEIPA torbida con avena e frumento, triple dry hopping di Citra/Galaxy/Mosaic
+  per intenso aroma tropicale. Non filtrata né chiarificata.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/new-england-ipa/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.061
+  fg: 1.012
+  abv_percent: 6.5
+  ibu: 56
+  ebc: 10
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "US 2-row malt"
+    kg: 4.1
+    percent: 70.7
+    note: "Malto base"
+  - malto: "UK Golden Promise"
+    kg: 0.91
+    percent: 15.7
+    note: "Malto base"
+  - malto: "Flaked wheat"
+    kg: 0.45
+    percent: 7.8
+    note: "Corpo e torbidità"
+  - malto: "Flaked oats"
+    kg: 0.34
+    percent: 5.9
+    note: "Corpo morbido"
+
+luppolatura:
+  - varieta: "Amarillo"
+    grammi: 43
+    tempo_min: 0
+    uso: first_wort
+  - varieta: "Amarillo"
+    grammi: 43
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+  - varieta: "Citra"
+    grammi: 28
+    tempo_min: 0
+    uso: hop_stand
+  - varieta: "Galaxy"
+    grammi: 28
+    tempo_min: 0
+    uso: hop_stand
+  - varieta: "Mosaic"
+    grammi: 28
+    tempo_min: 0
+    uso: hop_stand
+  - varieta: "Citra"
+    grammi: 85
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+  - varieta: "Galaxy"
+    grammi: 43
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+  - varieta: "Mosaic"
+    grammi: 43
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+
+lievito:
+  ceppo: "GigaYeast GY054 (Vermont IPA) / White Labs WLP095 (Burlington Ale)"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "18°C"
+  note: "Lievito NEIPA, con salita naturale"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 18
+  dry_hop_giorno: 5
+  dry_hop_temperatura_c: 18
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Triple dry hopping per aroma tropicale"
+  - "Non filtrata né chiarificata"
+  - "Avena e frumento per torbidità"
+
+alternative:
+  - descrizione: "Versione più chiara"
+    cambiamenti: "Ridurre avena e frumento"
+    impatto: "Meno torbida"

@@ -1,0 +1,106 @@
+nome: "Gordon Strong's Eisbock"
+stile: "Eisbock"
+codice_bjcp: "9B"
+descrizione: |
+  Eisbock ottenuto per concentrazione a freddo (freeze concentration): si
+  trasferiscono ~15 L lasciando ~3.8 L di ghiaccio, aumentando corpo e alcol.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-eisbock/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.081
+  fg: 1.017
+  abv_percent: 8.4
+  ibu: 21
+  ebc: 39
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner malt"
+    kg: 2.3
+    percent: 28
+    note: "Malto base"
+  - malto: "Dark Munich malt"
+    kg: 2.3
+    percent: 28
+    note: "Corpo maltato"
+  - malto: "Munich malt"
+    kg: 2.0
+    percent: 24
+    note: "Corpo maltato"
+  - malto: "Carapils"
+    kg: 0.45
+    percent: 6
+    note: "Schiuma e corpo"
+  - malto: "CaraMunich III"
+    kg: 0.45
+    percent: 6
+    note: "Caramello"
+  - malto: "Caravienne"
+    kg: 0.45
+    percent: 6
+    note: "Caramello"
+  - malto: "Crystal malt (80°L)"
+    kg: 0.23
+    percent: 3
+    note: "Caramello scuro"
+
+luppolatura:
+  - varieta: "Crystal"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Tettnang"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "Wyeast 2206 (Bavarian) / White Labs WLP940 (Mexican)"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "10°C"
+  note: "Lievito lager"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion, mashout 76°C"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 21
+  temperatura_c: 10
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "Freeze concentration: trasferire ~15L lasciando ~3.8L di ghiaccio"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Concentrazione a freddo per aumentare corpo e alcol"
+  - "Pitch rate elevato"
+
+alternative:
+  - descrizione: "Versione meno concentrata"
+    cambiamenti: "Ridurre il tempo di freeze"
+    impatto: "Meno alcolica"

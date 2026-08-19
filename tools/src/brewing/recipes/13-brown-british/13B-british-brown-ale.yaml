@@ -1,0 +1,106 @@
+nome: "Gordon Strong's British Brown Ale"
+stile: "British Brown Ale"
+codice_bjcp: "13B"
+descrizione: |
+  Brown ale inglese equilibrata e beverina, con doppio crystal e frumento
+  torrefatto per corpo e carattere.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-british-brown-ale/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.046
+  fg: 1.009
+  abv_percent: 4.9
+  ibu: 21
+  ebc: 35
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Maris Otter"
+    kg: 2.3
+    percent: 52
+    note: "Malto base"
+  - malto: "Golden Promise"
+    kg: 0.907
+    percent: 20
+    note: "Malto base"
+  - malto: "Frumento torrefatto"
+    kg: 0.454
+    percent: 10
+    note: "Corpo"
+  - malto: "Crystal UK (65°L)"
+    kg: 0.454
+    percent: 10
+    note: "Caramello"
+  - malto: "Crystal UK (45°L)"
+    kg: 0.227
+    percent: 5
+    note: "Caramello"
+  - malto: "Chocolate malt"
+    kg: 0.113
+    percent: 3
+    note: "Tostatura"
+
+luppolatura:
+  - varieta: "Goldings"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Goldings"
+    grammi: 14
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+  - varieta: "Goldings"
+    grammi: 14
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 1318 (London Ale III) / Omega OYL-011 / LalBrew Verdant IPA"
+  forma: liquido
+  attenuazione_percent: 74
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale inglese"
+
+mash:
+  temperatura_c: 66
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 8
+
+note_critiche:
+  - "Doppio crystal per carattere caramellato"
+  - "Frumento torrefatto per corpo"
+
+alternative:
+  - descrizione: "Versione più tostata"
+    cambiamenti: "Aumentare chocolate malt"
+    impatto: "Note tostate più decise"

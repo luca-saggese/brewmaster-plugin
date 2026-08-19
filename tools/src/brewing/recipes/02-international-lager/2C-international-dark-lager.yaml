@@ -1,0 +1,96 @@
+nome: "Gordon Strong's International Dark Lager"
+stile: "International Dark Lager"
+codice_bjcp: "2C"
+descrizione: |
+  Dark lager internazionale con Carafa Special II per colore e note tostate senza
+  astringenza, corpo medio e finitura pulita.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-international-dark-lager/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.050
+  fg: 1.012
+  abv_percent: 4.9
+  ibu: 14
+  ebc: 44
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "2-row Nord America"
+    kg: 2.5
+    percent: 52.4
+    note: "Malto base"
+  - malto: "Pilsner belga"
+    kg: 0.9
+    percent: 19.0
+    note: "Malto base"
+  - malto: "Mais in fiocchi"
+    kg: 0.45
+    percent: 9.5
+    note: "Secchezza"
+  - malto: "Riso in fiocchi"
+    kg: 0.45
+    percent: 9.5
+    note: "Secchezza"
+  - malto: "Weyermann Carafa Special II"
+    kg: 0.28
+    percent: 6.0
+    note: "Colore e tostatura"
+  - malto: "Dingemans Cara 45"
+    kg: 0.17
+    percent: 3.6
+    note: "Caramello"
+
+luppolatura:
+  - varieta: "Vanguard"
+    grammi: 23
+    tempo_min: 60
+    uso: boil
+
+lievito:
+  ceppo: "White Labs WLP833 (German Bock) / SafLager W-34/70"
+  forma: liquido
+  attenuazione_percent: 75
+  temperatura_fermentazione: "10°C"
+  note: "Lievito lager pulito"
+
+mash:
+  temperatura_c: 65
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 10
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 1
+  note: "Lagering 2 mesi a 1°C"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Carafa Special II dehusked per colore senza astringenza"
+  - "Lagering lungo per finitura pulita"
+
+alternative:
+  - descrizione: "Versione più tostata"
+    cambiamenti: "Aumentare Carafa a 8%"
+    impatto: "Note tostate più decise"

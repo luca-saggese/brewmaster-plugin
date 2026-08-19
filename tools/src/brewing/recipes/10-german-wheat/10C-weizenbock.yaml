@@ -1,0 +1,96 @@
+nome: "Gordon Strong's Weizenbock"
+stile: "Weizenbock"
+codice_bjcp: "10C"
+descrizione: |
+  Weizenbock ricco e maltato con oltre metà frumento, decoction mash e carattere
+  speziato/fruttato da lievito weizen.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-weizenbock/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.079
+  fg: 1.020
+  abv_percent: 7.9
+  ibu: 17
+  ebc: 39
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Wheat malt"
+    kg: 3.2
+    percent: 43
+    note: "Frumento"
+  - malto: "Vienna"
+    kg: 2.3
+    percent: 31
+    note: "Corpo maltato"
+  - malto: "Dark wheat"
+    kg: 0.68
+    percent: 9
+    note: "Colore"
+  - malto: "Caramel wheat"
+    kg: 0.68
+    percent: 9
+    note: "Caramello"
+  - malto: "Aromatic"
+    kg: 0.454
+    percent: 6
+    note: "Aroma maltato"
+  - malto: "Chocolate wheat"
+    kg: 0.113
+    percent: 2
+    note: "Tostatura"
+
+luppolatura:
+  - varieta: "Perle"
+    grammi: 21
+    tempo_min: 30
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "White Labs WLP380 / Wyeast 3638 / LalBrew Munich Classic / Mangrove Jack's M20"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "17°C"
+  note: "Lievito weizen"
+
+mash:
+  temperatura_c: 65
+  durata_min: 45
+  spessore_l_kg: 3.0
+  note: "Decozione: 55°C/15, 62°C/15, 70°C/15, mashout 76°C"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 17
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.8
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Decoction mash per ricchezza maltata"
+  - "Alta gravità, pitch rate elevato"
+
+alternative:
+  - descrizione: "Versione meno alcolica"
+    cambiamenti: "Ridurre OG a 1.070"
+    impatto: "Meno alcolica"

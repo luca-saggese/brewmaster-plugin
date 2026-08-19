@@ -1,0 +1,102 @@
+nome: "Rauchbier"
+stile: "Rauchbier"
+codice_bjcp: "6B"
+descrizione: |
+  Rauchbier di Bamberga con rauchmalz dominante e luppoli nobili. Affumicatura
+  bilanciata da malti Munich e caramello.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/rauchbier/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.053
+  fg: 1.013
+  abv_percent: 5.3
+  ibu: 21
+  ebc: 32
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "German smoked malt (rauchmalz)"
+    kg: 2.72
+    percent: 54.0
+    note: "Affumicato"
+  - malto: "Munich malt"
+    kg: 1.36
+    percent: 27.0
+    note: "Corpo maltato"
+  - malto: "Dark Munich malt"
+    kg: 0.45
+    percent: 9.0
+    note: "Profondità"
+  - malto: "Aromatic malt"
+    kg: 0.23
+    percent: 4.5
+    note: "Aroma maltato"
+  - malto: "Caramunich III"
+    kg: 0.23
+    percent: 4.5
+    note: "Caramello"
+  - malto: "Carafa Special III"
+    kg: 0.06
+    percent: 1.1
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Hallertauer"
+    grammi: 43
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Hallertauer"
+    grammi: 14
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "White Labs WLP830 / Wyeast 2124 / SafLager W-34/70"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "10°C"
+  note: "Lievito lager pulito"
+
+mash:
+  temperatura_c: 65
+  durata_min: 90
+  spessore_l_kg: 3.0
+  note: "Step: 55°C/10, 63°C/40, 70°C/20, 76°C/15"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 10
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "Lagering 0°C per 6 settimane"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Rauchmalz dominante bilanciato da Munich"
+  - "Luppoli nobili per non coprire l'affumicato"
+
+alternative:
+  - descrizione: "Versione più affumicata"
+    cambiamenti: "Aumentare rauchmalz a 70%"
+    impatto: "Affumicatura più intensa"

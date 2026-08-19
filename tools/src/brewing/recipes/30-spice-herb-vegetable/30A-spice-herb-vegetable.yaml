@@ -1,0 +1,111 @@
+nome: "Wee Hottie"
+stile: "Spice, Herb or Vegetable Beer (Wee Heavy con peperoncini)"
+codice_bjcp: "30A"
+descrizione: |
+  Una wee heavy scura e maltata (Maris Otter + rauch affumicato) che funge da
+  base robusta per il calore intenso di 80 peperoncini. Il corpo pieno e la
+  dolcezza residua bilanciano il piccante dei chipotle e serrano.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/wee-hottie/"
+  autore: "BYO Staff (ricetta di Kuyler Doyle)"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.073
+  fg: 1.025
+  abv_percent: 6.2
+  ibu: 20
+  ebc: 49
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Maris Otter malt"
+    kg: 5.22
+    percent: 76.7
+    note: "Malto base"
+  - malto: "Smoked rauch malt"
+    kg: 0.45
+    percent: 6.7
+    note: "Affumicato"
+  - malto: "British CaraPils malt"
+    kg: 0.45
+    percent: 6.7
+    note: "Schiuma e corpo"
+  - malto: "Belgian aromatic"
+    kg: 0.23
+    percent: 3.3
+    note: "Aroma maltato"
+  - malto: "Belgian CaraVienne"
+    kg: 0.23
+    percent: 3.3
+    note: "Caramello"
+  - malto: "British medium crystal"
+    kg: 0.11
+    percent: 1.7
+    note: "Caramello"
+  - malto: "British chocolate malt"
+    kg: 0.11
+    percent: 1.7
+    note: "Tostatura"
+
+luppolatura:
+  - varieta: "U.K. Target"
+    grammi: 14
+    tempo_min: 75
+    uso: boil
+    note: "Amaro"
+  - varieta: "U.K. Fuggles"
+    grammi: 7
+    tempo_min: 15
+    uso: boil
+    note: "Aroma"
+  - varieta: "U.K. Fuggles"
+    grammi: 7
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 1728 (Scottish Ale)"
+  forma: liquido
+  attenuazione_percent: 74
+  temperatura_fermentazione: "16°C"
+  note: "Lievito scozzese"
+
+mash:
+  temperatura_c: 70
+  durata_min: 90
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 75
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 16
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "40 chipotle + 40 serrano, privati dei semi e affettati, aggiunti al secondary"
+  - "Corpo pieno e dolcezza residua bilanciano il piccante"
+
+alternative:
+  - descrizione: "Versione meno piccante"
+    cambiamenti: "Ridurre i peperoncini a 40 totali"
+    impatto: "Piccante più contenuto"

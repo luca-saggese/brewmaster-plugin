@@ -1,0 +1,94 @@
+nome: "Brouwerij Duvel Moortgat's Duvel clone"
+stile: "Belgian Golden Strong Ale"
+codice_bjcp: "25C"
+descrizione: |
+  Clone di Duvel: golden strong ale molto secca e alcolica, chiara, con esteri
+  fruttati e finale asciutto.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/duvel-clone/"
+  autore: "Chris Colby"
+  verifica: "Clone commerciale pubblicato da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.061
+  fg: 1.007
+  abv_percent: 8.5
+  ibu: 30
+  ebc: 6
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Belgian Pilsner malt"
+    kg: 5.22
+    percent: 78
+    note: "Malto base"
+  - malto: "Corn sugar (kettle)"
+    kg: 0.23
+    percent: 3
+    note: "Attenuazione"
+  - malto: "Corn sugar (dosage)"
+    kg: 0.45
+    percent: 7
+    note: "Attenuazione"
+
+luppolatura:
+  - varieta: "Styrian Goldings"
+    grammi: 34
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Saaz"
+    grammi: 27
+    tempo_min: 15
+    uso: boil
+    note: "Aroma"
+  - varieta: "Saaz"
+    grammi: 21
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 1388 (Belgian Strong Ale) / WLP570 (Belgian Golden Ale)"
+  forma: liquido
+  attenuazione_percent: 85
+  temperatura_fermentazione: "16°C"
+  note: "Lievito belga, free rise fino a 29°C"
+
+mash:
+  temperatura_c: 62
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Step: 55→60→64°C"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 16
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 3.0
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Zucchero per attenuazione elevata"
+  - "Free rise fino a 29°C per esteri"
+
+alternative:
+  - descrizione: "Versione meno alcolica"
+    cambiamenti: "Ridurre lo zucchero"
+    impatto: "Meno alcolica"

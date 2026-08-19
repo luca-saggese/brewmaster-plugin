@@ -1,0 +1,93 @@
+nome: "Scottish 60/- Light"
+stile: "Scottish Light"
+codice_bjcp: "14A"
+descrizione: |
+  Scottish light da session, molto maltata e poco luppolata, con zucchero
+  invertito per corpo e colore.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/scottish-60-light/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.032
+  fg: 1.012
+  abv_percent: 2.5
+  ibu: 17
+  ebc: 35
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Golden Promise"
+    kg: 1.8
+    percent: 65
+    note: "Malto base"
+  - malto: "Flaked maize"
+    kg: 0.45
+    percent: 16
+    note: "Corpo"
+  - malto: "Invert No.3 / candi scuro"
+    kg: 0.45
+    percent: 16
+    note: "Colore e corpo"
+  - malto: "Debittered black malt"
+    kg: 0.085
+    percent: 3
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Fuggle"
+    grammi: 21
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Golding"
+    grammi: 7
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "White Labs WLP028 / Wyeast 1728 / SafAle US-05"
+  forma: liquido
+  attenuazione_percent: 74
+  temperatura_fermentazione: "15°C"
+  note: "Lievito scozzese"
+
+mash:
+  temperatura_c: 70
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 15
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 7
+
+note_critiche:
+  - "Molto maltata e poco luppolata"
+  - "Zucchero invertito per corpo e colore"
+
+alternative:
+  - descrizione: "Versione più corposa"
+    cambiamenti: "Mash a 72°C"
+    impatto: "Corpo più pieno"

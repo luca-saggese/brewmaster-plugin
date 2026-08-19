@@ -1,0 +1,19 @@
+{
+  "name": "brewmaster",
+  "version": "1.0.0",
+  "description": "Maestra Birraia AI \u2014 homebrewing recipe design, analysis, and brewing math tools.",
+  "keywords": ["homebrewing", "beer", "brewing", "mcp"],
+  "systemPromptPath": "./SYSTEM.md",
+  "mcpServers": {
+    "brewing": {
+      "command": "node",
+      "args": ["./tools/dist/server.mjs"],
+      "cwd": "./"
+    }
+  },
+  "interface": {
+    "displayName": "Brewmaster",
+    "shortDescription": "Homebrewing recipe design, brewing math, and cellar tracking",
+    "developerName": "Luca Saggese"
+  }
+}

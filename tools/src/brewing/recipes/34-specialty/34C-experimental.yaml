@@ -1,0 +1,108 @@
+nome: "Rastaman Stout (basata su Dogfish Head Bitches Brew)"
+stile: "Experimental Beer (imperial stout × T'ej etiope)"
+codice_bjcp: "34C"
+descrizione: |
+  Birra sperimentale che fonde imperial stout e T'ej etiope: grano saraceno
+  maltato, miele e sciroppo di sorgo, con foglie e steli di Gesho al posto dei
+  luppoli tradizionali. Lievito da idromele per un profilo dolce e complesso.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/rastaman-stout/"
+  autore: "Robert Archibald"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.088
+  fg: 1.024
+  abv_percent: 8.6
+  ibu: 40
+  ebc: 116
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "2-row pale malt"
+    kg: 2.3
+    percent: 38.8
+    note: "Malto base"
+  - malto: "Malted buckwheat"
+    kg: 1.8
+    percent: 30.4
+    note: "Grano saraceno maltato"
+  - malto: "Crystal malt (120°L)"
+    kg: 0.91
+    percent: 15.3
+    note: "Caramello"
+  - malto: "Black patent malt"
+    kg: 0.23
+    percent: 3.9
+    note: "Colore"
+  - malto: "Chocolate malt"
+    kg: 0.23
+    percent: 3.9
+    note: "Tostatura"
+  - malto: "Roasted barley"
+    kg: 0.23
+    percent: 3.9
+    note: "Tostatura"
+  - malto: "Briess Midnight Wheat malt"
+    kg: 0.23
+    percent: 3.9
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Gesho Kitel (foglie di luppolo etiope)"
+    grammi: 250
+    tempo_min: 15
+    uso: boil
+    note: "Amaricante tradizionale etiope"
+  - varieta: "Gesho Entchet (steli etiopi)"
+    grammi: 227
+    tempo_min: 0
+    uso: dry_hop
+    note: "In secondario 14 giorni"
+
+lievito:
+  ceppo: "White Labs WLP720 (Sweet Mead) / Wyeast 4184 (Sweet Mead)"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "20°C"
+  note: "Lievito da idromele"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion, enzima amilasi 1 tsp in mash"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+  note: "Secondaria 14 giorni su Gesho Entchet"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.4
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Miele 1.4kg e sciroppo di sorgo 1.4kg in bollitura"
+  - "Gesho al posto dei luppoli tradizionali"
+  - "Lievito da idromele per profilo dolce"
+
+alternative:
+  - descrizione: "Versione meno dolce"
+    cambiamenti: "Ridurre miele e sorgo"
+    impatto: "Finale più secco"

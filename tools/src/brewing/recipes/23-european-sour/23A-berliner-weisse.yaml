@@ -1,0 +1,80 @@
+nome: "Napoleon's Champagne (Berliner Weisse)"
+stile: "Berliner Weisse"
+codice_bjcp: "23A"
+descrizione: |
+  Berliner Weisse acida e rinfrescante, molto chiara e leggera, con acidità
+  lattica pulita e bassa luppolatura.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/berliner-weisse-napoleons-champagne/"
+  autore: "BYO Staff"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.030
+  fg: 1.004
+  abv_percent: 3.0
+  ibu: 9
+  ebc: 6
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Durst Pilsner malt"
+    kg: 1.81
+    percent: 67
+    note: "Malto base"
+  - malto: "Wheat malt"
+    kg: 0.91
+    percent: 33
+    note: "Frumento"
+
+luppolatura:
+  - varieta: "Spalt"
+    grammi: 28
+    tempo_min: 15
+    uso: boil
+    note: "Amaro leggero"
+
+lievito:
+  ceppo: "Wyeast 1007 (German Ale) / WLP029 + Wyeast 4335 (Lactobacillus)"
+  forma: liquido
+  attenuazione_percent: 80
+  temperatura_fermentazione: "17°C"
+  note: "Co-fermentazione con Lactobacillus, condizionamento 21-27°C"
+
+mash:
+  temperatura_c: 66
+  durata_min: 45
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 17
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 3.0
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Acidità lattica pulita"
+  - "Luppolatura minima"
+
+alternative:
+  - descrizione: "Versione più acida"
+    cambiamenti: "Aumentare il tempo di acidificazione"
+    impatto: "Acidità più marcata"

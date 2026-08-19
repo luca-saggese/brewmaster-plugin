@@ -1,0 +1,104 @@
+nome: "Gordon Strong's Sweet Stout"
+stile: "Sweet Stout (Milk Stout)"
+codice_bjcp: "16A"
+descrizione: |
+  Sweet stout stile Mackeson, con lattosio per dolcezza e IBU contenuti (~25)
+  per non coprire il carattere dolce.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-sweet-stout/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.054
+  fg: 1.017
+  abv_percent: 4.8
+  ibu: 25
+  ebc: 71
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Mild malt"
+    kg: 3.2
+    percent: 68
+    note: "Malto base dextrinoso"
+  - malto: "Fiocchi d'avena"
+    kg: 0.34
+    percent: 7
+    note: "Corpo"
+  - malto: "Fiocchi d'orzo"
+    kg: 0.227
+    percent: 5
+    note: "Corpo"
+  - malto: "Crystal (60°L)"
+    kg: 0.34
+    percent: 7
+    note: "Caramello"
+  - malto: "Carafa Special III"
+    kg: 0.142
+    percent: 3
+    note: "Colore"
+  - malto: "Chocolate malt"
+    kg: 0.142
+    percent: 3
+    note: "Tostatura"
+  - malto: "Orzo tostato"
+    kg: 0.283
+    percent: 6
+    note: "Tostatura"
+  - malto: "Black patent"
+    kg: 0.043
+    percent: 1
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Golding"
+    grammi: 35
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "Wyeast 1968 / WLP002 / Mangrove Jack's M15"
+  forma: liquido
+  attenuazione_percent: 70
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale inglese"
+
+mash:
+  temperatura_c: 66
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 7
+
+note_critiche:
+  - "Lattosio 340g a 15 min (non fermentabile) per dolcezza"
+  - "IBU contenuti per non coprire la dolcezza"
+
+alternative:
+  - descrizione: "Versione più dolce"
+    cambiamenti: "Aumentare lattosio"
+    impatto: "Dolcezza più marcata"

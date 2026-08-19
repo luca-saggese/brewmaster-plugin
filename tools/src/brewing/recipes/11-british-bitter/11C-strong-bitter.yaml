@@ -1,0 +1,110 @@
+nome: "Gordon Strong's Strong Bitter"
+stile: "Strong Bitter (ESB)"
+codice_bjcp: "11C"
+descrizione: |
+  ESB corposa e maltata con tecnica no-sparge e luppolatura inglese/continentale
+  bilanciata.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-strong-bitter/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.053
+  fg: 1.013
+  abv_percent: 5.2
+  ibu: 39
+  ebc: 26
+  efficienza_percent: 75
+  impianto: "All grain 19L (no-sparge)"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Maris Otter"
+    kg: 5.9
+    percent: 89
+    note: "Malto base"
+  - malto: "Crystal (70-80°L)"
+    kg: 0.34
+    percent: 5
+    note: "Caramello"
+  - malto: "Fiocchi di mais"
+    kg: 0.227
+    percent: 3
+    note: "Corpo"
+  - malto: "Victory"
+    kg: 0.15
+    percent: 2
+    note: "Tostatura"
+  - malto: "Black patent"
+    kg: 0.028
+    percent: 1
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Styrian Golding"
+    grammi: 28
+    tempo_min: 0
+    uso: first_wort
+  - varieta: "Challenger"
+    grammi: 14
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Fuggle"
+    grammi: 28
+    tempo_min: 20
+    uso: boil
+    note: "Aroma"
+  - varieta: "Styrian Golding"
+    grammi: 28
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+  - varieta: "Styrian Golding"
+    grammi: 28
+    tempo_min: 0
+    uso: whirlpool
+
+lievito:
+  ceppo: "Wyeast 1968 (London ESB) / WLP002 / LalBrew London ESB"
+  forma: liquido
+  attenuazione_percent: 72
+  temperatura_fermentazione: "19°C"
+  note: "Lievito ESB inglese"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion, no-sparge"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 19
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.2
+  temperatura_servizio_c: 8
+
+note_critiche:
+  - "Tecnica no-sparge per corpo pieno"
+  - "Lievito ESB per carattere fruttato"
+
+alternative:
+  - descrizione: "Versione più amara"
+    cambiamenti: "Aumentare IBU a 45"
+    impatto: "Più amara"

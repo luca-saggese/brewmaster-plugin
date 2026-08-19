@@ -1,0 +1,97 @@
+nome: "20/30 Vision Helles Bock"
+stile: "Helles Bock"
+codice_bjcp: "4C"
+descrizione: |
+  Helles bock dorato che mostra come pochi malti speciali chiari (20-30°L)
+  possano dare complessità maltata a una lager forte e pulita.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/20-30-vision-helles-bock/"
+  autore: "Aaron Hyde"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.068
+  fg: 1.017
+  abv_percent: 6.8
+  ibu: 29
+  ebc: 18
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner malt"
+    kg: 5.9
+    percent: 93
+    note: "Malto base"
+  - malto: "Weyermann CaraRed"
+    kg: 0.11
+    percent: 2
+    note: "Colore"
+  - malto: "Biscuit malt"
+    kg: 0.11
+    percent: 2
+    note: "Tostatura"
+  - malto: "Weyermann CaraAmber"
+    kg: 0.11
+    percent: 2
+    note: "Caramello"
+  - malto: "Dark Munich malt (30°L)"
+    kg: 0.11
+    percent: 2
+    note: "Corpo maltato"
+
+luppolatura:
+  - varieta: "Hallertauer Mittelfrüh"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Hallertauer Mittelfrüh"
+    grammi: 28
+    tempo_min: 30
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "White Labs WLP833 (German Bock) / Wyeast 2206 / SafLager W-34/70"
+  forma: liquido
+  attenuazione_percent: 76
+  temperatura_fermentazione: "13°C"
+  note: "Lievito lager"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 13
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Malti speciali chiari per complessità"
+  - "Pitch rate elevato per alta gravità"
+
+alternative:
+  - descrizione: "Versione più maltata"
+    cambiamenti: "Aumentare Munich"
+    impatto: "Corpo più pieno"

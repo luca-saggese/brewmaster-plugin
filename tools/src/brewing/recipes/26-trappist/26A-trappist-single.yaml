@@ -1,0 +1,81 @@
+nome: "Belgian Single (Trappist Single)"
+stile: "Trappist Single"
+codice_bjcp: "26A"
+descrizione: |
+  Trappist single chiara, secca e luppolata, con carattere di lievito trappista
+  fruttato-speziato e finale amaro e croccante.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/articles/trappist-style-single/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.049
+  fg: 1.007
+  abv_percent: 5.5
+  ibu: 35
+  ebc: 6
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Belgian Pilsner malt"
+    kg: 4.54
+    percent: 100
+    note: "Malto base"
+
+luppolatura:
+  - varieta: "Styrian Goldings"
+    grammi: 57
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Czech Saaz"
+    grammi: 57
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 3787 (Trappist High Gravity) / WLP530 (Abbey Ale)"
+  forma: liquido
+  attenuazione_percent: 82
+  temperatura_fermentazione: "18°C"
+  note: "Lievito trappista, free rise"
+
+mash:
+  temperatura_c: 63
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Step: 55°C/10, 63°C/40, 70°C/10"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 18
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.6
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Grist 100% Pilsner"
+  - "Luppolatura decisa per finale amaro"
+
+alternative:
+  - descrizione: "Versione più maltata"
+    cambiamenti: "Aggiungere un tocco di Vienna"
+    impatto: "Corpo più pieno"

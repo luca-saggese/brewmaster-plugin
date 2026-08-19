@@ -1,0 +1,110 @@
+nome: "Oceanside Ale Works' American Strong Ale clone"
+stile: "American Strong Ale"
+codice_bjcp: "22B"
+descrizione: |
+  Ibrido tra strong ale inglese, americana e belga: ricchezza di malto inglese,
+  lievito neutro americano e candi sugar belga come adjunct.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/oceanside-ale-works-american-strong-ale-clone/"
+  autore: "Glenn BurnSilver (Head Brewer Mark Purciel)"
+  verifica: "Clone commerciale pubblicato da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.082
+  fg: 1.014
+  abv_percent: 9.2
+  ibu: 83
+  ebc: 44
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "2-row pale malt"
+    kg: 3.63
+    percent: 50.0
+    note: "Malto base"
+  - malto: "Munich malt"
+    kg: 1.81
+    percent: 25.0
+    note: "Corpo maltato"
+  - malto: "Briess caramel Munich (60°L)"
+    kg: 0.45
+    percent: 6.25
+    note: "Caramello"
+  - malto: "Briess Victory malt"
+    kg: 0.45
+    percent: 6.25
+    note: "Tostatura"
+  - malto: "Belgian candi sugar"
+    kg: 0.45
+    percent: 6.25
+    note: "Attenuazione"
+  - malto: "Corn sugar"
+    kg: 0.45
+    percent: 6.25
+    note: "Attenuazione"
+
+luppolatura:
+  - varieta: "Nugget"
+    grammi: 21.3
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Millennium"
+    grammi: 21.3
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Columbus"
+    grammi: 21.3
+    tempo_min: 15
+    uso: boil
+    note: "Sapore"
+  - varieta: "Cascade"
+    grammi: 21.3
+    tempo_min: 0
+    uso: dry_hop
+    note: "Dry hop"
+
+lievito:
+  ceppo: "White Labs WLP001 (California Ale), starter da 3.5L"
+  forma: liquido
+  attenuazione_percent: 78
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale americano"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 20
+  dry_hop_giorno: 7
+  dry_hop_temperatura_c: 20
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Candi sugar belga come adjunct"
+  - "Alta gravità, pitch rate elevato"
+
+alternative:
+  - descrizione: "Versione meno alcolica"
+    cambiamenti: "Ridurre OG a 1.075"
+    impatto: "Meno alcolica"

@@ -1,0 +1,94 @@
+nome: "Vermont Pub and Brewery's Smoked Porter (clone)"
+stile: "Classic Style Smoked Beer (smoked porter)"
+codice_bjcp: "32A"
+descrizione: |
+  Clone della smoked porter della Vermont Pub & Brewery, che affumica i propri
+  malti su legno di mela, acero e hickory. Robust ale scura con 47 IBU.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/smoked-porter/"
+  autore: "Scott Russell"
+  verifica: "Clone commerciale pubblicato da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.055
+  fg: 1.016
+  abv_percent: 5.7
+  ibu: 47
+  ebc: 66
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "2-row pale malt"
+    kg: 4.0
+    percent: 74.5
+    note: "Malto base"
+  - malto: "Smoked malt"
+    kg: 0.91
+    percent: 16.9
+    note: "Affumicato"
+  - malto: "Black patent malt"
+    kg: 0.23
+    percent: 4.3
+    note: "Colore"
+  - malto: "Chocolate malt"
+    kg: 0.23
+    percent: 4.3
+    note: "Tostatura"
+
+luppolatura:
+  - varieta: "Chinook (12% AA)"
+    grammi: 28
+    tempo_min: 65
+    uso: boil
+    note: "Amaro"
+  - varieta: "Golding (4% AA)"
+    grammi: 21
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 1098 (British Ale) / White Labs WLP007 (Dry English Ale)"
+  forma: liquido
+  attenuazione_percent: 74
+  temperatura_fermentazione: "18°C"
+  note: "Lievito ale inglese, conditioning 3 settimane a 13°C"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 65
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 10
+  temperatura_c: 18
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+  note: "Conditioning 3 settimane a 13°C"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.4
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Malti affumicati su mela/acero/hickory"
+  - "Amaro deciso (47 IBU)"
+
+alternative:
+  - descrizione: "Versione più affumicata"
+    cambiamenti: "Aumentare smoked malt a 25%"
+    impatto: "Fumo più intenso"

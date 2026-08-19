@@ -1,0 +1,97 @@
+nome: "Gordon Strong's Irish Red Ale"
+stile: "Irish Red Ale"
+codice_bjcp: "15A"
+descrizione: |
+  Irish red equilibrata con base dextrinosa (mild malt), avena per corpo e orzo
+  tostato per il colore ramato.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-irish-red-ale/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.045
+  fg: 1.011
+  abv_percent: 4.4
+  ibu: 22
+  ebc: 28
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Mild malt"
+    kg: 3.2
+    percent: 74
+    note: "Malto base dextrinoso"
+  - malto: "Fiocchi di mais"
+    kg: 0.454
+    percent: 10
+    note: "Corpo"
+  - malto: "Crystal (40°L)"
+    kg: 0.454
+    percent: 10
+    note: "Caramello"
+  - malto: "Fiocchi d'avena"
+    kg: 0.113
+    percent: 3
+    note: "Corpo"
+  - malto: "Orzo tostato (300°L)"
+    kg: 0.113
+    percent: 3
+    note: "Colore ramato"
+
+luppolatura:
+  - varieta: "Golding"
+    grammi: 35
+    tempo_min: 45
+    uso: boil
+    note: "Amaro"
+  - varieta: "Golding"
+    grammi: 7
+    tempo_min: 10
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "White Labs WLP004 (Irish Ale) / Wyeast 1084 / SafAle S-04"
+  forma: liquido
+  attenuazione_percent: 74
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale irlandese"
+
+mash:
+  temperatura_c: 66
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 7
+
+note_critiche:
+  - "Orzo tostato per colore ramato"
+  - "Mild malt per corpo dextrinoso"
+
+alternative:
+  - descrizione: "Versione più chiara"
+    cambiamenti: "Ridurre orzo tostato"
+    impatto: "Colore più chiaro"

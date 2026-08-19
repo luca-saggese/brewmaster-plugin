@@ -1,0 +1,100 @@
+nome: "Gordon Strong's Dark Mild Ale"
+stile: "Dark Mild"
+codice_bjcp: "13A"
+descrizione: |
+  Mild scura a bassa gradazione, maltata e bilanciata, con base Maris Otter e
+  note tostate.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/gordon-strongs-dark-mild-ale/"
+  autore: "Gordon Strong"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.043
+  fg: 1.014
+  abv_percent: 3.8
+  ibu: 17
+  ebc: 43
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Maris Otter"
+    kg: 2.7
+    percent: 65
+    note: "Malto base"
+  - malto: "Brown malt UK"
+    kg: 0.567
+    percent: 14
+    note: "Tostatura"
+  - malto: "Crystal UK (50°L)"
+    kg: 0.227
+    percent: 5
+    note: "Caramello"
+  - malto: "Pale chocolate"
+    kg: 0.113
+    percent: 3
+    note: "Tostatura"
+  - malto: "Chocolate malt"
+    kg: 0.085
+    percent: 2
+    note: "Tostatura"
+  - malto: "Fiocchi d'orzo"
+    kg: 0.227
+    percent: 5
+    note: "Corpo"
+  - malto: "Fiocchi d'avena"
+    kg: 0.227
+    percent: 5
+    note: "Corpo"
+
+luppolatura:
+  - varieta: "East Kent Golding"
+    grammi: 21
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+
+lievito:
+  ceppo: "Wyeast 1968 / WLP002 / LalBrew London ESB"
+  forma: liquido
+  attenuazione_percent: 72
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale inglese"
+
+mash:
+  temperatura_c: 68
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 2
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.2
+  temperatura_servizio_c: 8
+
+note_critiche:
+  - "Bassa gradazione, corpo pieno"
+  - "Fiocchi per corpo senza alcol"
+
+alternative:
+  - descrizione: "Versione più chiara"
+    cambiamenti: "Ridurre chocolate malt"
+    impatto: "Colore più chiaro"

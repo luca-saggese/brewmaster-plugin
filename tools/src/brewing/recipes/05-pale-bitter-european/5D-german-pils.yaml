@@ -1,0 +1,91 @@
+nome: "German Pils (Pils)"
+stile: "German Pils"
+codice_bjcp: "5D"
+descrizione: |
+  Pils tedesca piccante e amara (45 IBU) con luppoli nobili. Corpo solido e
+  finale croccante.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/german-pils/"
+  autore: "Horst D. Dornbusch"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.048
+  fg: 1.011
+  abv_percent: 4.9
+  ibu: 45
+  ebc: 7
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner malt"
+    kg: 4.0
+    percent: 90.1
+    note: "Malto base"
+  - malto: "Carapils/Carafoam"
+    kg: 0.44
+    percent: 9.9
+    note: "Schiuma e corpo"
+
+luppolatura:
+  - varieta: "Tettnanger"
+    grammi: 43
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Spalt"
+    grammi: 36
+    tempo_min: 30
+    uso: boil
+    note: "Sapore"
+  - varieta: "Mittelfrüh"
+    grammi: 18
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 2247 / White Labs WLP830 / Saflager S-189"
+  forma: liquido
+  attenuazione_percent: 78
+  temperatura_fermentazione: "10°C"
+  note: "Lievito lager, diacetyl rest 19°C"
+
+mash:
+  temperatura_c: 65
+  durata_min: 90
+  spessore_l_kg: 3.0
+  note: "Step: 40°C/15, 50°C/15, 65°C/30, 72°C/30, mash-out 76°C"
+
+bollitura:
+  durata_min: 90
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 10
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "Lagering 0-3.5°C"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.6
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Bollitura 90 min per ridurre i DMS"
+  - "Luppoli nobili per amarezza piccante"
+
+alternative:
+  - descrizione: "Versione meno amara"
+    cambiamenti: "Ridurre IBU a 35"
+    impatto: "Più bilanciata"

@@ -1,0 +1,99 @@
+nome: "Munich Helles"
+stile: "Munich Helles"
+codice_bjcp: "4A"
+descrizione: |
+  Helles equilibrata e maltata con luppoli nobili tedeschi. Mash multi-step per
+  un corpo morbido e pulito.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/munich-helles/"
+  autore: "Horst D. Dornbusch"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.047
+  fg: 1.011
+  abv_percent: 4.8
+  ibu: 20
+  ebc: 8
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pilsner malt"
+    kg: 4.0
+    percent: 89.9
+    note: "Malto base"
+  - malto: "Weyermann Carahell"
+    kg: 0.15
+    percent: 3.4
+    note: "Corpo"
+  - malto: "Carapils/Carafoam"
+    kg: 0.15
+    percent: 3.4
+    note: "Schiuma e corpo"
+  - malto: "Acidulated malt"
+    kg: 0.15
+    percent: 3.4
+    note: "pH mash"
+
+luppolatura:
+  - varieta: "Tradition"
+    grammi: 24
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Mittelfrüh"
+    grammi: 9
+    tempo_min: 15
+    uso: boil
+    note: "Aroma"
+  - varieta: "Mittelfrüh"
+    grammi: 6
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "White Labs WLP860 / Wyeast 2352 / Mangrove Jack's M76"
+  forma: liquido
+  attenuazione_percent: 75
+  temperatura_fermentazione: "10°C"
+  note: "Lievito lager, diacetyl rest 19°C"
+
+mash:
+  temperatura_c: 65
+  durata_min: 90
+  spessore_l_kg: 3.0
+  note: "Step: 40°C/15, 50°C/15, 65°C/30, 72°C/30, mash-out 76°C"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 10
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "Lagering 0-3.5°C"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 4
+
+note_critiche:
+  - "Mash multi-step per corpo morbido"
+  - "Diacetyl rest a 19°C"
+
+alternative:
+  - descrizione: "Versione più semplice"
+    cambiamenti: "Single infusion a 65°C"
+    impatto: "Corpo leggermente diverso"

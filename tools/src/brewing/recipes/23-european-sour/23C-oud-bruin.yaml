@@ -1,0 +1,94 @@
+nome: "Flanders Brown Ale (Oud Bruin)"
+stile: "Oud Bruin (Flanders Brown Ale)"
+codice_bjcp: "23C"
+descrizione: |
+  Oud Bruin fiammingo con acidità da batteri lattici e legno di quercia. Mash a
+  step per corpo e complessità, con invecchiamento in bottiglia per almeno 6 mesi.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/flanders-brown-ale/"
+  autore: "Horst Dornbusch"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.049
+  fg: 1.012
+  abv_percent: 4.7
+  ibu: 20
+  ebc: 32
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Pale Pils malt"
+    kg: 2.3
+    percent: 48.9
+    note: "Malto base"
+  - malto: "6-row pale brewers malt"
+    kg: 0.57
+    percent: 12.1
+    note: "Malto base"
+  - malto: "Vienna malt"
+    kg: 0.86
+    percent: 18.3
+    note: "Corpo maltato"
+  - malto: "Crystal malt (40°L)"
+    kg: 0.97
+    percent: 20.6
+    note: "Caramello"
+
+luppolatura:
+  - varieta: "Hallertauer Mittelfrüh"
+    grammi: 39
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Saaz"
+    grammi: 28
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Wyeast 1388 / WLP550 + Wyeast 5335 (Lactobacillus buchneri)"
+  forma: liquido
+  attenuazione_percent: 78
+  temperatura_fermentazione: "20°C"
+  note: "Acidità da batteri lattici"
+
+mash:
+  temperatura_c: 62
+  durata_min: 100
+  spessore_l_kg: 3.0
+  note: "Step: 52°C/20, 62°C/40, 72°C/40"
+
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 14
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+  note: "Invecchiamento in bottiglia almeno 6 mesi"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Acidità da batteri lattici"
+  - "Invecchiamento in bottiglia 6+ mesi"
+
+alternative:
+  - descrizione: "Versione meno acida"
+    cambiamenti: "Ridurre il tempo di invecchiamento"
+    impatto: "Acidità più contenuta"

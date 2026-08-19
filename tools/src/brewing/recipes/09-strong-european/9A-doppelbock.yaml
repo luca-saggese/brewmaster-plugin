@@ -1,0 +1,98 @@
+nome: "Doppelbockinator"
+stile: "Doppelbock"
+codice_bjcp: "9A"
+descrizione: |
+  Doppelbock potente (9.7% ABV) dominata dal malto Munich. Richiede pitch rate
+  elevato (starter ~7.6 L).
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/doppelbockinator/"
+  autore: "Aaron Hyde"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.091
+  fg: 1.023
+  abv_percent: 9.7
+  ibu: 24
+  ebc: 36
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Munich malt"
+    kg: 5.9
+    percent: 64.8
+    note: "Malto dominante"
+  - malto: "Continental Pilsner malt"
+    kg: 1.45
+    percent: 15.9
+    note: "Malto base"
+  - malto: "Goldpils Vienna malt"
+    kg: 1.45
+    percent: 15.9
+    note: "Corpo maltato"
+  - malto: "Caramel Munich malt"
+    kg: 0.26
+    percent: 2.8
+    note: "Caramello"
+  - malto: "Blackprinz malt"
+    kg: 0.06
+    percent: 0.6
+    note: "Colore"
+
+luppolatura:
+  - varieta: "Hallertauer Hersbrucker"
+    grammi: 28
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Hallertauer Hersbrucker"
+    grammi: 28
+    tempo_min: 5
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "White Labs WLP833 / Wyeast 2206"
+  forma: liquido
+  attenuazione_percent: 75
+  temperatura_fermentazione: "13°C"
+  note: "Lievito lager, pitch rate elevato (starter ~7.6L)"
+
+mash:
+  temperatura_c: 67
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 90
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 21
+  temperatura_c: 13
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 0
+  note: "Lagering 9°C per 6 settimane"
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.5
+  temperatura_servizio_c: 5
+
+note_critiche:
+  - "Pitch rate elevato per alta gravità"
+  - "Munich dominante per corpo maltato"
+
+alternative:
+  - descrizione: "Versione più leggera"
+    cambiamenti: "Ridurre OG a 1.080"
+    impatto: "Meno alcolica"

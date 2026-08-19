@@ -1,0 +1,112 @@
+nome: "Jamil's American Barleywine"
+stile: "American Barleywine"
+codice_bjcp: "22C"
+descrizione: |
+  Barleywine americana da 12.5% ABV con lunga bollitura (120 min), luppolatura
+  intensa e malti crystal per complessità. Da invecchiare.
+
+fonte:
+  nome: "Brew Your Own (BYO) magazine"
+  url: "https://byo.com/recipes/jamils-american-barleywine/"
+  autore: "Jamil Zainasheff"
+  verifica: "Ricetta pubblicata da BYO, fonte autorevole. Non verificata come premiata."
+
+parametri:
+  batch_size_litri: 19
+  og: 1.115
+  fg: 1.022
+  abv_percent: 12.5
+  ibu: 99
+  ebc: 34
+  efficienza_percent: 75
+  impianto: "All grain 19L"
+  volume_fermentatore: 19
+
+grist:
+  - malto: "Great Western pale malt 2L"
+    kg: 9.4
+    percent: 87.0
+    note: "Malto base"
+  - malto: "Dextrose"
+    kg: 0.4
+    percent: 3.7
+    note: "Attenuazione"
+  - malto: "Briess crystal 20L"
+    kg: 0.4
+    percent: 3.7
+    note: "Caramello"
+  - malto: "Baird British crystal 75L"
+    kg: 0.4
+    percent: 3.7
+    note: "Caramello scuro"
+  - malto: "Thomas Fawcett pale chocolate 200L"
+    kg: 0.1
+    percent: 0.9
+    note: "Tostatura"
+  - malto: "Franco-Belges Special B 150L"
+    kg: 0.1
+    percent: 0.9
+    note: "Frutta secca"
+
+luppolatura:
+  - varieta: "Magnum"
+    grammi: 58
+    tempo_min: 60
+    uso: boil
+    note: "Amaro"
+  - varieta: "Chinook"
+    grammi: 24
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+  - varieta: "Centennial"
+    grammi: 35
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+  - varieta: "Amarillo"
+    grammi: 35
+    tempo_min: 0
+    uso: boil
+    note: "Aroma"
+
+lievito:
+  ceppo: "Safale US-05"
+  forma: secco
+  attenuazione_percent: 78
+  temperatura_fermentazione: "20°C"
+  note: "Lievito ale americano, poi 21°C nell'ultimo terzo"
+
+mash:
+  temperatura_c: 65
+  durata_min: 60
+  spessore_l_kg: 3.0
+  note: "Single infusion"
+
+bollitura:
+  durata_min: 120
+  volume_pre_boil_litri: 24
+  volume_post_boil_litri: 19
+
+fermentazione:
+  primaria_giorni: 21
+  temperatura_c: 20
+  cold_crash: true
+  cold_crash_giorni: 3
+  cold_crash_temp_c: 2
+
+carbonazione:
+  metodo: bottiglia
+  zucchero_tipo: saccarosio
+  co2_volumi: 2.3
+  temperatura_servizio_c: 6
+
+note_critiche:
+  - "Bollitura 120 min per concentrazione"
+  - "Alta gravità, pitch rate elevato"
+  - "Da invecchiare"
+
+alternative:
+  - descrizione: "Versione più leggera"
+    cambiamenti: "Ridurre OG a 1.100"
+    impatto: "Meno alcolica"

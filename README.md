@@ -160,4 +160,4 @@ npm run build
 
 ## License
 
-Part of the kimi-code repository. See the repository root for license details.
+Apache 1.0

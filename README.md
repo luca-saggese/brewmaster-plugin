@@ -15,6 +15,24 @@ A Kimi Code plugin that turns the assistant into a dedicated **homebrewing maste
 
 ## Installation
 
+### 1. Install Kimi Code CLI
+
+This plugin requires the **Kimi Code CLI** (the terminal client that runs plugins). If you don't have it yet, install it first:
+
+- **macOS (Homebrew):**
+  ```sh
+  brew install kimi-code-cli
+  ```
+- **Other platforms / manual install:** see the official installation guide at [kimi.com/code](https://kimi.com/code) (or the Kimi Code docs site) for the latest instructions.
+
+Verify the install with:
+
+```sh
+kimi --version
+```
+
+### 2. Install the plugin
+
 This plugin is distributed as a GitHub repository. Install it directly from the Kimi Code TUI with the `/plugins` command:
 
 ```

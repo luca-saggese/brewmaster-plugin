@@ -18,15 +18,8 @@ A Kimi Code plugin that turns the assistant into a dedicated **homebrewing maste
 This plugin is distributed as a GitHub repository. Install it directly from the Kimi Code TUI with the `/plugins` command:
 
 ```
-/plugins install https://github.com/<owner>/<repo>
+/plugins install https://github.com/luca-saggese/brewmaster-plugin
 ```
-
-The following URL forms are supported:
-
-- `https://github.com/<owner>/<repo>` — install the latest release; falls back to the default branch if no release exists
-- `https://github.com/<owner>/<repo>/tree/<ref>` — install a specific branch, tag, or short commit SHA
-- `https://github.com/<owner>/<repo>/releases/tag/<tag>` — pin to a specific tag
-- `https://github.com/<owner>/<repo>/commit/<sha>` — pin to a specific commit
 
 After installing, run `/reload` or `/new` to activate the plugin (the current session will not update). You can also manage it interactively with `/plugins`, or install from a local directory or zip URL with `/plugins install <path-or-url>`.
 

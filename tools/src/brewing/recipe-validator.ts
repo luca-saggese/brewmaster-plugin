@@ -42,6 +42,25 @@ export const RecipeValidatorInputSchema = z.object({
   impianto: z.string().optional(),
   descrizione: z.string().optional(),
   note: z.string().optional(),
+
+  // ── Datos de cotización (brewday) ──
+  mash_water_liters: z.number().optional().describe('Agua de ammostamento (mash) en litros.'),
+  sparge_water_liters: z.number().optional().describe('Agua de lavado (sparge) en litros.'),
+  total_water_liters: z.number().optional().describe('Agua total de la cotización en litros.'),
+  mash_salts: z.object({
+    gypsum_g: z.number().optional().describe('Gesso (CaSO₄) en gramos.'),
+    cacl2_g: z.number().optional().describe('Cloruro de calcio (CaCl₂) en gramos.'),
+    epsom_g: z.number().optional().describe('Sal de Epsom (MgSO₄) en gramos.'),
+    nahco3_g: z.number().optional().describe('Bicarbonato de sodio (NaHCO₃) en gramos.'),
+    lactic_acid_ml: z.number().optional().describe('Ácido láctico (88%) en ml.'),
+  }).optional(),
+  mash_in_temp_c: z.number().optional().describe('Temperatura de mash-in (empaste) en °C.'),
+  pre_boil_og: z.number().optional().describe('Gravedad pre-boil (SG).'),
+  post_boil_og: z.number().optional().describe('Gravedad post-boil (SG).'),
+  primary_days: z.number().optional().describe('Días de fermentación primaria.'),
+  conditioning_days: z.number().optional().describe('Días de maduración/condicionamiento.'),
+  serving_temp_c: z.number().optional().describe('Temperatura de servicio en °C.'),
+  bottle_type: z.string().optional().describe('Tipo de botella (es. 500ml, 330ml, swing-top).'),
 });
 
 export type RecipeValidatorInput = z.infer<typeof RecipeValidatorInputSchema>;
@@ -153,6 +172,12 @@ function findStyle(q: string): BjcpStyle | undefined {
   if (BJCP[q]) return BJCP[q];
   const lq = q.toLowerCase();
   for (const s of Object.values(BJCP)) if (s.name.toLowerCase().includes(lq)) return s;
+  // Extract a BJCP code from a prefixed label like "BJCP 25C — Saison (...)"
+  const m = q.match(/\bBJ\s+([0-9A-Z]+)\b/i) ?? q.match(/\b([0-9]{1,2}[A-Z][0-9]?)\b/i);
+  if (m) {
+    const code = m[1].toUpperCase();
+    if (BJCP[code]) return BJCP[code];
+  }
   return undefined;
 }
 
@@ -183,6 +208,33 @@ function quickCheck(r: RecipeValidatorInput, style: BjcpStyle | undefined) {
     if (n.includes('crystal') || n.includes('caramel') || n.includes('chocolate') || n.includes('black') || n.includes('roast') || n.includes('special') || n.includes('cara')) specPct += pct;
   }
   if (specPct > 25) issues.push(`Malti speciali al ${specPct.toFixed(0)}%`);
+
+  // ── Completitud de los datos de cotización (brewday) ──
+  const brewdayMissing: string[] = [];
+  if (r.mash_water_liters === undefined) brewdayMissing.push('agua de ammostamento (mash_water_liters)');
+  if (r.sparge_water_liters === undefined) brewdayMissing.push('agua de lavado (sparge_water_liters)');
+  if (r.total_water_liters === undefined) brewdayMissing.push('agua total (total_water_liters)');
+  if (r.mash_salts === undefined) brewdayMissing.push('sales de mash (mash_salts)');
+  if (r.mash_in_temp_c === undefined) brewdayMissing.push('temperatura de mash-in (mash_in_temp_c)');
+  if (r.pre_boil_og === undefined) brewdayMissing.push('gravedad pre-boil (pre_boil_og)');
+  if (r.post_boil_og === undefined) brewdayMissing.push('gravedad post-boil (post_boil_og)');
+  if (r.boil_time_minutes === undefined) brewdayMissing.push('duración de la ebullición (boil_time_minutes)');
+  if (r.fermentation_temp_c === undefined) brewdayMissing.push('temperatura de fermentación (fermentation_temp_c)');
+  if (r.primary_days === undefined) brewdayMissing.push('días de fermentación primaria (primary_days)');
+  if (r.carbonation_volumes === undefined) brewdayMissing.push('carbonatación (carbonation_volumes)');
+  if (r.packaging_volume_liters === undefined) brewdayMissing.push('volumen de envasado (packaging_volume_liters)');
+  if (r.bottle_type === undefined) brewdayMissing.push('tipo de botella (bottle_type)');
+
+  if (brewdayMissing.length > 0) {
+    issues.push(`Datos de cotización incompletos — faltan: ${brewdayMissing.join(', ')}`);
+  }
+
+  // Coherencia de volúmenes de agua
+  if (r.mash_water_liters !== undefined && r.sparge_water_liters !== undefined && r.total_water_liters !== undefined) {
+    const sum = r.mash_water_liters + r.sparge_water_liters;
+    if (Math.abs(sum - r.total_water_liters) > 1)
+      issues.push(`Agua total (${r.total_water_liters}L) ≠ mash (${r.mash_water_liters}L) + sparge (${r.sparge_water_liters}L) = ${sum.toFixed(1)}L`);
+  }
 
   return { issues, warnings, abv, ibuRatio, specPct };
 }
@@ -221,6 +273,25 @@ function buildLlmReviewPrompt(r: RecipeValidatorInput): string {
     r.carbonation_volumes !== undefined ? `Carbonazione: ${r.carbonation_volumes} vol${r.carbonation_method ? ` (${r.carbonation_method})` : ''}${r.priming_sugar_gl !== undefined ? ` — ${r.priming_sugar_gl} g/L priming` : ''}` : null,
     r.boil_time_minutes !== undefined ? `Bollitura: ${r.boil_time_minutes} min` : null,
     r.pre_boil_volume_liters !== undefined || r.post_boil_volume_liters !== undefined ? `Volumi: pre-boil ${r.pre_boil_volume_liters ?? '?'}L, post-boil ${r.post_boil_volume_liters ?? '?'}L, fermentatore ${r.fermentation_volume_liters ?? '?'}L, confezionamento ${r.packaging_volume_liters ?? '?'}L` : null,
+    '',
+    r.mash_water_liters !== undefined || r.sparge_water_liters !== undefined || r.total_water_liters !== undefined ? '── Agua de cotización ──' : null,
+    r.mash_water_liters !== undefined ? `  Agua de ammostamento: ${r.mash_water_liters}L` : null,
+    r.sparge_water_liters !== undefined ? `  Agua de lavado (sparge): ${r.sparge_water_liters}L` : null,
+    r.total_water_liters !== undefined ? `  Agua total: ${r.total_water_liters}L` : null,
+    r.mash_salts ? `  Sales mash: ${[
+      r.mash_salts.gypsum_g !== undefined ? `gesso ${r.mash_salts.gypsum_g}g` : null,
+      r.mash_salts.cacl2_g !== undefined ? `CaCl₂ ${r.mash_salts.cacl2_g}g` : null,
+      r.mash_salts.epsom_g !== undefined ? `Epsom ${r.mash_salts.epsom_g}g` : null,
+      r.mash_salts.nahco3_g !== undefined ? `NaHCO₃ ${r.mash_salts.nahco3_g}g` : null,
+      r.mash_salts.lactic_acid_ml !== undefined ? `ácido láctico ${r.mash_salts.lactic_acid_ml}ml` : null,
+    ].filter(x => x !== null).join(', ')}` : null,
+    r.mash_in_temp_c !== undefined ? `  Mash-in: ${r.mash_in_temp_c}°C` : null,
+    r.pre_boil_og !== undefined ? `  OG pre-boil: ${r.pre_boil_og.toFixed(3)}` : null,
+    r.post_boil_og !== undefined ? `  OG post-boil: ${r.post_boil_og.toFixed(3)}` : null,
+    r.primary_days !== undefined ? `  Fermentación primaria: ${r.primary_days} días` : null,
+    r.conditioning_days !== undefined ? `  Maduración: ${r.conditioning_days} días` : null,
+    r.serving_temp_c !== undefined ? `  Servicio: ${r.serving_temp_c}°C` : null,
+    r.bottle_type !== undefined ? `  Botella: ${r.bottle_type}` : null,
     '',
     r.descrizione ? `Descrizione: ${r.descrizione}` : null,
     r.note ? `Note: ${r.note}` : null,
@@ -266,6 +337,13 @@ function buildLlmReviewPrompt(r: RecipeValidatorInput): string {
     `- plausibilità sensoriale;`,
     `- chiarezza e riproducibilità della procedura;`,
     `- attendibilità delle affermazioni storiche o tecniche.`,
+    ``,
+    `Verifica che la ricetta contenga TUTTI los datos necesarios para seguir la`,
+    `cotización de principio a fin, hasta el embotellado: agua total, agua de`,
+    `ammostamento y de lavado (sparge), sales de mash y ácido láctico,`,
+    `temperatura de mash-in, gravedad pre-boil y post-boil, duración de la`,
+    `ebullición, temperatura y días de fermentación, carbonatación y tipo de`,
+    `botella. Señala cualquier dato faltante como critical_issue o warning.`,
     ``,
     `Regole:`,
     ``,

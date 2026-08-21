@@ -29,7 +29,7 @@ const COLOR_PRIMARY = '#c0392b';
 const COLOR_TEXT = '#1a1a1a';
 const COLOR_MUTED = '#7f8c8d';
 
-function yamlToPdf(inputPath: string, outputPath: string): string {
+export function yamlToPdf(inputPath: string, outputPath: string): string {
   const raw = readFileSync(inputPath, 'utf-8');
   const data: Record<string, unknown> = (yaml.load(raw) ?? {}) as Record<string, unknown>;
 
@@ -66,42 +66,111 @@ function yamlToPdf(inputPath: string, outputPath: string): string {
     return doc.y + 9;
   }
 
-  function formatValue(value: unknown, indent = 0): string {
-    if (value == null) return '-';
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  /**
+   * Render a YAML value as a list of lines with proper indentation, so nested
+   * objects and arrays of objects read like a JSON-serialized structure
+   * instead of a flat `[object Object]` blob.
+   */
+  function valueLines(value: unknown, indent: number): string[] {
+    if (value == null) return ['-'];
+    if (typeof value === 'string') return [value];
+    if (typeof value === 'number' || typeof value === 'boolean') return [String(value)];
     if (Array.isArray(value)) {
-      if (value.length === 0) return '-';
-      return value
-        .map((item) => {
-          if (typeof item === 'object' && item !== null) {
-            return Object.entries(item as Record<string, unknown>)
-              .map(([k, v]) => `${k}: ${formatValue(v, indent + 1)}`)
-              .join(', ');
+      if (value.length === 0) return ['-'];
+      const lines: string[] = [];
+      for (const item of value) {
+        if (typeof item === 'object' && item !== null) {
+          const entries = Object.entries(item as Record<string, unknown>);
+          if (entries.length === 0) {
+            lines.push('• -');
+            continue;
           }
-          return formatValue(item, indent + 1);
-        })
-        .join('; ');
+          const [firstKey, firstVal] = entries[0]!;
+          const firstLines = valueLines(firstVal, indent + 1);
+          lines.push(`• ${firstKey}: ${firstLines[0] ?? ''}`);
+          for (let i = 1; i < firstLines.length; i++) lines.push(`  ${firstLines[i]}`);
+          for (let i = 1; i < entries.length; i++) {
+            const [k, v] = entries[i]!;
+            const vLines = valueLines(v, indent + 1);
+            lines.push(`  ${k}: ${vLines[0] ?? ''}`);
+            for (let j = 1; j < vLines.length; j++) lines.push(`    ${vLines[j]}`);
+          }
+        } else {
+          lines.push(`• ${valueLines(item, indent + 1)[0] ?? ''}`);
+        }
+      }
+      return lines;
     }
     if (typeof value === 'object') {
       const entries = Object.entries(value as Record<string, unknown>);
-      if (entries.length === 0) return '-';
-      return entries
-        .map(([k, v]) => `${k}: ${formatValue(v, indent + 1)}`)
-        .join(', ');
+      if (entries.length === 0) return ['-'];
+      const lines: string[] = [];
+      for (const [k, v] of entries) {
+        const vLines = valueLines(v, indent + 1);
+        lines.push(`${k}: ${vLines[0] ?? ''}`);
+        for (let i = 1; i < vLines.length; i++) lines.push(`  ${vLines[i]}`);
+      }
+      return lines;
     }
-    return String(value);
+    return [String(value)];
   }
 
-  function kv(label: string, value: string): number {
+  function kv(label: string, value: unknown): number {
+    const lines = valueLines(value, 0);
+    const isComplex = Array.isArray(value) || (typeof value === 'object' && value !== null);
     if (doc.y > PAGE_H - 50) doc.addPage();
-    const ky = doc.y + 1;
-    doc.font('Helvetica-Bold').fontSize(10).fillColor('#555555')
-      .text(label + ': ', MARGIN, ky, { continued: true, lineGap: 4 })
-      .font('Helvetica').fontSize(10).fillColor(COLOR_TEXT)
-      .text(value, { lineGap: 4 });
-    doc.moveDown(0.3);
+    if (isComplex) {
+      // Label on its own line, then every item on its own line below.
+      doc.font('Helvetica-Bold').fontSize(10).fillColor('#555555')
+        .text(label + ':', MARGIN, doc.y + 1, { lineGap: 4 });
+      for (const line of lines) {
+        if (doc.y > PAGE_H - 50) doc.addPage();
+        doc.font('Helvetica').fontSize(10).fillColor(COLOR_TEXT)
+          .text(line, MARGIN + 12, doc.y + 1, { width: USABLE_W - 12, lineGap: 4 });
+      }
+    } else {
+      doc.font('Helvetica-Bold').fontSize(10).fillColor('#555555')
+        .text(label + ': ', MARGIN, doc.y + 1, { continued: true, lineGap: 4 })
+        .font('Helvetica').fontSize(10).fillColor(COLOR_TEXT)
+        .text(lines[0] ?? '-', { lineGap: 4 });
+    }
     return doc.y;
+  }
+
+  /**
+   * Render a top-level section generically: an array of strings becomes a
+   * bulleted list (one line per item), an array of objects becomes a list of
+   * indented blocks, and a plain object becomes key/value lines.
+   */
+  function renderSection(title: string, value: unknown): number {
+    doc.y = section(title);
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === 'object' && item !== null) {
+          const lines = valueLines(item, 0);
+          for (const line of lines) {
+            if (doc.y > PAGE_H - 50) doc.addPage();
+            doc.font('Helvetica').fontSize(10).fillColor(COLOR_TEXT)
+              .text(line, MARGIN + 10, doc.y + 1, { width: USABLE_W - 10, lineGap: 4 });
+          }
+          doc.y += 2;
+        } else {
+          if (doc.y > PAGE_H - 50) doc.addPage();
+          doc.font('Helvetica').fontSize(10).fillColor(COLOR_TEXT)
+            .text('• ' + String(item), MARGIN + 10, doc.y + 1, { width: USABLE_W - 10, lineGap: 4 });
+        }
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        const label = k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+        doc.y = kv(label, v);
+      }
+    } else {
+      if (doc.y > PAGE_H - 50) doc.addPage();
+      doc.font('Helvetica').fontSize(10).fillColor(COLOR_TEXT)
+        .text(String(value), MARGIN + 10, doc.y + 1, { width: USABLE_W - 10, lineGap: 4 });
+    }
+    return doc.y + 4;
   }
 
   function simpleTable(header: string[], rows: string[][], colWidths: number[]): number {
@@ -141,7 +210,7 @@ function yamlToPdf(inputPath: string, outputPath: string): string {
     y = section('Parametri');
     for (const [k, v] of Object.entries(params)) {
       const label = k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-      y = kv(label, formatValue(v));
+      y = kv(label, v);
     }
     y += 6;
   }
@@ -167,7 +236,7 @@ function yamlToPdf(inputPath: string, outputPath: string): string {
       doc.y = section(sec.charAt(0).toUpperCase() + sec.slice(1));
       for (const [k, v] of Object.entries(obj)) {
         const label = k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-        y = kv(label, formatValue(v));
+        y = kv(label, v);
       }
       y += 4;
     }
@@ -183,8 +252,7 @@ function yamlToPdf(inputPath: string, outputPath: string): string {
       if (!trimmed) continue;
       if (doc.y > PAGE_H - 40) doc.addPage();
       doc.font('Helvetica').fontSize(10).fillColor(COLOR_TEXT)
-        .text('• ' + trimmed, MARGIN + 10, doc.y + 2, { width: USABLE_W - 10 });
-      doc.y += 4;
+        .text('• ' + trimmed, MARGIN + 10, doc.y + 2, { width: USABLE_W - 10, lineGap: 4 });
     }
     y = doc.y;
   }
@@ -196,19 +264,32 @@ function yamlToPdf(inputPath: string, outputPath: string): string {
     for (const a of alts) {
       if (doc.y > PAGE_H - 50) doc.addPage();
       doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_TEXT)
-        .text('• ' + String(a['descrizione'] ?? ''), MARGIN + 10, doc.y + 2, { width: USABLE_W - 10 });
+        .text('• ' + String(a['descrizione'] ?? ''), MARGIN + 10, doc.y + 2, { width: USABLE_W - 10, lineGap: 4 });
       if (a['cambiamenti']) {
-        doc.moveDown(0.3);
         doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED)
-          .text('Cambiamenti: ' + String(a['cambiamenti']), MARGIN + 20, doc.y, { width: USABLE_W - 20 });
+          .text('Cambiamenti: ' + String(a['cambiamenti']), MARGIN + 20, doc.y + 1, { width: USABLE_W - 20, lineGap: 4 });
       }
       if (a['impatto']) {
-        doc.y += 2;
         doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED)
-          .text('Impatto: ' + String(a['impatto']), MARGIN + 20, doc.y, { width: USABLE_W - 20 });
+          .text('Impatto: ' + String(a['impatto']), MARGIN + 20, doc.y + 1, { width: USABLE_W - 20, lineGap: 4 });
       }
-      doc.y += 4;
+      doc.y += 2;
     }
+  }
+
+  // Generic fallback: render any remaining top-level section (cronologia,
+  // note_degustazione, kit_originale, aggiunte_bollitura, fonte, ...) so no
+  // recipe data is silently dropped.
+  const handled = new Set([
+    'nome', 'stile', 'descrizione', 'parametri', 'grist', 'luppolatura',
+    'lievito', 'acqua', 'mash', 'bollitura', 'fermentazione', 'carbonazione',
+    'note_critiche', 'alternative',
+  ]);
+  for (const [key, value] of Object.entries(data)) {
+    if (handled.has(key)) continue;
+    if (value == null) continue;
+    const title = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    y = renderSection(title, value);
   }
 
   // Footer

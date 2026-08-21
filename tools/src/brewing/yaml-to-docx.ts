@@ -27,34 +27,56 @@ function escapeXml(text: string): string {
     .replace(/'/g, '&apos;');
 }
 
-function formatValue(value: unknown): string {
-  if (value == null) return '-';
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+/**
+ * Render a YAML value as a list of lines with proper indentation, so nested
+ * objects and arrays of objects read like a JSON-serialized structure
+ * instead of a flat `[object Object]` blob.
+ */
+function valueLines(value: unknown, indent: number): string[] {
+  if (value == null) return ['-'];
+  if (typeof value === 'string') return [value];
+  if (typeof value === 'number' || typeof value === 'boolean') return [String(value)];
   if (Array.isArray(value)) {
-    if (value.length === 0) return '-';
-    return value
-      .map((item) => {
-        if (typeof item === 'object' && item !== null) {
-          return Object.entries(item as Record<string, unknown>)
-            .map(([k, v]) => `${k}: ${formatValue(v)}`)
-            .join(', ');
+    if (value.length === 0) return ['-'];
+    const lines: string[] = [];
+    for (const item of value) {
+      if (typeof item === 'object' && item !== null) {
+        const entries = Object.entries(item as Record<string, unknown>);
+        if (entries.length === 0) {
+          lines.push('• -');
+          continue;
         }
-        return formatValue(item);
-      })
-      .join('; ');
+        const [firstKey, firstVal] = entries[0]!;
+        const firstLines = valueLines(firstVal, indent + 1);
+        lines.push(`• ${firstKey}: ${firstLines[0] ?? ''}`);
+        for (let i = 1; i < firstLines.length; i++) lines.push(`  ${firstLines[i]}`);
+        for (let i = 1; i < entries.length; i++) {
+          const [k, v] = entries[i]!;
+          const vLines = valueLines(v, indent + 1);
+          lines.push(`  ${k}: ${vLines[0] ?? ''}`);
+          for (let j = 1; j < vLines.length; j++) lines.push(`    ${vLines[j]}`);
+        }
+      } else {
+        lines.push(`• ${valueLines(item, indent + 1)[0] ?? ''}`);
+      }
+    }
+    return lines;
   }
   if (typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.length === 0) return '-';
-    return entries
-      .map(([k, v]) => `${k}: ${formatValue(v)}`)
-      .join(', ');
+    if (entries.length === 0) return ['-'];
+    const lines: string[] = [];
+    for (const [k, v] of entries) {
+      const vLines = valueLines(v, indent + 1);
+      lines.push(`${k}: ${vLines[0] ?? ''}`);
+      for (let i = 1; i < vLines.length; i++) lines.push(`  ${vLines[i]}`);
+    }
+    return lines;
   }
-  return String(value);
+  return [String(value)];
 }
 
-function yamlToDocx(inputPath: string, outputPath: string): string {
+export function yamlToDocx(inputPath: string, outputPath: string): string {
   const raw = readFileSync(inputPath, 'utf-8');
   const data: Record<string, unknown> = (yaml.load(raw) ?? {}) as Record<string, unknown>;
 
@@ -78,7 +100,17 @@ function yamlToDocx(inputPath: string, outputPath: string): string {
   }
 
   function kv(label: string, value: unknown): void {
-    body += `<w:p><w:r><w:rPr><w:b/><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(label)}: </w:t></w:r><w:r><w:rPr><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(formatValue(value))}</w:t></w:r></w:p>`;
+    const lines = valueLines(value, 0);
+    const isComplex = Array.isArray(value) || (typeof value === 'object' && value !== null);
+    if (isComplex) {
+      // Label on its own line, then every item on its own line below.
+      body += `<w:p><w:r><w:rPr><w:b/><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(label)}:</w:t></w:r></w:p>`;
+      for (const line of lines) {
+        body += `<w:p><w:r><w:rPr><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r></w:p>`;
+      }
+    } else {
+      body += `<w:p><w:r><w:rPr><w:b/><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(label)}: </w:t></w:r><w:r><w:rPr><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(lines[0] ?? '-')}</w:t></w:r></w:p>`;
+    }
   }
 
   function simpleTable(header: string[], rows: string[][]): void {
@@ -142,6 +174,38 @@ function yamlToDocx(inputPath: string, outputPath: string): string {
       for (const [k, v] of Object.entries(obj)) {
         kv(k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()), v);
       }
+    }
+  }
+
+  // Generic fallback: render any remaining top-level section (cronologia,
+  // note_degustazione, kit_originale, aggiunte_bollitura, fonte, ...) so no
+  // recipe data is silently dropped.
+  const handled = new Set([
+    'nome', 'stile', 'descrizione', 'parametri', 'grist', 'luppolatura',
+    'lievito', 'acqua', 'mash', 'bollitura', 'fermentazione', 'carbonazione',
+    'note_critiche', 'alternative',
+  ]);
+  for (const [key, value] of Object.entries(data)) {
+    if (handled.has(key)) continue;
+    if (value == null) continue;
+    const title = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    heading(title);
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === 'object' && item !== null) {
+          for (const line of valueLines(item, 0)) {
+            body += `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r></w:p>`;
+          }
+        } else {
+          body += `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">• ${escapeXml(String(item))}</w:t></w:r></w:p>`;
+        }
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        kv(k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()), v);
+      }
+    } else {
+      body += `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${escapeXml(String(value))}</w:t></w:r></w:p>`;
     }
   }
 

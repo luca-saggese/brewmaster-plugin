@@ -195,14 +195,35 @@ function findStyle(q: string): BjcpStyle | undefined {
     // Also try matching just the code part (e.g., "IPA" → 21A)
     if (s.code.toLowerCase() === lq) return s;
   }
+  // Try extracting a BJCP code from a prefixed label like "BJCP 25C — Saison"
+  const codeMatch = q.match(/\bBJCP\s+([0-9]+[A-Za-z]?)\b/i);
+  if (codeMatch) {
+    const code = codeMatch[1].toUpperCase();
+    if (BJCP[code]) return BJCP[code];
+  }
+  // Try matching the first token that looks like a BJCP code (e.g. "25C")
+  const bareCode = q.match(/\b([0-9]{1,2}[A-Z][0-9]?)\b/i);
+  if (bareCode) {
+    const code = bareCode[1].toUpperCase();
+    if (BJCP[code]) return BJCP[code];
+  }
   return undefined;
 }
 
 function findAllStyles(query: string): BjcpStyle[] {
   const lq = query.toLowerCase();
-  return Object.values(BJCP).filter(
+  const matches = Object.values(BJCP).filter(
     s => s.name.toLowerCase().includes(lq) || s.code.toLowerCase().includes(lq),
   );
+  if (matches.length > 0) return matches;
+  // Fall back to the extracted BJCP code if present
+  const m = query.match(/\bBJ\s+([0-9A-Z]+)\b/i) ?? query.match(/\b([0-9]{1,2}[A-Z][0-9]?)\b/i);
+  if (m) {
+    const code = m[1].toUpperCase();
+    const s = BJCP[code];
+    if (s) return [s];
+  }
+  return [];
 }
 
 // ============================================================================
@@ -239,12 +260,54 @@ interface ParsedRecipe {
   note?: string;
   spezie?: { nome: string; grammi: number; uso: string; tempo_min?: number; note?: string }[];
   zuccheri?: { tipo: string; grammi: number; note?: string }[];
+  // ── Datos de cotización (brewday) ──
+  mash_water_liters?: number;
+  sparge_water_liters?: number;
+  total_water_liters?: number;
+  mash_salts?: { gypsum_g?: number; cacl2_g?: number; epsom_g?: number; nahco3_g?: number; lactic_acid_ml?: number };
+  mash_in_temp_c?: number;
+  pre_boil_og?: number;
+  post_boil_og?: number;
+  primary_days?: number;
+  conditioning_days?: number;
+  serving_temp_c?: number;
+  bottle_type?: string;
   rawYaml: string;
 }
 
 const VALID_HOP_USES = new Set(['boil', 'whirlpool', 'dry_hop', 'first_wort', 'mash', 'hopback', 'dip_hop', 'hop_stand']);
+// ── Helpers de lectura tolerante a variantes de nombre de campo ──
+// Muchas recetas usan nombres de campo distintos (es. `mash.acqua_strike_litri`
+// vs `agua.mash_litri`, `bollitura.durata_min` vs `parametri.bollitura_min`).
+// Estos helpers buscan el primer valor no nulo entre varias claves alternativas.
 
-function parseYamlRecipe(filePath: string): ParsedRecipe {
+function pickNum(obj: Record<string, unknown> | undefined, keys: string[]): number | undefined {
+  if (!obj) return undefined;
+  for (const k of keys) {
+    const v = obj[k];
+    if (v != null && !Number.isNaN(Number(v))) return Number(v);
+  }
+  return undefined;
+}
+
+function pickStr(obj: Record<string, unknown> | undefined, keys: string[]): string | undefined {
+  if (!obj) return undefined;
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'string' && v.trim() !== '') return v;
+  }
+  return undefined;
+}
+
+function pickBool(obj: Record<string, unknown> | undefined, keys: string[]): boolean | undefined {
+  if (!obj) return undefined;
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'boolean') return v;
+  }
+  return undefined;
+}
+export function parseYamlRecipe(filePath: string): ParsedRecipe {
   if (!existsSync(filePath)) {
     throw new Error(`File non trovato: ${filePath}`);
   }
@@ -270,21 +333,31 @@ function parseYamlRecipe(filePath: string): ParsedRecipe {
   const ebc = params['ebc'] != null ? Number(params['ebc']) : undefined;
   const abv_percent = params['abv_percent'] != null ? Number(params['abv_percent']) : undefined;
   const efficiency_percent = params['efficienza_percent'] != null ? Number(params['efficienza_percent']) : undefined;
-  const boil_time_minutes = params['bollitura_min'] != null ? Number(params['bollitura_min']) : undefined;
+
+  // Bollitura: duración puede estar en `parametri.bollitura_min` o `bollitura.durata_min`
+  const bollitura = (d['bollitura'] ?? d['bolliura']) as Record<string, unknown> | undefined;
+  const boil_time_minutes = pickNum(params, ['bollitura_min', 'duracion_bollitura_min'])
+    ?? pickNum(bollitura, ['durata_min', 'duration_min', 'duracion_min']);
 
   // Volumes
-  const pre_boil_volume_liters = params['pre_boil_litri'] != null ? Number(params['pre_boil_litri']) : undefined;
-  const post_boil_volume_liters = params['post_boil_litri'] != null ? Number(params['post_boil_litri']) : undefined;
-  const fermentation_volume_liters = params['fermentatore_litri'] != null ? Number(params['fermentatore_litri']) : undefined;
-  const packaging_volume_liters = params['confezionamento_litri'] != null ? Number(params['confezionamento_litri']) : undefined;
+  const pre_boil_volume_liters = pickNum(params, ['pre_boil_litri', 'pre_boil_volumen_litri'])
+    ?? pickNum(bollitura, ['volume_pre_boil_litri', 'pre_boil_litri', 'volumen_pre_boil_litri']);
+  const post_boil_volume_liters = pickNum(params, ['post_boil_litri', 'post_boil_volumen_litri'])
+    ?? pickNum(bollitura, ['volume_post_boil_litri', 'post_boil_litri', 'volumen_post_boil_litri']);
+  const fermentation_volume_liters = pickNum(params, ['fermentatore_litri', 'volume_fermentatore', 'fermentador_litri']);
+  const packaging_volume_liters = pickNum(params, ['confezionamento_litri', 'confezionamiento_litri', 'envasado_litri', 'embotellado_litri']);
 
   // Equipment
   const impianto = typeof params['impianto'] === 'string' ? params['impianto'] : undefined;
 
-  // Carbonation
-  const carbonation_volumes = params['carbonazione_vol'] != null ? Number(params['carbonazione_vol']) : undefined;
-  const carbonation_method = typeof params['carbonazione_metodo'] === 'string' ? params['carbonazione_metodo'] : undefined;
-  const priming_sugar_gl = params['priming_gl'] != null ? Number(params['priming_gl']) : undefined;
+  // Carbonation: en `parametri` o sección `carbonazione`
+  const carbonazione = (d['carbonazione'] ?? d['carbonatacion']) as Record<string, unknown> | undefined;
+  const carbonation_volumes = pickNum(params, ['carbonazione_vol', 'co2_volumi'])
+    ?? pickNum(carbonazione, ['co2_volumi', 'co2_vol', 'volumen_co2', 'vol_co2']);
+  const carbonation_method = pickStr(params, ['carbonazione_metodo', 'metodo_carbonatacion'])
+    ?? pickStr(carbonazione, ['metodo', 'metodo_carbonatacion']);
+  const priming_sugar_gl = pickNum(params, ['priming_gl', 'priming_g_l'])
+    ?? pickNum(carbonazione, ['zucchero_g_per_litro', 'azucar_g_por_litro', 'priming_gl']);
 
   // Grist → grain_bill
   const grist = Array.isArray(d['grist']) ? d['grist'] as Array<Record<string, unknown>> : [];
@@ -338,12 +411,12 @@ function parseYamlRecipe(filePath: string): ParsedRecipe {
   // Water profile
   const acqua = d['acqua'] as Record<string, unknown> | undefined;
   const water_profile = acqua ? {
-    ca: Number(acqua['ca'] ?? 0),
-    mg: Number(acqua['mg'] ?? 0),
-    na: Number(acqua['na'] ?? 0),
-    cl: Number(acqua['cl'] ?? 0),
-    so4: Number(acqua['so4'] ?? 0),
-    hco3: Number(acqua['hco3'] ?? 0),
+    ca: Number(pickNum(acqua, ['ca', 'ca_mg_l']) ?? 0),
+    mg: Number(pickNum(acqua, ['mg', 'mg_mg_l']) ?? 0),
+    na: Number(pickNum(acqua, ['na', 'na_mg_l']) ?? 0),
+    cl: Number(pickNum(acqua, ['cl', 'cl_mg_l']) ?? 0),
+    so4: Number(pickNum(acqua, ['so4', 'so4_mg_l']) ?? 0),
+    hco3: Number(pickNum(acqua, ['hco3', 'hco3_mg_l']) ?? 0),
   } : undefined;
 
   // Description / notes
@@ -365,6 +438,42 @@ function parseYamlRecipe(filePath: string): ParsedRecipe {
     grammi: Number(z['grammi'] ?? 0),
     note: typeof z['note'] === 'string' ? z['note'] : undefined,
   })) : undefined;
+
+  // ── Datos de cotización (brewday) ──
+  // Agua: sección `agua`/`acqua` con mash/sparge/total, o `mash.acqua_strike_litri`
+  const agua = (d['agua'] ?? d['acqua']) as Record<string, unknown> | undefined;
+  const mash_water_liters = pickNum(agua, ['mash_litri', 'mash_agua_litri', 'strike_litri'])
+    ?? pickNum(mash, ['acqua_strike_litri', 'strike_litri', 'agua_strike_litri']);
+  const sparge_water_liters = pickNum(agua, ['sparge_litri', 'sparge_agua_litri'])
+    ?? pickNum(d['sparge'] as Record<string, unknown> | undefined, ['sparge_litri', 'volumen_litri', 'litri']);
+  const total_water_liters = pickNum(agua, ['total_litri', 'total_agua_litri', 'agua_total_litri']);
+
+  // Sales de mash y ácido láctico: sección "sales"/"mash_salts", o dentro de agua
+  const sales = (d['sales'] ?? d['mash_salts']) as Record<string, unknown> | undefined;
+  const mash_salts = sales ? {
+    gypsum_g: pickNum(sales, ['gesso_g', 'gypsum_g', 'gesso']),
+    cacl2_g: pickNum(sales, ['cacl2_g', 'cacl2']),
+    epsom_g: pickNum(sales, ['epsom_g', 'epsom']),
+    nahco3_g: pickNum(sales, ['nahco3_g', 'nahco3']),
+    lactic_acid_ml: pickNum(sales, ['acido_lactico_ml', 'lactic_acid_ml', 'acido_lactico']),
+  } : undefined;
+
+  // Mash-in: sección "mash" con variantes
+  const mashInTemp = pickNum(mash, ['temperatura_in_c', 'mash_in_c', 'temperatura_strike_c', 'strike_c']);
+
+  // Gravedades pre/post-boil: sección "bollitura"
+  const pre_boil_og = pickNum(bollitura, ['og_pre_boil', 'gravedad_pre_boil', 'pre_boil_og'])
+    ?? pickNum(params, ['og_pre_boil', 'pre_boil_og']);
+  const post_boil_og = pickNum(bollitura, ['og_post_boil', 'gravedad_post_boil', 'post_boil_og'])
+    ?? pickNum(params, ['og_post_boil', 'post_boil_og']);
+
+  // Fermentación: días primaria y maduración
+  const primary_days = pickNum(ferm, ['primaria_giorni', 'primaria_dias', 'dias_primaria']);
+  const conditioning_days = pickNum(ferm, ['madurazione_giorni', 'maduracion_dias', 'dias_maduracion']);
+
+  // Carbonatación: temperatura de servicio y tipo de botella
+  const serving_temp_c = pickNum(carbonazione, ['temperatura_servizio_c', 'temperatura_servicio_c', 'servicio_c']);
+  const bottle_type = pickStr(carbonazione, ['tipo_botella', 'tipo_botella', 'botella']);
 
   // Validate required fields
   const missing: string[] = [];
@@ -402,6 +511,17 @@ function parseYamlRecipe(filePath: string): ParsedRecipe {
     note,
     spezie,
     zuccheri,
+    mash_water_liters: isNaN(mash_water_liters as number) ? undefined : mash_water_liters,
+    sparge_water_liters: isNaN(sparge_water_liters as number) ? undefined : sparge_water_liters,
+    total_water_liters: isNaN(total_water_liters as number) ? undefined : total_water_liters,
+    mash_salts,
+    mash_in_temp_c: isNaN(mashInTemp as number) ? undefined : mashInTemp,
+    pre_boil_og: isNaN(pre_boil_og as number) ? undefined : pre_boil_og,
+    post_boil_og: isNaN(post_boil_og as number) ? undefined : post_boil_og,
+    primary_days: isNaN(primary_days as number) ? undefined : primary_days,
+    conditioning_days: isNaN(conditioning_days as number) ? undefined : conditioning_days,
+    serving_temp_c: isNaN(serving_temp_c as number) ? undefined : serving_temp_c,
+    bottle_type,
     rawYaml: raw,
   };
 }
@@ -428,7 +548,7 @@ interface ValidationResult {
   carbonationIssues: string[];
 }
 
-function validateRecipe(r: ParsedRecipe): ValidationResult {
+export function validateRecipe(r: ParsedRecipe): ValidationResult {
   const style = findStyle(r.beer_style);
   const issues: string[] = [];
   const warnings: string[] = [];
@@ -580,6 +700,36 @@ function validateRecipe(r: ParsedRecipe): ValidationResult {
   if (r.abv_percent !== undefined && Math.abs(r.abv_percent - abv) > 0.5)
     warnings.push(`ABV dichiarato (${r.abv_percent}%) ≠ calcolato (${abv.toFixed(1)}%) — differenza >0.5%.`);
 
+  // ── Completitud de los datos de cotización (brewday) ──
+  const brewdayMissing: string[] = [];
+  if (r.mash_water_liters === undefined) brewdayMissing.push('agua de ammostamento (agua.mash_litri)');
+  if (r.sparge_water_liters === undefined) brewdayMissing.push('agua de lavado (agua.sparge_litri)');
+  if (r.total_water_liters === undefined) brewdayMissing.push('agua total (agua.total_litri)');
+  if (r.mash_salts === undefined) brewdayMissing.push('sales de mash (sales)');
+  if (r.mash_in_temp_c === undefined) brewdayMissing.push('temperatura de mash-in (mash.temperatura_in_c)');
+  if (r.pre_boil_og === undefined) brewdayMissing.push('gravedad pre-boil (bollitura.og_pre_boil)');
+  if (r.post_boil_og === undefined) brewdayMissing.push('gravedad post-boil (bollitura.og_post_boil)');
+  if (r.boil_time_minutes === undefined) brewdayMissing.push('duración de la ebullición (parametri.bollitura_min)');
+  if (r.fermentation_temp_c === undefined) brewdayMissing.push('temperatura de fermentación (fermentazione.temperatura_c)');
+  if (r.primary_days === undefined) brewdayMissing.push('días de fermentación primaria (fermentazione.primaria_giorni)');
+  if (r.carbonation_volumes === undefined) brewdayMissing.push('carbonatación (carbonazione.co2_volumi)');
+  if (r.packaging_volume_liters === undefined) brewdayMissing.push('volumen de envasado (parametri.confezionamento_litri)');
+  if (r.bottle_type === undefined) brewdayMissing.push('tipo de botella (carbonazione.tipo_botella)');
+
+  if (brewdayMissing.length > 0)
+    issues.push(`Datos de cotización incompletos — faltan: ${brewdayMissing.join(', ')}`);
+
+  // Coherencia de volúmenes de agua
+  if (r.mash_water_liters !== undefined && r.sparge_water_liters !== undefined && r.total_water_liters !== undefined) {
+    const sum = r.mash_water_liters + r.sparge_water_liters;
+    if (Math.abs(sum - r.total_water_liters) > 1)
+      volumeIssues.push(`Agua total (${r.total_water_liters}L) ≠ mash (${r.mash_water_liters}L) + sparge (${r.sparge_water_liters}L) = ${sum.toFixed(1)}L`);
+  }
+
+  // Coherencia de gravedades pre/post-boil
+  if (r.pre_boil_og !== undefined && r.post_boil_og !== undefined && r.post_boil_og < r.pre_boil_og)
+    volumeIssues.push(`OG post-boil (${r.post_boil_og.toFixed(3)}) < OG pre-boil (${r.pre_boil_og.toFixed(3)}) — la ebullición no puede reducir la gravedad.`);
+
   // ── Efficiency sanity ──
   if (r.efficiency_percent !== undefined) {
     if (r.efficiency_percent > 100) warnings.push('Efficienza >100% — impossibile senza errori di misura.');
@@ -654,7 +804,22 @@ export class YamlValidatorTool implements BuiltinTool<YamlValidatorInput> {
         ...(v.volumeIssues.length ? ['', '📐 Problemi volumi:', ...v.volumeIssues.map(iv => `  📐 ${iv}`)] : []),
         ...(v.carbonationIssues.length ? ['', '🫧 Problemi carbonazione:', ...v.carbonationIssues.map(ic => `  🫧 ${ic}`)] : []),
         '',
-        '💡 Usa recipe_validator con i dati strutturati per la revisione qualitativa LLM.',
+        '── Datos de cotización (brewday) ──',
+        `Agua: mash ${recipe.mash_water_liters ?? '?'}L, sparge ${recipe.sparge_water_liters ?? '?'}L, total ${recipe.total_water_liters ?? '?'}L`,
+        recipe.mash_salts
+          ? `Sales mash: ${[
+              recipe.mash_salts.gypsum_g !== undefined ? `gesso ${recipe.mash_salts.gypsum_g}g` : null,
+              recipe.mash_salts.cacl2_g !== undefined ? `CaCl₂ ${recipe.mash_salts.cacl2_g}g` : null,
+              recipe.mash_salts.epsom_g !== undefined ? `Epsom ${recipe.mash_salts.epsom_g}g` : null,
+              recipe.mash_salts.nahco3_g !== undefined ? `NaHCO₃ ${recipe.mash_salts.nahco3_g}g` : null,
+              recipe.mash_salts.lactic_acid_ml !== undefined ? `ácido láctico ${recipe.mash_salts.lactic_acid_ml}ml` : null,
+            ].filter(x => x !== null).join(', ') || 'ninguna'}`
+          : 'Sales mash: no especificadas',
+        `Mash-in: ${recipe.mash_in_temp_c ?? '?'}°C | OG pre-boil: ${recipe.pre_boil_og?.toFixed(3) ?? '?'} | OG post-boil: ${recipe.post_boil_og?.toFixed(3) ?? '?'}`,
+        `Fermentación: ${recipe.primary_days ?? '?'} días primaria${recipe.conditioning_days !== undefined ? `, ${recipe.conditioning_days} días maduración` : ''} a ${recipe.fermentation_temp_c ?? '?'}°C`,
+        `Envasado: ${recipe.packaging_volume_liters ?? '?'}L${recipe.bottle_type ? ` en ${recipe.bottle_type}` : ''}${recipe.carbonation_volumes !== undefined ? `, ${recipe.carbonation_volumes} vol CO₂` : ''}${recipe.serving_temp_c !== undefined ? `, servicio ${recipe.serving_temp_c}°C` : ''}`,
+        '',
+        '💡 Usa recipe_validator con los datos estructurados para la revisión cualitativa LLM.',
       ].join('\n');
 
       return Promise.resolve({ output: report });

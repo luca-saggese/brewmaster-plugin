@@ -260,7 +260,7 @@ interface ParsedRecipe {
   note?: string;
   spezie?: { nome: string; grammi: number; uso: string; tempo_min?: number; note?: string }[];
   zuccheri?: { tipo: string; grammi: number; note?: string }[];
-  // ── Datos de cotización (brewday) ──
+  // ── Dati di quotazione (brewday) ──
   mash_water_liters?: number;
   sparge_water_liters?: number;
   total_water_liters?: number;
@@ -276,10 +276,10 @@ interface ParsedRecipe {
 }
 
 const VALID_HOP_USES = new Set(['boil', 'whirlpool', 'dry_hop', 'first_wort', 'mash', 'hopback', 'dip_hop', 'hop_stand']);
-// ── Helpers de lectura tolerante a variantes de nombre de campo ──
-// Muchas recetas usan nombres de campo distintos (es. `mash.acqua_strike_litri`
-// vs `agua.mash_litri`, `bollitura.durata_min` vs `parametri.bollitura_min`).
-// Estos helpers buscan el primer valor no nulo entre varias claves alternativas.
+// ── Helper di lettura tolleranti alle varianti dei nomi di campo ──
+// Molte ricette usano nomi di campo diversi (es. `mash.acqua_strike_litri`
+// vs `acqua.mash_litri`, `bollitura.durata_min` vs `parametri.bollitura_min`).
+// Questi helper cercano il primo valore non nullo tra più chiavi alternative.
 
 function pickNum(obj: Record<string, unknown> | undefined, keys: string[]): number | undefined {
   if (!obj) return undefined;
@@ -334,7 +334,7 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
   const abv_percent = params['abv_percent'] != null ? Number(params['abv_percent']) : undefined;
   const efficiency_percent = params['efficienza_percent'] != null ? Number(params['efficienza_percent']) : undefined;
 
-  // Bollitura: duración puede estar en `parametri.bollitura_min` o `bollitura.durata_min`
+  // Bollitura: la durata può essere in `parametri.bollitura_min` o in `bollitura.durata_min`
   const bollitura = (d['bollitura'] ?? d['bolliura']) as Record<string, unknown> | undefined;
   const boil_time_minutes = pickNum(params, ['bollitura_min', 'duracion_bollitura_min'])
     ?? pickNum(bollitura, ['durata_min', 'duration_min', 'duracion_min']);
@@ -350,7 +350,7 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
   // Equipment
   const impianto = typeof params['impianto'] === 'string' ? params['impianto'] : undefined;
 
-  // Carbonation: en `parametri` o sección `carbonazione`
+  // Carbonazione: in `parametri` o nella sezione `carbonazione`
   const carbonazione = (d['carbonazione'] ?? d['carbonatacion']) as Record<string, unknown> | undefined;
   const carbonation_volumes = pickNum(params, ['carbonazione_vol', 'co2_volumi'])
     ?? pickNum(carbonazione, ['co2_volumi', 'co2_vol', 'volumen_co2', 'vol_co2']);
@@ -439,8 +439,8 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
     note: typeof z['note'] === 'string' ? z['note'] : undefined,
   })) : undefined;
 
-  // ── Datos de cotización (brewday) ──
-  // Agua: sección `agua`/`acqua` con mash/sparge/total, o `mash.acqua_strike_litri`
+  // ── Dati di quotazione (brewday) ──
+  // Acqua: sezione `acqua` con mash/sparge/total, oppure `mash.acqua_strike_litri`
   const agua = (d['agua'] ?? d['acqua']) as Record<string, unknown> | undefined;
   const mash_water_liters = pickNum(agua, ['mash_litri', 'mash_agua_litri', 'strike_litri'])
     ?? pickNum(mash, ['acqua_strike_litri', 'strike_litri', 'agua_strike_litri']);
@@ -448,7 +448,7 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
     ?? pickNum(d['sparge'] as Record<string, unknown> | undefined, ['sparge_litri', 'volumen_litri', 'litri']);
   const total_water_liters = pickNum(agua, ['total_litri', 'total_agua_litri', 'agua_total_litri']);
 
-  // Sales de mash y ácido láctico: sección "sales"/"mash_salts", o dentro de agua
+  // Sali del mash e acido lattico: sezione "sales"/"mash_salts", oppure dentro ad `acqua`
   const sales = (d['sales'] ?? d['mash_salts']) as Record<string, unknown> | undefined;
   const mash_salts = sales ? {
     gypsum_g: pickNum(sales, ['gesso_g', 'gypsum_g', 'gesso']),
@@ -458,20 +458,20 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
     lactic_acid_ml: pickNum(sales, ['acido_lactico_ml', 'lactic_acid_ml', 'acido_lactico']),
   } : undefined;
 
-  // Mash-in: sección "mash" con variantes
+  // Mash-in: sezione "mash" con varianti
   const mashInTemp = pickNum(mash, ['temperatura_in_c', 'mash_in_c', 'temperatura_strike_c', 'strike_c']);
 
-  // Gravedades pre/post-boil: sección "bollitura"
+  // Gravità pre/post-boil: sezione "bollitura"
   const pre_boil_og = pickNum(bollitura, ['og_pre_boil', 'gravedad_pre_boil', 'pre_boil_og'])
     ?? pickNum(params, ['og_pre_boil', 'pre_boil_og']);
   const post_boil_og = pickNum(bollitura, ['og_post_boil', 'gravedad_post_boil', 'post_boil_og'])
     ?? pickNum(params, ['og_post_boil', 'post_boil_og']);
 
-  // Fermentación: días primaria y maduración
+  // Fermentazione: giorni primaria e maturazione
   const primary_days = pickNum(ferm, ['primaria_giorni', 'primaria_dias', 'dias_primaria']);
   const conditioning_days = pickNum(ferm, ['madurazione_giorni', 'maduracion_dias', 'dias_maduracion']);
 
-  // Carbonatación: temperatura de servicio y tipo de botella
+  // Carbonatazione: temperatura di servizio e tipo di bottiglia
   const serving_temp_c = pickNum(carbonazione, ['temperatura_servizio_c', 'temperatura_servicio_c', 'servicio_c']);
   const bottle_type = pickStr(carbonazione, ['tipo_botella', 'tipo_botella', 'botella']);
 
@@ -700,35 +700,35 @@ export function validateRecipe(r: ParsedRecipe): ValidationResult {
   if (r.abv_percent !== undefined && Math.abs(r.abv_percent - abv) > 0.5)
     warnings.push(`ABV dichiarato (${r.abv_percent}%) ≠ calcolato (${abv.toFixed(1)}%) — differenza >0.5%.`);
 
-  // ── Completitud de los datos de cotización (brewday) ──
+  // ── Completezza dei dati di quotazione (brewday) ──
   const brewdayMissing: string[] = [];
-  if (r.mash_water_liters === undefined) brewdayMissing.push('agua de ammostamento (agua.mash_litri)');
-  if (r.sparge_water_liters === undefined) brewdayMissing.push('agua de lavado (agua.sparge_litri)');
-  if (r.total_water_liters === undefined) brewdayMissing.push('agua total (agua.total_litri)');
-  if (r.mash_salts === undefined) brewdayMissing.push('sales de mash (sales)');
-  if (r.mash_in_temp_c === undefined) brewdayMissing.push('temperatura de mash-in (mash.temperatura_in_c)');
-  if (r.pre_boil_og === undefined) brewdayMissing.push('gravedad pre-boil (bollitura.og_pre_boil)');
-  if (r.post_boil_og === undefined) brewdayMissing.push('gravedad post-boil (bollitura.og_post_boil)');
-  if (r.boil_time_minutes === undefined) brewdayMissing.push('duración de la ebullición (parametri.bollitura_min)');
-  if (r.fermentation_temp_c === undefined) brewdayMissing.push('temperatura de fermentación (fermentazione.temperatura_c)');
-  if (r.primary_days === undefined) brewdayMissing.push('días de fermentación primaria (fermentazione.primaria_giorni)');
-  if (r.carbonation_volumes === undefined) brewdayMissing.push('carbonatación (carbonazione.co2_volumi)');
-  if (r.packaging_volume_liters === undefined) brewdayMissing.push('volumen de envasado (parametri.confezionamento_litri)');
-  if (r.bottle_type === undefined) brewdayMissing.push('tipo de botella (carbonazione.tipo_botella)');
+  if (r.mash_water_liters === undefined) brewdayMissing.push('acqua di ammostamento (acqua.mash_litri)');
+  if (r.sparge_water_liters === undefined) brewdayMissing.push('acqua di sparge (acqua.sparge_litri)');
+  if (r.total_water_liters === undefined) brewdayMissing.push('acqua totale (acqua.total_litri)');
+  if (r.mash_salts === undefined) brewdayMissing.push('sali del mash (sales)');
+  if (r.mash_in_temp_c === undefined) brewdayMissing.push('temperatura di mash-in (mash.temperatura_in_c)');
+  if (r.pre_boil_og === undefined) brewdayMissing.push('gravità pre-boil (bollitura.og_pre_boil)');
+  if (r.post_boil_og === undefined) brewdayMissing.push('gravità post-boil (bollitura.og_post_boil)');
+  if (r.boil_time_minutes === undefined) brewdayMissing.push('durata della bollitura (parametri.bollitura_min)');
+  if (r.fermentation_temp_c === undefined) brewdayMissing.push('temperatura di fermentazione (fermentazione.temperatura_c)');
+  if (r.primary_days === undefined) brewdayMissing.push('giorni di fermentazione primaria (fermentazione.primaria_giorni)');
+  if (r.carbonation_volumes === undefined) brewdayMissing.push('carbonatazione (carbonazione.co2_volumi)');
+  if (r.packaging_volume_liters === undefined) brewdayMissing.push('volume di confezionamento (parametri.confezionamento_litri)');
+  if (r.bottle_type === undefined) brewdayMissing.push('tipo di bottiglia (carbonazione.tipo_botella)');
 
   if (brewdayMissing.length > 0)
-    issues.push(`Datos de cotización incompletos — faltan: ${brewdayMissing.join(', ')}`);
+    issues.push(`Dati di quotazione incompleti — mancano: ${brewdayMissing.join(', ')}`);
 
-  // Coherencia de volúmenes de agua
+  // Coerenza dei volumi d'acqua
   if (r.mash_water_liters !== undefined && r.sparge_water_liters !== undefined && r.total_water_liters !== undefined) {
     const sum = r.mash_water_liters + r.sparge_water_liters;
     if (Math.abs(sum - r.total_water_liters) > 1)
-      volumeIssues.push(`Agua total (${r.total_water_liters}L) ≠ mash (${r.mash_water_liters}L) + sparge (${r.sparge_water_liters}L) = ${sum.toFixed(1)}L`);
+      volumeIssues.push(`Acqua totale (${r.total_water_liters}L) ≠ mash (${r.mash_water_liters}L) + sparge (${r.sparge_water_liters}L) = ${sum.toFixed(1)}L`);
   }
 
-  // Coherencia de gravedades pre/post-boil
+  // Coerenza delle gravità pre/post-boil
   if (r.pre_boil_og !== undefined && r.post_boil_og !== undefined && r.post_boil_og < r.pre_boil_og)
-    volumeIssues.push(`OG post-boil (${r.post_boil_og.toFixed(3)}) < OG pre-boil (${r.pre_boil_og.toFixed(3)}) — la ebullición no puede reducir la gravedad.`);
+    volumeIssues.push(`OG post-boil (${r.post_boil_og.toFixed(3)}) < OG pre-boil (${r.pre_boil_og.toFixed(3)}) — la bollitura non può ridurre la gravità.`);
 
   // ── Efficiency sanity ──
   if (r.efficiency_percent !== undefined) {
@@ -804,22 +804,22 @@ export class YamlValidatorTool implements BuiltinTool<YamlValidatorInput> {
         ...(v.volumeIssues.length ? ['', '📐 Problemi volumi:', ...v.volumeIssues.map(iv => `  📐 ${iv}`)] : []),
         ...(v.carbonationIssues.length ? ['', '🫧 Problemi carbonazione:', ...v.carbonationIssues.map(ic => `  🫧 ${ic}`)] : []),
         '',
-        '── Datos de cotización (brewday) ──',
-        `Agua: mash ${recipe.mash_water_liters ?? '?'}L, sparge ${recipe.sparge_water_liters ?? '?'}L, total ${recipe.total_water_liters ?? '?'}L`,
+        '── Dati di quotazione (brewday) ──',
+        `Acqua: mash ${recipe.mash_water_liters ?? '?'}L, sparge ${recipe.sparge_water_liters ?? '?'}L, totale ${recipe.total_water_liters ?? '?'}L`,
         recipe.mash_salts
-          ? `Sales mash: ${[
+          ? `Sali del mash: ${[
               recipe.mash_salts.gypsum_g !== undefined ? `gesso ${recipe.mash_salts.gypsum_g}g` : null,
               recipe.mash_salts.cacl2_g !== undefined ? `CaCl₂ ${recipe.mash_salts.cacl2_g}g` : null,
               recipe.mash_salts.epsom_g !== undefined ? `Epsom ${recipe.mash_salts.epsom_g}g` : null,
               recipe.mash_salts.nahco3_g !== undefined ? `NaHCO₃ ${recipe.mash_salts.nahco3_g}g` : null,
-              recipe.mash_salts.lactic_acid_ml !== undefined ? `ácido láctico ${recipe.mash_salts.lactic_acid_ml}ml` : null,
-            ].filter(x => x !== null).join(', ') || 'ninguna'}`
-          : 'Sales mash: no especificadas',
+              recipe.mash_salts.lactic_acid_ml !== undefined ? `acido lattico ${recipe.mash_salts.lactic_acid_ml}ml` : null,
+            ].filter(x => x !== null).join(', ') || 'nessuno'}`
+          : 'Sali del mash: non specificati',
         `Mash-in: ${recipe.mash_in_temp_c ?? '?'}°C | OG pre-boil: ${recipe.pre_boil_og?.toFixed(3) ?? '?'} | OG post-boil: ${recipe.post_boil_og?.toFixed(3) ?? '?'}`,
-        `Fermentación: ${recipe.primary_days ?? '?'} días primaria${recipe.conditioning_days !== undefined ? `, ${recipe.conditioning_days} días maduración` : ''} a ${recipe.fermentation_temp_c ?? '?'}°C`,
-        `Envasado: ${recipe.packaging_volume_liters ?? '?'}L${recipe.bottle_type ? ` en ${recipe.bottle_type}` : ''}${recipe.carbonation_volumes !== undefined ? `, ${recipe.carbonation_volumes} vol CO₂` : ''}${recipe.serving_temp_c !== undefined ? `, servicio ${recipe.serving_temp_c}°C` : ''}`,
+        `Fermentazione: ${recipe.primary_days ?? '?'} giorni primaria${recipe.conditioning_days !== undefined ? `, ${recipe.conditioning_days} giorni di maturazione` : ''} a ${recipe.fermentation_temp_c ?? '?'}°C`,
+        `Confezionamento: ${recipe.packaging_volume_liters ?? '?'}L${recipe.bottle_type ? ` in ${recipe.bottle_type}` : ''}${recipe.carbonation_volumes !== undefined ? `, ${recipe.carbonation_volumes} vol CO₂` : ''}${recipe.serving_temp_c !== undefined ? `, servizio ${recipe.serving_temp_c}°C` : ''}`,
         '',
-        '💡 Usa recipe_validator con los datos estructurados para la revisión cualitativa LLM.',
+        '💡 Usa recipe_validator con i dati strutturati per la revisione qualitativa LLM.',
       ].join('\n');
 
       return Promise.resolve({ output: report });

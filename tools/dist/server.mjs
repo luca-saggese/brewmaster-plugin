@@ -6196,7 +6196,24 @@ const RecipeValidatorInputSchema = object({
 	priming_sugar_gl: number().optional(),
 	impianto: string().optional(),
 	descrizione: string().optional(),
-	note: string().optional()
+	note: string().optional(),
+	mash_water_liters: number().optional().describe("Agua de ammostamento (mash) en litros."),
+	sparge_water_liters: number().optional().describe("Agua de lavado (sparge) en litros."),
+	total_water_liters: number().optional().describe("Agua total de la cotización en litros."),
+	mash_salts: object({
+		gypsum_g: number().optional().describe("Gesso (CaSO₄) en gramos."),
+		cacl2_g: number().optional().describe("Cloruro de calcio (CaCl₂) en gramos."),
+		epsom_g: number().optional().describe("Sal de Epsom (MgSO₄) en gramos."),
+		nahco3_g: number().optional().describe("Bicarbonato de sodio (NaHCO₃) en gramos."),
+		lactic_acid_ml: number().optional().describe("Ácido láctico (88%) en ml.")
+	}).optional(),
+	mash_in_temp_c: number().optional().describe("Temperatura de mash-in (empaste) en °C."),
+	pre_boil_og: number().optional().describe("Gravedad pre-boil (SG)."),
+	post_boil_og: number().optional().describe("Gravedad post-boil (SG)."),
+	primary_days: number().optional().describe("Días de fermentación primaria."),
+	conditioning_days: number().optional().describe("Días de maduración/condicionamiento."),
+	serving_temp_c: number().optional().describe("Temperatura de servicio en °C."),
+	bottle_type: string().optional().describe("Tipo de botella (es. 500ml, 330ml, swing-top).")
 });
 const BJCP$1 = {
 	"1A": {
@@ -7674,6 +7691,11 @@ function findStyle$1(q) {
 	if (BJCP$1[q]) return BJCP$1[q];
 	const lq = q.toLowerCase();
 	for (const s of Object.values(BJCP$1)) if (s.name.toLowerCase().includes(lq)) return s;
+	const m = q.match(/\bBJ\s+([0-9A-Z]+)\b/i) ?? q.match(/\b([0-9]{1,2}[A-Z][0-9]?)\b/i);
+	if (m) {
+		const code = m[1].toUpperCase();
+		if (BJCP$1[code]) return BJCP$1[code];
+	}
 }
 function quickCheck(r, style) {
 	const issues = [];
@@ -7697,6 +7719,25 @@ function quickCheck(r, style) {
 		if (n.includes("crystal") || n.includes("caramel") || n.includes("chocolate") || n.includes("black") || n.includes("roast") || n.includes("special") || n.includes("cara")) specPct += pct;
 	}
 	if (specPct > 25) issues.push(`Malti speciali al ${specPct.toFixed(0)}%`);
+	const brewdayMissing = [];
+	if (r.mash_water_liters === void 0) brewdayMissing.push("agua de ammostamento (mash_water_liters)");
+	if (r.sparge_water_liters === void 0) brewdayMissing.push("agua de lavado (sparge_water_liters)");
+	if (r.total_water_liters === void 0) brewdayMissing.push("agua total (total_water_liters)");
+	if (r.mash_salts === void 0) brewdayMissing.push("sales de mash (mash_salts)");
+	if (r.mash_in_temp_c === void 0) brewdayMissing.push("temperatura de mash-in (mash_in_temp_c)");
+	if (r.pre_boil_og === void 0) brewdayMissing.push("gravedad pre-boil (pre_boil_og)");
+	if (r.post_boil_og === void 0) brewdayMissing.push("gravedad post-boil (post_boil_og)");
+	if (r.boil_time_minutes === void 0) brewdayMissing.push("duración de la ebullición (boil_time_minutes)");
+	if (r.fermentation_temp_c === void 0) brewdayMissing.push("temperatura de fermentación (fermentation_temp_c)");
+	if (r.primary_days === void 0) brewdayMissing.push("días de fermentación primaria (primary_days)");
+	if (r.carbonation_volumes === void 0) brewdayMissing.push("carbonatación (carbonation_volumes)");
+	if (r.packaging_volume_liters === void 0) brewdayMissing.push("volumen de envasado (packaging_volume_liters)");
+	if (r.bottle_type === void 0) brewdayMissing.push("tipo de botella (bottle_type)");
+	if (brewdayMissing.length > 0) issues.push(`Datos de cotización incompletos — faltan: ${brewdayMissing.join(", ")}`);
+	if (r.mash_water_liters !== void 0 && r.sparge_water_liters !== void 0 && r.total_water_liters !== void 0) {
+		const sum = r.mash_water_liters + r.sparge_water_liters;
+		if (Math.abs(sum - r.total_water_liters) > 1) issues.push(`Agua total (${r.total_water_liters}L) ≠ mash (${r.mash_water_liters}L) + sparge (${r.sparge_water_liters}L) = ${sum.toFixed(1)}L`);
+	}
 	return {
 		issues,
 		warnings,
@@ -7736,6 +7777,25 @@ function buildLlmReviewPrompt(r) {
 		r.carbonation_volumes !== void 0 ? `Carbonazione: ${r.carbonation_volumes} vol${r.carbonation_method ? ` (${r.carbonation_method})` : ""}${r.priming_sugar_gl !== void 0 ? ` — ${r.priming_sugar_gl} g/L priming` : ""}` : null,
 		r.boil_time_minutes !== void 0 ? `Bollitura: ${r.boil_time_minutes} min` : null,
 		r.pre_boil_volume_liters !== void 0 || r.post_boil_volume_liters !== void 0 ? `Volumi: pre-boil ${r.pre_boil_volume_liters ?? "?"}L, post-boil ${r.post_boil_volume_liters ?? "?"}L, fermentatore ${r.fermentation_volume_liters ?? "?"}L, confezionamento ${r.packaging_volume_liters ?? "?"}L` : null,
+		"",
+		r.mash_water_liters !== void 0 || r.sparge_water_liters !== void 0 || r.total_water_liters !== void 0 ? "── Agua de cotización ──" : null,
+		r.mash_water_liters !== void 0 ? `  Agua de ammostamento: ${r.mash_water_liters}L` : null,
+		r.sparge_water_liters !== void 0 ? `  Agua de lavado (sparge): ${r.sparge_water_liters}L` : null,
+		r.total_water_liters !== void 0 ? `  Agua total: ${r.total_water_liters}L` : null,
+		r.mash_salts ? `  Sales mash: ${[
+			r.mash_salts.gypsum_g !== void 0 ? `gesso ${r.mash_salts.gypsum_g}g` : null,
+			r.mash_salts.cacl2_g !== void 0 ? `CaCl₂ ${r.mash_salts.cacl2_g}g` : null,
+			r.mash_salts.epsom_g !== void 0 ? `Epsom ${r.mash_salts.epsom_g}g` : null,
+			r.mash_salts.nahco3_g !== void 0 ? `NaHCO₃ ${r.mash_salts.nahco3_g}g` : null,
+			r.mash_salts.lactic_acid_ml !== void 0 ? `ácido láctico ${r.mash_salts.lactic_acid_ml}ml` : null
+		].filter((x) => x !== null).join(", ")}` : null,
+		r.mash_in_temp_c !== void 0 ? `  Mash-in: ${r.mash_in_temp_c}°C` : null,
+		r.pre_boil_og !== void 0 ? `  OG pre-boil: ${r.pre_boil_og.toFixed(3)}` : null,
+		r.post_boil_og !== void 0 ? `  OG post-boil: ${r.post_boil_og.toFixed(3)}` : null,
+		r.primary_days !== void 0 ? `  Fermentación primaria: ${r.primary_days} días` : null,
+		r.conditioning_days !== void 0 ? `  Maduración: ${r.conditioning_days} días` : null,
+		r.serving_temp_c !== void 0 ? `  Servicio: ${r.serving_temp_c}°C` : null,
+		r.bottle_type !== void 0 ? `  Botella: ${r.bottle_type}` : null,
 		"",
 		r.descrizione ? `Descrizione: ${r.descrizione}` : null,
 		r.note ? `Note: ${r.note}` : null
@@ -7779,6 +7839,13 @@ function buildLlmReviewPrompt(r) {
 		`- plausibilità sensoriale;`,
 		`- chiarezza e riproducibilità della procedura;`,
 		`- attendibilità delle affermazioni storiche o tecniche.`,
+		``,
+		`Verifica che la ricetta contenga TUTTI los datos necesarios para seguir la`,
+		`cotización de principio a fin, hasta el embotellado: agua total, agua de`,
+		`ammostamento y de lavado (sparge), sales de mash y ácido láctico,`,
+		`temperatura de mash-in, gravedad pre-boil y post-boil, duración de la`,
+		`ebullición, temperatura y días de fermentación, carbonatación y tipo de`,
+		`botella. Señala cualquier dato faltante como critical_issue o warning.`,
 		``,
 		`Regole:`,
 		``,
@@ -11642,9 +11709,53 @@ const YamlToDocxInputSchema = object({
 function escapeXml(text) {
 	return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
+/**
+* Render a YAML value as a list of lines with proper indentation, so nested
+* objects and arrays of objects read like a JSON-serialized structure
+* instead of a flat `[object Object]` blob.
+*/
+function valueLines(value, indent) {
+	if (value == null) return ["-"];
+	if (typeof value === "string") return [value];
+	if (typeof value === "number" || typeof value === "boolean") return [String(value)];
+	if (Array.isArray(value)) {
+		if (value.length === 0) return ["-"];
+		const lines = [];
+		for (const item of value) if (typeof item === "object" && item !== null) {
+			const entries = Object.entries(item);
+			if (entries.length === 0) {
+				lines.push("• -");
+				continue;
+			}
+			const [firstKey, firstVal] = entries[0];
+			const firstLines = valueLines(firstVal, indent + 1);
+			lines.push(`• ${firstKey}: ${firstLines[0] ?? ""}`);
+			for (let i = 1; i < firstLines.length; i++) lines.push(`  ${firstLines[i]}`);
+			for (let i = 1; i < entries.length; i++) {
+				const [k, v] = entries[i];
+				const vLines = valueLines(v, indent + 1);
+				lines.push(`  ${k}: ${vLines[0] ?? ""}`);
+				for (let j = 1; j < vLines.length; j++) lines.push(`    ${vLines[j]}`);
+			}
+		} else lines.push(`• ${valueLines(item, indent + 1)[0] ?? ""}`);
+		return lines;
+	}
+	if (typeof value === "object") {
+		const entries = Object.entries(value);
+		if (entries.length === 0) return ["-"];
+		const lines = [];
+		for (const [k, v] of entries) {
+			const vLines = valueLines(v, indent + 1);
+			lines.push(`${k}: ${vLines[0] ?? ""}`);
+			for (let i = 1; i < vLines.length; i++) lines.push(`  ${vLines[i]}`);
+		}
+		return lines;
+	}
+	return [String(value)];
+}
 function yamlToDocx(inputPath, outputPath) {
 	const raw = readFileSync(inputPath, "utf-8");
-	const data = load(raw);
+	const data = load(raw) ?? {};
 	let body = "";
 	const nome = String(data["nome"] ?? "Ricetta di Birra");
 	body += `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="36"/></w:rPr><w:t xml:space="preserve">${escapeXml(nome)}</w:t></w:r></w:p>`;
@@ -11654,7 +11765,11 @@ function yamlToDocx(inputPath, outputPath) {
 		body += `<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="4" w:color="C0392B"/></w:pBdr></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="26"/><w:color w:val="C0392B"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
 	}
 	function kv(label, value) {
-		body += `<w:p><w:r><w:rPr><w:b/><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(label)}: </w:t></w:r><w:r><w:rPr><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(value != null ? String(value) : "-")}</w:t></w:r></w:p>`;
+		const lines = valueLines(value, 0);
+		if (Array.isArray(value) || typeof value === "object" && value !== null) {
+			body += `<w:p><w:r><w:rPr><w:b/><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(label)}:</w:t></w:r></w:p>`;
+			for (const line of lines) body += `<w:p><w:r><w:rPr><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r></w:p>`;
+		} else body += `<w:p><w:r><w:rPr><w:b/><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(label)}: </w:t></w:r><w:r><w:rPr><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(lines[0] ?? "-")}</w:t></w:r></w:p>`;
 	}
 	function simpleTable(header, rows) {
 		body += "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/><w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"C0392B\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"C0392B\"/></w:tblBorders></w:tblPr><w:tblGrid>";
@@ -11725,6 +11840,31 @@ function yamlToDocx(inputPath, outputPath) {
 			heading(sec.charAt(0).toUpperCase() + sec.slice(1));
 			for (const [k, v] of Object.entries(obj)) kv(k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), v);
 		}
+	}
+	const handled = /* @__PURE__ */ new Set([
+		"nome",
+		"stile",
+		"descrizione",
+		"parametri",
+		"grist",
+		"luppolatura",
+		"lievito",
+		"acqua",
+		"mash",
+		"bollitura",
+		"fermentazione",
+		"carbonazione",
+		"note_critiche",
+		"alternative"
+	]);
+	for (const [key, value] of Object.entries(data)) {
+		if (handled.has(key)) continue;
+		if (value == null) continue;
+		heading(key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
+		if (Array.isArray(value)) for (const item of value) if (typeof item === "object" && item !== null) for (const line of valueLines(item, 0)) body += `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r></w:p>`;
+		else body += `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">• ${escapeXml(String(item))}</w:t></w:r></w:p>`;
+		else if (typeof value === "object" && value !== null) for (const [k, v] of Object.entries(value)) kv(k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), v);
+		else body += `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${escapeXml(String(value))}</w:t></w:r></w:p>`;
 	}
 	const notes = data["note_critiche"];
 	if (notes) {
@@ -12236,7 +12376,7 @@ const COLOR_TEXT = "#1a1a1a";
 const COLOR_MUTED = "#7f8c8d";
 function yamlToPdf(inputPath, outputPath) {
 	const raw = readFileSync(inputPath, "utf-8");
-	const data = load(raw);
+	const data = load(raw) ?? {};
 	const doc = new PDFLite({
 		size: "A4",
 		margins: {
@@ -12268,15 +12408,105 @@ function yamlToPdf(inputPath, outputPath) {
 		doc.moveTo(MARGIN, doc.y + 3).lineTo(545, doc.y + 3).strokeColor(COLOR_PRIMARY).lineWidth(1.5).stroke();
 		return doc.y + 9;
 	}
+	/**
+	* Render a YAML value as a list of lines with proper indentation, so nested
+	* objects and arrays of objects read like a JSON-serialized structure
+	* instead of a flat `[object Object]` blob.
+	*/
+	function valueLines(value, indent) {
+		if (value == null) return ["-"];
+		if (typeof value === "string") return [value];
+		if (typeof value === "number" || typeof value === "boolean") return [String(value)];
+		if (Array.isArray(value)) {
+			if (value.length === 0) return ["-"];
+			const lines = [];
+			for (const item of value) if (typeof item === "object" && item !== null) {
+				const entries = Object.entries(item);
+				if (entries.length === 0) {
+					lines.push("• -");
+					continue;
+				}
+				const [firstKey, firstVal] = entries[0];
+				const firstLines = valueLines(firstVal, indent + 1);
+				lines.push(`• ${firstKey}: ${firstLines[0] ?? ""}`);
+				for (let i = 1; i < firstLines.length; i++) lines.push(`  ${firstLines[i]}`);
+				for (let i = 1; i < entries.length; i++) {
+					const [k, v] = entries[i];
+					const vLines = valueLines(v, indent + 1);
+					lines.push(`  ${k}: ${vLines[0] ?? ""}`);
+					for (let j = 1; j < vLines.length; j++) lines.push(`    ${vLines[j]}`);
+				}
+			} else lines.push(`• ${valueLines(item, indent + 1)[0] ?? ""}`);
+			return lines;
+		}
+		if (typeof value === "object") {
+			const entries = Object.entries(value);
+			if (entries.length === 0) return ["-"];
+			const lines = [];
+			for (const [k, v] of entries) {
+				const vLines = valueLines(v, indent + 1);
+				lines.push(`${k}: ${vLines[0] ?? ""}`);
+				for (let i = 1; i < vLines.length; i++) lines.push(`  ${vLines[i]}`);
+			}
+			return lines;
+		}
+		return [String(value)];
+	}
 	function kv(label, value) {
+		const lines = valueLines(value, 0);
+		const isComplex = Array.isArray(value) || typeof value === "object" && value !== null;
 		if (doc.y > 792) doc.addPage();
-		const ky = doc.y + 1;
-		doc.font("Helvetica-Bold").fontSize(10).fillColor("#555555").text(label + ": ", MARGIN, ky, {
+		if (isComplex) {
+			doc.font("Helvetica-Bold").fontSize(10).fillColor("#555555").text(label + ":", MARGIN, doc.y + 1, { lineGap: 4 });
+			for (const line of lines) {
+				if (doc.y > 792) doc.addPage();
+				doc.font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text(line, 62, doc.y + 1, {
+					width: 483,
+					lineGap: 4
+				});
+			}
+		} else doc.font("Helvetica-Bold").fontSize(10).fillColor("#555555").text(label + ": ", MARGIN, doc.y + 1, {
 			continued: true,
 			lineGap: 4
-		}).font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text(value, { lineGap: 4 });
-		doc.moveDown(.3);
+		}).font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text(lines[0] ?? "-", { lineGap: 4 });
 		return doc.y;
+	}
+	/**
+	* Render a top-level section generically: an array of strings becomes a
+	* bulleted list (one line per item), an array of objects becomes a list of
+	* indented blocks, and a plain object becomes key/value lines.
+	*/
+	function renderSection(title, value) {
+		doc.y = section(title);
+		if (Array.isArray(value)) for (const item of value) if (typeof item === "object" && item !== null) {
+			const lines = valueLines(item, 0);
+			for (const line of lines) {
+				if (doc.y > 792) doc.addPage();
+				doc.font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text(line, 60, doc.y + 1, {
+					width: 485,
+					lineGap: 4
+				});
+			}
+			doc.y += 2;
+		} else {
+			if (doc.y > 792) doc.addPage();
+			doc.font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text("• " + String(item), 60, doc.y + 1, {
+				width: 485,
+				lineGap: 4
+			});
+		}
+		else if (typeof value === "object" && value !== null) for (const [k, v] of Object.entries(value)) {
+			const label = k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+			doc.y = kv(label, v);
+		}
+		else {
+			if (doc.y > 792) doc.addPage();
+			doc.font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text(String(value), 60, doc.y + 1, {
+				width: 485,
+				lineGap: 4
+			});
+		}
+		return doc.y + 4;
 	}
 	function simpleTable(header, rows, colWidths) {
 		if (doc.y > 722) doc.addPage();
@@ -12311,7 +12541,7 @@ function yamlToPdf(inputPath, outputPath) {
 	const params = data["parametri"];
 	if (params && Object.keys(params).length > 0) {
 		y = section("Parametri");
-		for (const [k, v] of Object.entries(params)) y = kv(k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), v != null ? String(v) : "-");
+		for (const [k, v] of Object.entries(params)) y = kv(k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), v);
 		y += 6;
 	}
 	const grist = data["grist"];
@@ -12374,7 +12604,7 @@ function yamlToPdf(inputPath, outputPath) {
 		const obj = data[sec];
 		if (obj && Object.keys(obj).length > 0) {
 			doc.y = section(sec.charAt(0).toUpperCase() + sec.slice(1));
-			for (const [k, v] of Object.entries(obj)) y = kv(k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), v != null ? String(v) : "-");
+			for (const [k, v] of Object.entries(obj)) y = kv(k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), v);
 			y += 4;
 		}
 	}
@@ -12386,8 +12616,10 @@ function yamlToPdf(inputPath, outputPath) {
 			const trimmed = String(n).trim();
 			if (!trimmed) continue;
 			if (doc.y > 802) doc.addPage();
-			doc.font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text("• " + trimmed, 60, doc.y + 2, { width: 485 });
-			doc.y += 4;
+			doc.font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text("• " + trimmed, 60, doc.y + 2, {
+				width: 485,
+				lineGap: 4
+			});
 		}
 		y = doc.y;
 	}
@@ -12396,17 +12628,41 @@ function yamlToPdf(inputPath, outputPath) {
 		y = section("Alternative");
 		for (const a of alts) {
 			if (doc.y > 792) doc.addPage();
-			doc.font("Helvetica-Bold").fontSize(10).fillColor(COLOR_TEXT).text("• " + String(a["descrizione"] ?? ""), 60, doc.y + 2, { width: 485 });
-			if (a["cambiamenti"]) {
-				doc.moveDown(.3);
-				doc.font("Helvetica").fontSize(9).fillColor(COLOR_MUTED).text("Cambiamenti: " + String(a["cambiamenti"]), 70, doc.y, { width: 475 });
-			}
-			if (a["impatto"]) {
-				doc.y += 2;
-				doc.font("Helvetica").fontSize(9).fillColor(COLOR_MUTED).text("Impatto: " + String(a["impatto"]), 70, doc.y, { width: 475 });
-			}
-			doc.y += 4;
+			doc.font("Helvetica-Bold").fontSize(10).fillColor(COLOR_TEXT).text("• " + String(a["descrizione"] ?? ""), 60, doc.y + 2, {
+				width: 485,
+				lineGap: 4
+			});
+			if (a["cambiamenti"]) doc.font("Helvetica").fontSize(9).fillColor(COLOR_MUTED).text("Cambiamenti: " + String(a["cambiamenti"]), 70, doc.y + 1, {
+				width: 475,
+				lineGap: 4
+			});
+			if (a["impatto"]) doc.font("Helvetica").fontSize(9).fillColor(COLOR_MUTED).text("Impatto: " + String(a["impatto"]), 70, doc.y + 1, {
+				width: 475,
+				lineGap: 4
+			});
+			doc.y += 2;
 		}
+	}
+	const handled = /* @__PURE__ */ new Set([
+		"nome",
+		"stile",
+		"descrizione",
+		"parametri",
+		"grist",
+		"luppolatura",
+		"lievito",
+		"acqua",
+		"mash",
+		"bollitura",
+		"fermentazione",
+		"carbonazione",
+		"note_critiche",
+		"alternative"
+	]);
+	for (const [key, value] of Object.entries(data)) {
+		if (handled.has(key)) continue;
+		if (value == null) continue;
+		y = renderSection(key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), value);
 	}
 	doc.y += 10;
 	doc.font("Helvetica-Oblique").fontSize(8).fillColor(COLOR_MUTED).text("Generato da Maestra Birraia AI — Kimi Code Brewing Assistant", MARGIN, doc.y, { align: "center" });
@@ -22818,10 +23074,28 @@ function findStyle(q) {
 		if (s.name.toLowerCase().includes(lq)) return s;
 		if (s.code.toLowerCase() === lq) return s;
 	}
+	const codeMatch = q.match(/\bBJCP\s+([0-9]+[A-Za-z]?)\b/i);
+	if (codeMatch) {
+		const code = codeMatch[1].toUpperCase();
+		if (BJCP[code]) return BJCP[code];
+	}
+	const bareCode = q.match(/\b([0-9]{1,2}[A-Z][0-9]?)\b/i);
+	if (bareCode) {
+		const code = bareCode[1].toUpperCase();
+		if (BJCP[code]) return BJCP[code];
+	}
 }
 function findAllStyles(query) {
 	const lq = query.toLowerCase();
-	return Object.values(BJCP).filter((s) => s.name.toLowerCase().includes(lq) || s.code.toLowerCase().includes(lq));
+	const matches = Object.values(BJCP).filter((s) => s.name.toLowerCase().includes(lq) || s.code.toLowerCase().includes(lq));
+	if (matches.length > 0) return matches;
+	const m = query.match(/\bBJ\s+([0-9A-Z]+)\b/i) ?? query.match(/\b([0-9]{1,2}[A-Z][0-9]?)\b/i);
+	if (m) {
+		const code = m[1].toUpperCase();
+		const s = BJCP[code];
+		if (s) return [s];
+	}
+	return [];
 }
 const VALID_HOP_USES = /* @__PURE__ */ new Set([
 	"boil",
@@ -22833,6 +23107,20 @@ const VALID_HOP_USES = /* @__PURE__ */ new Set([
 	"dip_hop",
 	"hop_stand"
 ]);
+function pickNum(obj, keys) {
+	if (!obj) return void 0;
+	for (const k of keys) {
+		const v = obj[k];
+		if (v != null && !Number.isNaN(Number(v))) return Number(v);
+	}
+}
+function pickStr(obj, keys) {
+	if (!obj) return void 0;
+	for (const k of keys) {
+		const v = obj[k];
+		if (typeof v === "string" && v.trim() !== "") return v;
+	}
+}
 function parseYamlRecipe(filePath) {
 	if (!existsSync(filePath)) throw new Error(`File non trovato: ${filePath}`);
 	const raw = readFileSync(filePath, "utf-8");
@@ -22849,15 +23137,47 @@ function parseYamlRecipe(filePath) {
 	const ebc = params["ebc"] != null ? Number(params["ebc"]) : void 0;
 	const abv_percent = params["abv_percent"] != null ? Number(params["abv_percent"]) : void 0;
 	const efficiency_percent = params["efficienza_percent"] != null ? Number(params["efficienza_percent"]) : void 0;
-	const boil_time_minutes = params["bollitura_min"] != null ? Number(params["bollitura_min"]) : void 0;
-	const pre_boil_volume_liters = params["pre_boil_litri"] != null ? Number(params["pre_boil_litri"]) : void 0;
-	const post_boil_volume_liters = params["post_boil_litri"] != null ? Number(params["post_boil_litri"]) : void 0;
-	const fermentation_volume_liters = params["fermentatore_litri"] != null ? Number(params["fermentatore_litri"]) : void 0;
-	const packaging_volume_liters = params["confezionamento_litri"] != null ? Number(params["confezionamento_litri"]) : void 0;
+	const bollitura = d["bollitura"] ?? d["bolliura"];
+	const boil_time_minutes = pickNum(params, ["bollitura_min", "duracion_bollitura_min"]) ?? pickNum(bollitura, [
+		"durata_min",
+		"duration_min",
+		"duracion_min"
+	]);
+	const pre_boil_volume_liters = pickNum(params, ["pre_boil_litri", "pre_boil_volumen_litri"]) ?? pickNum(bollitura, [
+		"volume_pre_boil_litri",
+		"pre_boil_litri",
+		"volumen_pre_boil_litri"
+	]);
+	const post_boil_volume_liters = pickNum(params, ["post_boil_litri", "post_boil_volumen_litri"]) ?? pickNum(bollitura, [
+		"volume_post_boil_litri",
+		"post_boil_litri",
+		"volumen_post_boil_litri"
+	]);
+	const fermentation_volume_liters = pickNum(params, [
+		"fermentatore_litri",
+		"volume_fermentatore",
+		"fermentador_litri"
+	]);
+	const packaging_volume_liters = pickNum(params, [
+		"confezionamento_litri",
+		"confezionamiento_litri",
+		"envasado_litri",
+		"embotellado_litri"
+	]);
 	const impianto = typeof params["impianto"] === "string" ? params["impianto"] : void 0;
-	const carbonation_volumes = params["carbonazione_vol"] != null ? Number(params["carbonazione_vol"]) : void 0;
-	const carbonation_method = typeof params["carbonazione_metodo"] === "string" ? params["carbonazione_metodo"] : void 0;
-	const priming_sugar_gl = params["priming_gl"] != null ? Number(params["priming_gl"]) : void 0;
+	const carbonazione = d["carbonazione"] ?? d["carbonatacion"];
+	const carbonation_volumes = pickNum(params, ["carbonazione_vol", "co2_volumi"]) ?? pickNum(carbonazione, [
+		"co2_volumi",
+		"co2_vol",
+		"volumen_co2",
+		"vol_co2"
+	]);
+	const carbonation_method = pickStr(params, ["carbonazione_metodo", "metodo_carbonatacion"]) ?? pickStr(carbonazione, ["metodo", "metodo_carbonatacion"]);
+	const priming_sugar_gl = pickNum(params, ["priming_gl", "priming_g_l"]) ?? pickNum(carbonazione, [
+		"zucchero_g_per_litro",
+		"azucar_g_por_litro",
+		"priming_gl"
+	]);
 	const grain_bill = (Array.isArray(d["grist"]) ? d["grist"] : []).map((g) => ({
 		malt: String(g["malto"] ?? ""),
 		kg: Number(g["kg"] ?? 0),
@@ -22893,12 +23213,12 @@ function parseYamlRecipe(filePath) {
 	const fermentation_temp_c = ferm["temperatura_c"] != null ? Number(ferm["temperatura_c"]) : void 0;
 	const acqua = d["acqua"];
 	const water_profile = acqua ? {
-		ca: Number(acqua["ca"] ?? 0),
-		mg: Number(acqua["mg"] ?? 0),
-		na: Number(acqua["na"] ?? 0),
-		cl: Number(acqua["cl"] ?? 0),
-		so4: Number(acqua["so4"] ?? 0),
-		hco3: Number(acqua["hco3"] ?? 0)
+		ca: Number(pickNum(acqua, ["ca", "ca_mg_l"]) ?? 0),
+		mg: Number(pickNum(acqua, ["mg", "mg_mg_l"]) ?? 0),
+		na: Number(pickNum(acqua, ["na", "na_mg_l"]) ?? 0),
+		cl: Number(pickNum(acqua, ["cl", "cl_mg_l"]) ?? 0),
+		so4: Number(pickNum(acqua, ["so4", "so4_mg_l"]) ?? 0),
+		hco3: Number(pickNum(acqua, ["hco3", "hco3_mg_l"]) ?? 0)
 	} : void 0;
 	const descrizione = typeof d["descrizione"] === "string" ? d["descrizione"] : void 0;
 	const note = typeof d["note"] === "string" ? d["note"] : void 0;
@@ -22914,6 +23234,78 @@ function parseYamlRecipe(filePath) {
 		grammi: Number(z["grammi"] ?? 0),
 		note: typeof z["note"] === "string" ? z["note"] : void 0
 	})) : void 0;
+	const agua = d["agua"] ?? d["acqua"];
+	const mash_water_liters = pickNum(agua, [
+		"mash_litri",
+		"mash_agua_litri",
+		"strike_litri"
+	]) ?? pickNum(mash, [
+		"acqua_strike_litri",
+		"strike_litri",
+		"agua_strike_litri"
+	]);
+	const sparge_water_liters = pickNum(agua, ["sparge_litri", "sparge_agua_litri"]) ?? pickNum(d["sparge"], [
+		"sparge_litri",
+		"volumen_litri",
+		"litri"
+	]);
+	const total_water_liters = pickNum(agua, [
+		"total_litri",
+		"total_agua_litri",
+		"agua_total_litri"
+	]);
+	const sales = d["sales"] ?? d["mash_salts"];
+	const mash_salts = sales ? {
+		gypsum_g: pickNum(sales, [
+			"gesso_g",
+			"gypsum_g",
+			"gesso"
+		]),
+		cacl2_g: pickNum(sales, ["cacl2_g", "cacl2"]),
+		epsom_g: pickNum(sales, ["epsom_g", "epsom"]),
+		nahco3_g: pickNum(sales, ["nahco3_g", "nahco3"]),
+		lactic_acid_ml: pickNum(sales, [
+			"acido_lactico_ml",
+			"lactic_acid_ml",
+			"acido_lactico"
+		])
+	} : void 0;
+	const mashInTemp = pickNum(mash, [
+		"temperatura_in_c",
+		"mash_in_c",
+		"temperatura_strike_c",
+		"strike_c"
+	]);
+	const pre_boil_og = pickNum(bollitura, [
+		"og_pre_boil",
+		"gravedad_pre_boil",
+		"pre_boil_og"
+	]) ?? pickNum(params, ["og_pre_boil", "pre_boil_og"]);
+	const post_boil_og = pickNum(bollitura, [
+		"og_post_boil",
+		"gravedad_post_boil",
+		"post_boil_og"
+	]) ?? pickNum(params, ["og_post_boil", "post_boil_og"]);
+	const primary_days = pickNum(ferm, [
+		"primaria_giorni",
+		"primaria_dias",
+		"dias_primaria"
+	]);
+	const conditioning_days = pickNum(ferm, [
+		"madurazione_giorni",
+		"maduracion_dias",
+		"dias_maduracion"
+	]);
+	const serving_temp_c = pickNum(carbonazione, [
+		"temperatura_servizio_c",
+		"temperatura_servicio_c",
+		"servicio_c"
+	]);
+	const bottle_type = pickStr(carbonazione, [
+		"tipo_botella",
+		"tipo_botella",
+		"botella"
+	]);
 	const missing = [];
 	if (!recipe_name) missing.push("nome");
 	if (!beer_style) missing.push("stile");
@@ -22952,6 +23344,17 @@ function parseYamlRecipe(filePath) {
 		note,
 		spezie,
 		zuccheri,
+		mash_water_liters: isNaN(mash_water_liters) ? void 0 : mash_water_liters,
+		sparge_water_liters: isNaN(sparge_water_liters) ? void 0 : sparge_water_liters,
+		total_water_liters: isNaN(total_water_liters) ? void 0 : total_water_liters,
+		mash_salts,
+		mash_in_temp_c: isNaN(mashInTemp) ? void 0 : mashInTemp,
+		pre_boil_og: isNaN(pre_boil_og) ? void 0 : pre_boil_og,
+		post_boil_og: isNaN(post_boil_og) ? void 0 : post_boil_og,
+		primary_days: isNaN(primary_days) ? void 0 : primary_days,
+		conditioning_days: isNaN(conditioning_days) ? void 0 : conditioning_days,
+		serving_temp_c: isNaN(serving_temp_c) ? void 0 : serving_temp_c,
+		bottle_type,
 		rawYaml: raw
 	};
 }
@@ -23047,6 +23450,26 @@ function validateRecipe(r) {
 		if (Math.abs(r.priming_sugar_gl * r.batch_size_liters - expectedPriming) > expectedPriming * .4) carbonationIssues.push(`Dosaggio priming (${r.priming_sugar_gl} g/L) incoerente con carbonazione target (${r.carbonation_volumes} vol).`);
 	}
 	if (r.abv_percent !== void 0 && Math.abs(r.abv_percent - abv) > .5) warnings.push(`ABV dichiarato (${r.abv_percent}%) ≠ calcolato (${abv.toFixed(1)}%) — differenza >0.5%.`);
+	const brewdayMissing = [];
+	if (r.mash_water_liters === void 0) brewdayMissing.push("acqua di ammostamento (acqua.mash_litri)");
+	if (r.sparge_water_liters === void 0) brewdayMissing.push("acqua di sparge (acqua.sparge_litri)");
+	if (r.total_water_liters === void 0) brewdayMissing.push("acqua totale (acqua.total_litri)");
+	if (r.mash_salts === void 0) brewdayMissing.push("sali del mash (sales)");
+	if (r.mash_in_temp_c === void 0) brewdayMissing.push("temperatura di mash-in (mash.temperatura_in_c)");
+	if (r.pre_boil_og === void 0) brewdayMissing.push("gravità pre-boil (bollitura.og_pre_boil)");
+	if (r.post_boil_og === void 0) brewdayMissing.push("gravità post-boil (bollitura.og_post_boil)");
+	if (r.boil_time_minutes === void 0) brewdayMissing.push("durata della bollitura (parametri.bollitura_min)");
+	if (r.fermentation_temp_c === void 0) brewdayMissing.push("temperatura di fermentazione (fermentazione.temperatura_c)");
+	if (r.primary_days === void 0) brewdayMissing.push("giorni di fermentazione primaria (fermentazione.primaria_giorni)");
+	if (r.carbonation_volumes === void 0) brewdayMissing.push("carbonatazione (carbonazione.co2_volumi)");
+	if (r.packaging_volume_liters === void 0) brewdayMissing.push("volume di confezionamento (parametri.confezionamento_litri)");
+	if (r.bottle_type === void 0) brewdayMissing.push("tipo di bottiglia (carbonazione.tipo_botella)");
+	if (brewdayMissing.length > 0) issues.push(`Dati di quotazione incompleti — mancano: ${brewdayMissing.join(", ")}`);
+	if (r.mash_water_liters !== void 0 && r.sparge_water_liters !== void 0 && r.total_water_liters !== void 0) {
+		const sum = r.mash_water_liters + r.sparge_water_liters;
+		if (Math.abs(sum - r.total_water_liters) > 1) volumeIssues.push(`Acqua totale (${r.total_water_liters}L) ≠ mash (${r.mash_water_liters}L) + sparge (${r.sparge_water_liters}L) = ${sum.toFixed(1)}L`);
+	}
+	if (r.pre_boil_og !== void 0 && r.post_boil_og !== void 0 && r.post_boil_og < r.pre_boil_og) volumeIssues.push(`OG post-boil (${r.post_boil_og.toFixed(3)}) < OG pre-boil (${r.pre_boil_og.toFixed(3)}) — la bollitura non può ridurre la gravità.`);
 	if (r.efficiency_percent !== void 0) {
 		if (r.efficiency_percent > 100) warnings.push("Efficienza >100% — impossibile senza errori di misura.");
 		else if (r.efficiency_percent < 50) warnings.push("Efficienza <50% — molto bassa, verificare la macinatura e il mash.");
@@ -23119,6 +23542,19 @@ var YamlValidatorTool = class {
 					"🫧 Problemi carbonazione:",
 					...v.carbonationIssues.map((ic) => `  🫧 ${ic}`)
 				] : [],
+				"",
+				"── Dati di quotazione (brewday) ──",
+				`Acqua: mash ${recipe.mash_water_liters ?? "?"}L, sparge ${recipe.sparge_water_liters ?? "?"}L, totale ${recipe.total_water_liters ?? "?"}L`,
+				recipe.mash_salts ? `Sali del mash: ${[
+					recipe.mash_salts.gypsum_g !== void 0 ? `gesso ${recipe.mash_salts.gypsum_g}g` : null,
+					recipe.mash_salts.cacl2_g !== void 0 ? `CaCl₂ ${recipe.mash_salts.cacl2_g}g` : null,
+					recipe.mash_salts.epsom_g !== void 0 ? `Epsom ${recipe.mash_salts.epsom_g}g` : null,
+					recipe.mash_salts.nahco3_g !== void 0 ? `NaHCO₃ ${recipe.mash_salts.nahco3_g}g` : null,
+					recipe.mash_salts.lactic_acid_ml !== void 0 ? `acido lattico ${recipe.mash_salts.lactic_acid_ml}ml` : null
+				].filter((x) => x !== null).join(", ") || "nessuno"}` : "Sali del mash: non specificati",
+				`Mash-in: ${recipe.mash_in_temp_c ?? "?"}°C | OG pre-boil: ${recipe.pre_boil_og?.toFixed(3) ?? "?"} | OG post-boil: ${recipe.post_boil_og?.toFixed(3) ?? "?"}`,
+				`Fermentazione: ${recipe.primary_days ?? "?"} giorni primaria${recipe.conditioning_days !== void 0 ? `, ${recipe.conditioning_days} giorni di maturazione` : ""} a ${recipe.fermentation_temp_c ?? "?"}°C`,
+				`Confezionamento: ${recipe.packaging_volume_liters ?? "?"}L${recipe.bottle_type ? ` in ${recipe.bottle_type}` : ""}${recipe.carbonation_volumes !== void 0 ? `, ${recipe.carbonation_volumes} vol CO₂` : ""}${recipe.serving_temp_c !== void 0 ? `, servizio ${recipe.serving_temp_c}°C` : ""}`,
 				"",
 				"💡 Usa recipe_validator con i dati strutturati per la revisione qualitativa LLM."
 			].join("\n");

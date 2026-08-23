@@ -23555,6 +23555,7 @@ var YamlValidatorTool = class {
 				`Mash-in: ${recipe.mash_in_temp_c ?? "?"}°C | OG pre-boil: ${recipe.pre_boil_og?.toFixed(3) ?? "?"} | OG post-boil: ${recipe.post_boil_og?.toFixed(3) ?? "?"}`,
 				`Fermentazione: ${recipe.primary_days ?? "?"} giorni primaria${recipe.conditioning_days !== void 0 ? `, ${recipe.conditioning_days} giorni di maturazione` : ""} a ${recipe.fermentation_temp_c ?? "?"}°C`,
 				`Confezionamento: ${recipe.packaging_volume_liters ?? "?"}L${recipe.bottle_type ? ` in ${recipe.bottle_type}` : ""}${recipe.carbonation_volumes !== void 0 ? `, ${recipe.carbonation_volumes} vol CO₂` : ""}${recipe.serving_temp_c !== void 0 ? `, servizio ${recipe.serving_temp_c}°C` : ""}`,
+				"IMPORTANTE i campi dello YAML devono corrispondere allo schema, non solo semanticamente ma anche sintatticamente, altrimenti il validatore non li riconosce.",
 				"",
 				"💡 Usa recipe_validator con i dati strutturati per la revisione qualitativa LLM."
 			].join("\n");

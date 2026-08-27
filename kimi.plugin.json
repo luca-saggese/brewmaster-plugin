@@ -1,7 +1,7 @@
 {
   "name": "brewmaster",
   "version": "1.0.0",
-  "description": "Maestra Birraia AI \u2014 homebrewing recipe design, analysis, and brewing math tools.",
+  "description": "Brewmaster AI \u2014 homebrewing recipe design, analysis, and brewing math tools.",
   "keywords": ["homebrewing", "beer", "brewing", "mcp"],
   "systemPromptPath": "./SYSTEM.md",
   "mcpServers": {

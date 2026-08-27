@@ -5,7 +5,8 @@
  * Each entry records: timestamp, phase (mash/boil/fermentation/etc),
  * measurements (OG, temp, pH, etc), notes, issues, and improvements.
  *
- * Data stored in ~/.kimi-code/brewing/brewday/{recipe_key}.json
+ * Data stored per-user under the data root (`.brewing-data` inside the user's
+ * chroot, else `~/.kimi-code/brewing`) in `brewday/{recipe_key}.json`.
  */
 
 import { z } from 'zod';
@@ -18,11 +19,11 @@ import {
   unlinkSync,
 } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
-import { homedir } from 'node:os';
 
 import type { BuiltinTool, ToolExecution, ExecutableToolResult } from '../shim/tool-contract';
 import { registerTool } from '../shim/tool-registry';
 import { toInputJsonSchema } from '../shim/input-schema';
+import { dataRoot } from './data-root';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,16 +66,12 @@ interface BrewdayLogFile {
 
 // ── Storage ──────────────────────────────────────────────────────────────────
 
-function resolveKimiHome(): string {
-  return join(homedir(), '.kimi-code');
+function brewdayDir(root: string): string {
+  return join(root, 'brewday');
 }
 
-function brewdayDir(): string {
-  return join(resolveKimiHome(), 'brewing', 'brewday');
-}
-
-function logFilePath(recipeKey: string): string {
-  return join(brewdayDir(), `${sanitizeKey(recipeKey)}.json`);
+function logFilePath(root: string, recipeKey: string): string {
+  return join(brewdayDir(root), `${sanitizeKey(recipeKey)}.json`);
 }
 
 function sanitizeKey(name: string): string {
@@ -85,15 +82,15 @@ function sanitizeKey(name: string): string {
     .slice(0, 80);
 }
 
-function ensureBrewdayDir(): void {
-  const dir = brewdayDir();
+function ensureBrewdayDir(root: string): void {
+  const dir = brewdayDir(root);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
 }
 
-function loadLogFile(recipeKey: string): BrewdayLog[] {
-  const path = logFilePath(recipeKey);
+function loadLogFile(root: string, recipeKey: string): BrewdayLog[] {
+  const path = logFilePath(root, recipeKey);
   if (!existsSync(path)) return [];
   try {
     const raw = readFileSync(path, 'utf-8');
@@ -107,17 +104,17 @@ function loadLogFile(recipeKey: string): BrewdayLog[] {
   }
 }
 
-function saveLogFile(recipeKey: string, logs: BrewdayLog[]): void {
-  ensureBrewdayDir();
-  const path = logFilePath(recipeKey);
+function saveLogFile(root: string, recipeKey: string, logs: BrewdayLog[]): void {
+  ensureBrewdayDir(root);
+  const path = logFilePath(root, recipeKey);
   const file: BrewdayLogFile = { version: 1, logs };
   writeFileSync(path, JSON.stringify(file, null, 2), 'utf-8');
 }
 
-function listAllRecipeKeys(): string[] {
-  ensureBrewdayDir();
+function listAllRecipeKeys(root: string): string[] {
+  ensureBrewdayDir(root);
   try {
-    return readdirSync(brewdayDir())
+    return readdirSync(brewdayDir(root))
       .filter(f => f.endsWith('.json'))
       .map(f => basename(f, '.json'));
   } catch {
@@ -248,26 +245,27 @@ export class BrewdayLogTool implements BuiltinTool<BrewdayLogInput> {
   };
 
   resolveExecution(args: BrewdayLogInput): ToolExecution {
+    const root = dataRoot(args);
     const desc = args.action === 'start'
       ? `Start brew log: ${args.recipe_name ?? 'unknown'}`
       : `Brewday ${args.action}: ${args.recipe_name ?? ''}`;
     return {
       description: desc,
       approvalRule: this.name,
-      execute: () => this.execute(args),
+      execute: () => this.execute(args, root),
     };
   }
 
-  private execute(args: BrewdayLogInput): Promise<ExecutableToolResult> {
+  private execute(args: BrewdayLogInput, root: string): Promise<ExecutableToolResult> {
     try {
       switch (args.action) {
-        case 'start': return this.handleStart(args);
+        case 'start': return this.handleStart(args, root);
         case 'add_entry':
-        case 'log': return this.handleAddEntry(args);
-        case 'list': return this.handleList(args);
-        case 'read': return this.handleRead(args);
-        case 'summary': return this.handleSummary(args);
-        case 'delete': return this.handleDelete(args);
+        case 'log': return this.handleAddEntry(args, root);
+        case 'list': return this.handleList(args, root);
+        case 'read': return this.handleRead(args, root);
+        case 'summary': return this.handleSummary(args, root);
+        case 'delete': return this.handleDelete(args, root);
         default:
           return Promise.resolve({ isError: true, output: `Azione sconosciuta: ${args.action}` });
       }
@@ -276,11 +274,11 @@ export class BrewdayLogTool implements BuiltinTool<BrewdayLogInput> {
     }
   }
 
-  private handleStart(args: BrewdayLogInput): Promise<ExecutableToolResult> {
+  private handleStart(args: BrewdayLogInput, root: string): Promise<ExecutableToolResult> {
     if (!args.recipe_name) return Promise.resolve({ isError: true, output: 'recipe_name è obbligatorio per start.' });
 
     const recipeKey = args.recipe_key ?? sanitizeKey(args.recipe_name);
-    const logs = loadLogFile(recipeKey);
+    const logs = loadLogFile(root, recipeKey);
     const brewNumber = logs.length + 1;
     const now = new Date().toISOString();
 
@@ -301,14 +299,14 @@ export class BrewdayLogTool implements BuiltinTool<BrewdayLogInput> {
     };
 
     logs.push(newLog);
-    saveLogFile(recipeKey, logs);
+    saveLogFile(root, recipeKey, logs);
 
     return Promise.resolve({
       output: [
         `✅ **Cotta #${brewNumber} avviata:** ${args.recipe_name}`,
         `📅 Data: ${newLog.brew_date}`,
         args.batch_size_litres ? `📦 Batch: ${args.batch_size_litres}L` : '',
-        `📂 File: \`${logFilePath(recipeKey)}\` (key: ${recipeKey})`,
+        `📂 File: \`${logFilePath(root, recipeKey)}\` (key: ${recipeKey})`,
         '',
         `Usa \`brewday_log action:"add_entry" recipe_name:"${args.recipe_name}" ...\` per registrare gli eventi.`,
       ].filter(Boolean).join('\n'),
@@ -328,12 +326,12 @@ export class BrewdayLogTool implements BuiltinTool<BrewdayLogInput> {
     return undefined;
   }
 
-  private handleAddEntry(args: BrewdayLogInput): Promise<ExecutableToolResult> {
+  private handleAddEntry(args: BrewdayLogInput, root: string): Promise<ExecutableToolResult> {
     if (!args.recipe_name) return Promise.resolve({ isError: true, output: 'recipe_name è obbligatorio.' });
     if (!args.notes) return Promise.resolve({ isError: true, output: 'notes è obbligatorio per add_entry.' });
 
     const recipeKey = args.recipe_key ?? sanitizeKey(args.recipe_name);
-    const logs = loadLogFile(recipeKey);
+    const logs = loadLogFile(root, recipeKey);
     if (logs.length === 0) {
       return Promise.resolve({ isError: true, output: `Nessuna cotta trovata per "${args.recipe_name}". Usa action:"start" prima.` });
     }
@@ -368,7 +366,7 @@ export class BrewdayLogTool implements BuiltinTool<BrewdayLogInput> {
 
     target.entries.push(entry);
     target.updatedAt = new Date().toISOString();
-    saveLogFile(recipeKey, logs);
+    saveLogFile(root, recipeKey, logs);
 
     return Promise.resolve({
       output: [
@@ -378,10 +376,10 @@ export class BrewdayLogTool implements BuiltinTool<BrewdayLogInput> {
     });
   }
 
-  private handleList(args: BrewdayLogInput): Promise<ExecutableToolResult> {
+  private handleList(args: BrewdayLogInput, root: string): Promise<ExecutableToolResult> {
     if (args.recipe_name) {
       const recipeKey = args.recipe_key ?? sanitizeKey(args.recipe_name);
-      const logs = loadLogFile(recipeKey);
+      const logs = loadLogFile(root, recipeKey);
       if (logs.length === 0) {
         return Promise.resolve({ output: `Nessuna cotta registrata per "${args.recipe_name}".` });
       }
@@ -396,14 +394,14 @@ export class BrewdayLogTool implements BuiltinTool<BrewdayLogInput> {
     }
 
     // List all recipes with brew logs
-    const keys = listAllRecipeKeys();
+    const keys = listAllRecipeKeys(root);
     if (keys.length === 0) {
       return Promise.resolve({ output: 'Nessun diario di cotta trovato. Usa `brewday_log action:"start"` per iniziarne uno.' });
     }
 
     const lines = [`**${keys.length} ricette con diario di cotta:**`, ''];
     for (const key of keys.sort()) {
-      const logs = loadLogFile(key);
+      const logs = loadLogFile(root, key);
       const name = logs[0]?.recipe_name ?? key;
       const activeCount = logs.filter(l => l.status === 'in_progress').length;
       const completedCount = logs.filter(l => l.status === 'completed').length;
@@ -413,11 +411,11 @@ export class BrewdayLogTool implements BuiltinTool<BrewdayLogInput> {
     return Promise.resolve({ output: lines.join('\n') });
   }
 
-  private handleRead(args: BrewdayLogInput): Promise<ExecutableToolResult> {
+  private handleRead(args: BrewdayLogInput, root: string): Promise<ExecutableToolResult> {
     if (!args.recipe_name) return Promise.resolve({ isError: true, output: 'recipe_name è obbligatorio per read.' });
 
     const recipeKey = args.recipe_key ?? sanitizeKey(args.recipe_name);
-    const logs = loadLogFile(recipeKey);
+    const logs = loadLogFile(root, recipeKey);
     if (logs.length === 0) {
       return Promise.resolve({ output: `Nessuna cotta registrata per "${args.recipe_name}".` });
     }
@@ -437,11 +435,11 @@ export class BrewdayLogTool implements BuiltinTool<BrewdayLogInput> {
     return Promise.resolve({ output: lines.join('\n') });
   }
 
-  private handleSummary(args: BrewdayLogInput): Promise<ExecutableToolResult> {
+  private handleSummary(args: BrewdayLogInput, root: string): Promise<ExecutableToolResult> {
     if (!args.recipe_name) return Promise.resolve({ isError: true, output: 'recipe_name è obbligatorio.' });
 
     const recipeKey = args.recipe_key ?? sanitizeKey(args.recipe_name);
-    const logs = loadLogFile(recipeKey);
+    const logs = loadLogFile(root, recipeKey);
     const brewNumber = args.brew_number ?? logs.length;
     const idx = logs.findIndex(l => l.brew_number === brewNumber);
     if (idx < 0) {
@@ -463,7 +461,7 @@ export class BrewdayLogTool implements BuiltinTool<BrewdayLogInput> {
     }
 
     target.updatedAt = new Date().toISOString();
-    saveLogFile(recipeKey, logs);
+    saveLogFile(root, recipeKey, logs);
 
     return Promise.resolve({
       output: [
@@ -480,11 +478,11 @@ export class BrewdayLogTool implements BuiltinTool<BrewdayLogInput> {
     });
   }
 
-  private handleDelete(args: BrewdayLogInput): Promise<ExecutableToolResult> {
+  private handleDelete(args: BrewdayLogInput, root: string): Promise<ExecutableToolResult> {
     if (!args.recipe_name) return Promise.resolve({ isError: true, output: 'recipe_name è obbligatorio per delete.' });
 
     const recipeKey = args.recipe_key ?? sanitizeKey(args.recipe_name);
-    const logs = loadLogFile(recipeKey);
+    const logs = loadLogFile(root, recipeKey);
 
     if (args.brew_number) {
       const idx = logs.findIndex(l => l.brew_number === args.brew_number);
@@ -492,16 +490,16 @@ export class BrewdayLogTool implements BuiltinTool<BrewdayLogInput> {
       logs.splice(idx, 1);
       if (logs.length === 0) {
         // Remove the file entirely
-        const path = logFilePath(recipeKey);
+        const path = logFilePath(root, recipeKey);
         if (existsSync(path)) unlinkSync(path);
         return Promise.resolve({ output: `🗑️ Cotta #${args.brew_number} eliminata. File rimosso (nessuna altra cotta per "${args.recipe_name}").` });
       }
-      saveLogFile(recipeKey, logs);
+      saveLogFile(root, recipeKey, logs);
       return Promise.resolve({ output: `🗑️ Cotta #${args.brew_number} eliminata da "${args.recipe_name}". ${logs.length} cotta/e rimanenti.` });
     }
 
     // Delete all brews for this recipe
-    const path = logFilePath(recipeKey);
+    const path = logFilePath(root, recipeKey);
     if (existsSync(path)) unlinkSync(path);
     return Promise.resolve({ output: `🗑️ Tutte le cotte per "${args.recipe_name}" eliminate.` });
   }

@@ -2,8 +2,8 @@
  * Inventory manager tool — persistent stock management for brewing raw materials.
  *
  * Manages a persistent inventory of brewing ingredients (malts, hops, yeasts,
- * spices, adjuncts, water salts, etc.) stored in
- * `~/.kimi-code/brewing/inventory.json`.
+ * spices, adjuncts, water salts, etc.) stored per-user under the data root
+ * (`.brewing-data` inside the user's chroot, else `~/.kimi-code/brewing`).
  *
  * Each item tracks: name, category, quantity (with unit), purchase date, cost,
  * supplier, best-before / expiry date, lot, storage notes, and free notes.
@@ -28,11 +28,11 @@ import {
   mkdirSync,
 } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { homedir } from 'node:os';
 
 import type { BuiltinTool, ToolExecution, ExecutableToolResult } from '../shim/tool-contract';
 import { registerTool } from '../shim/tool-registry';
 import { toInputJsonSchema } from '../shim/input-schema';
+import { dataRoot } from './data-root';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -72,23 +72,19 @@ interface InventoryFile {
 
 // ── Storage ──────────────────────────────────────────────────────────────────
 
-function resolveKimiHome(): string {
-  return join(homedir(), '.kimi-code');
+function inventoryPath(root: string): string {
+  return join(root, 'inventory.json');
 }
 
-function inventoryPath(): string {
-  return join(resolveKimiHome(), 'brewing', 'inventory.json');
-}
-
-function ensureDir(): void {
-  const dir = dirname(inventoryPath());
+function ensureDir(root: string): void {
+  const dir = dirname(inventoryPath(root));
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
 }
 
-function loadItems(): InventoryItem[] {
-  const path = inventoryPath();
+function loadItems(root: string): InventoryItem[] {
+  const path = inventoryPath(root);
   if (!existsSync(path)) return [];
   try {
     const raw = readFileSync(path, 'utf-8');
@@ -102,10 +98,10 @@ function loadItems(): InventoryItem[] {
   }
 }
 
-function saveItems(items: InventoryItem[]): void {
-  ensureDir();
+function saveItems(root: string, items: InventoryItem[]): void {
+  ensureDir(root);
   const file: InventoryFile = { version: 1, items };
-  writeFileSync(inventoryPath(), JSON.stringify(file, null, 2), 'utf-8');
+  writeFileSync(inventoryPath(root), JSON.stringify(file, null, 2), 'utf-8');
 }
 
 function makeId(): string {
@@ -190,26 +186,27 @@ export type InventoryManagerInput = z.infer<typeof InventoryManagerInputSchema>;
 export class InventoryManagerTool implements BuiltinTool<InventoryManagerInput> {
   readonly name = 'inventory_manager' as const;
   readonly description =
-    'Gestisci l\'inventario persistente delle materie prime brassicole (malti, luppoli, lieviti, spezie, adjunct, sali acqua, zuccheri). Aggiungi/rimuovi/regola quantità, elenca, cerca e ottieni riepiloghi di scorte, valore e scadenze. I dati sono salvati in ~/.kimi-code/brewing/inventory.json.';
+    'Gestisci l\'inventario persistente delle materie prime brassicole (malti, luppoli, lieviti, spezie, adjunct, sali acqua, zuccheri). Aggiungi/rimuovi/regola quantità, elenca, cerca e ottieni riepiloghi di scorte, valore e scadenze. I dati sono salvati per utente in .brewing-data dentro la chroot dell\'utente (fallback ~/.kimi-code/brewing).';
   readonly parameters: Record<string, unknown> = toInputJsonSchema(InventoryManagerInputSchema);
 
   resolveExecution(args: InventoryManagerInput): ToolExecution {
+    const root = dataRoot(args);
     return {
       description: `Inventory ${args.operation}${args.name ? `: ${args.name}` : ''}`,
       approvalRule: this.name,
-      execute: () => this.execute(args),
+      execute: () => this.execute(args, root),
     };
   }
 
-  private execute(args: InventoryManagerInput): Promise<ExecutableToolResult> {
+  private execute(args: InventoryManagerInput, root: string): Promise<ExecutableToolResult> {
     try {
       switch (args.operation) {
-        case 'add': return Promise.resolve(this.add(args));
-        case 'remove': return Promise.resolve(this.remove(args));
-        case 'adjust': return Promise.resolve(this.adjust(args));
-        case 'list': return Promise.resolve(this.list(args));
-        case 'search': return Promise.resolve(this.search(args));
-        case 'stats': return Promise.resolve(this.stats());
+        case 'add': return Promise.resolve(this.add(args, root));
+        case 'remove': return Promise.resolve(this.remove(args, root));
+        case 'adjust': return Promise.resolve(this.adjust(args, root));
+        case 'list': return Promise.resolve(this.list(args, root));
+        case 'search': return Promise.resolve(this.search(args, root));
+        case 'stats': return Promise.resolve(this.stats(root));
       }
     } catch (e) {
       return Promise.resolve({ isError: true, output: e instanceof Error ? e.message : String(e) });
@@ -218,11 +215,11 @@ export class InventoryManagerTool implements BuiltinTool<InventoryManagerInput> 
 
   // ── add ────────────────────────────────────────────────────────────────────
 
-  private add(args: InventoryManagerInput): ExecutableToolResult {
+  private add(args: InventoryManagerInput, root: string): ExecutableToolResult {
     const name = args.name?.trim();
     if (!name) return { isError: true, output: 'Specifica un nome per l\'articolo (campo "name").' };
 
-    const items = loadItems();
+    const items = loadItems(root);
     const existing = findItem(items, name);
 
     if (existing) {
@@ -239,7 +236,7 @@ export class InventoryManagerTool implements BuiltinTool<InventoryManagerInput> 
       if (args.storage) existing.storage = args.storage;
       if (args.notes) existing.notes = args.notes;
       existing.updatedAt = new Date().toISOString();
-      saveItems(items);
+      saveItems(root, items);
       return {
         output: `Riapprovvigionato **${existing.name}**: ora ${formatQty(existing)} (aggiunti ${delta} ${existing.unit}).\n${itemToLine(existing)}`,
       };
@@ -265,7 +262,7 @@ export class InventoryManagerTool implements BuiltinTool<InventoryManagerInput> 
       updatedAt: now,
     };
     items.push(item);
-    saveItems(items);
+    saveItems(root, items);
     return {
       output: `Aggiunto **${item.name}** [${item.category}] — ${formatQty(item)}.\n${itemToLine(item)}`,
     };
@@ -273,34 +270,34 @@ export class InventoryManagerTool implements BuiltinTool<InventoryManagerInput> 
 
   // ── remove ─────────────────────────────────────────────────────────────────
 
-  private remove(args: InventoryManagerInput): ExecutableToolResult {
+  private remove(args: InventoryManagerInput, root: string): ExecutableToolResult {
     const name = args.name?.trim();
     if (!name) return { isError: true, output: 'Specifica il nome dell\'articolo da rimuovere (campo "name").' };
 
-    const items = loadItems();
+    const items = loadItems(root);
     const idx = items.findIndex((i) => normalizeName(i.name) === normalizeName(name));
     if (idx < 0) return { isError: true, output: `Nessun articolo trovato con nome "${name}".` };
 
     const [removed] = items.splice(idx, 1);
-    saveItems(items);
+    saveItems(root, items);
     return { output: `Rimosso **${removed.name}** [${removed.category}] dall'inventario.` };
   }
 
   // ── adjust ─────────────────────────────────────────────────────────────────
 
-  private adjust(args: InventoryManagerInput): ExecutableToolResult {
+  private adjust(args: InventoryManagerInput, root: string): ExecutableToolResult {
     const name = args.name?.trim();
     if (!name) return { isError: true, output: 'Specifica il nome dell\'articolo da regolare (campo "name").' };
     if (args.quantity === undefined) return { isError: true, output: 'Specifica il delta di quantità (campo "quantity", positivo per aggiungere, negativo per sottrarre).' };
 
-    const items = loadItems();
+    const items = loadItems(root);
     const item = findItem(items, name);
     if (!item) return { isError: true, output: `Nessun articolo trovato con nome "${name}".` };
 
     item.quantity += args.quantity;
     if (item.quantity < 0) item.quantity = 0;
     item.updatedAt = new Date().toISOString();
-    saveItems(items);
+    saveItems(root, items);
 
     const direction = args.quantity >= 0 ? 'aggiunti' : 'sottratti';
     const status = item.quantity === 0 ? ' ⚠️ ESAURITO' : '';
@@ -311,8 +308,8 @@ export class InventoryManagerTool implements BuiltinTool<InventoryManagerInput> 
 
   // ── list ───────────────────────────────────────────────────────────────────
 
-  private list(args: InventoryManagerInput): ExecutableToolResult {
-    let items = loadItems();
+  private list(args: InventoryManagerInput, root: string): ExecutableToolResult {
+    let items = loadItems(root);
     if (items.length === 0) return { output: 'Inventario vuoto. Usa l\'operazione "add" per aggiungere materie prime.' };
 
     if (args.category) items = items.filter((i) => i.category === args.category);
@@ -347,11 +344,11 @@ export class InventoryManagerTool implements BuiltinTool<InventoryManagerInput> 
 
   // ── search ─────────────────────────────────────────────────────────────────
 
-  private search(args: InventoryManagerInput): ExecutableToolResult {
+  private search(args: InventoryManagerInput, root: string): ExecutableToolResult {
     const q = (args.name ?? '').trim().toLowerCase();
     if (!q) return { isError: true, output: 'Specifica un termine di ricerca (campo "name").' };
 
-    const items = loadItems().filter((i) =>
+    const items = loadItems(root).filter((i) =>
       i.name.toLowerCase().includes(q) ||
       (i.notes ?? '').toLowerCase().includes(q) ||
       (i.supplier ?? '').toLowerCase().includes(q) ||
@@ -366,8 +363,8 @@ export class InventoryManagerTool implements BuiltinTool<InventoryManagerInput> 
 
   // ── stats ──────────────────────────────────────────────────────────────────
 
-  private stats(): ExecutableToolResult {
-    const items = loadItems();
+  private stats(root: string): ExecutableToolResult {
+    const items = loadItems(root);
     if (items.length === 0) return { output: 'Inventario vuoto. Usa l\'operazione "add" per aggiungere materie prime.' };
 
     const totalValue = items.reduce((sum, i) => sum + (i.cost !== undefined ? i.cost * i.quantity : 0), 0);

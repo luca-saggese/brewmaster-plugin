@@ -8913,13 +8913,37 @@ var InventorySearchTool = class {
 registerTool(InventorySearchTool);
 
 //#endregion
+//#region src/brewing/data-root.ts
+/**
+* Shared data-root resolution for the brewmaster plugin.
+*
+* Persistent brewing data (memory, inventory, brewday logs) is stored per-user
+* inside the connected user's chroot under `.brewing-data`, so a multi-user
+* server keeps each user's data separate. When no user is attached to the tool
+* call (e.g. running outside the kap-server), it falls back to the legacy
+* `~/.kimi-code/brewing` location.
+*/
+function userChroot(args) {
+	if (args === null || typeof args !== "object") return void 0;
+	const user = args["_kimi_user"];
+	if (user === null || typeof user !== "object") return void 0;
+	const chroot = user["chroot"];
+	return typeof chroot === "string" && chroot.length > 0 ? chroot : void 0;
+}
+function dataRoot(args) {
+	const chroot = userChroot(args);
+	if (chroot !== void 0) return join(chroot, ".brewing-data");
+	return join(homedir(), ".kimi-code", "brewing");
+}
+
+//#endregion
 //#region src/brewing/inventory-manager.ts
 /**
 * Inventory manager tool — persistent stock management for brewing raw materials.
 *
 * Manages a persistent inventory of brewing ingredients (malts, hops, yeasts,
-* spices, adjuncts, water salts, etc.) stored in
-* `~/.kimi-code/brewing/inventory.json`.
+* spices, adjuncts, water salts, etc.) stored per-user under the data root
+* (`.brewing-data` inside the user's chroot, else `~/.kimi-code/brewing`).
 *
 * Each item tracks: name, category, quantity (with unit), purchase date, cost,
 * supplier, best-before / expiry date, lot, storage notes, and free notes.
@@ -8945,18 +8969,15 @@ const INVENTORY_CATEGORIES = [
 	"sugar",
 	"other"
 ];
-function resolveKimiHome$2() {
-	return join(homedir(), ".kimi-code");
+function inventoryPath(root) {
+	return join(root, "inventory.json");
 }
-function inventoryPath() {
-	return join(resolveKimiHome$2(), "brewing", "inventory.json");
-}
-function ensureDir$1() {
-	const dir = dirname(inventoryPath());
+function ensureDir$1(root) {
+	const dir = dirname(inventoryPath(root));
 	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
-function loadItems() {
-	const path = inventoryPath();
+function loadItems(root) {
+	const path = inventoryPath(root);
 	if (!existsSync(path)) return [];
 	try {
 		const raw = readFileSync(path, "utf-8");
@@ -8967,13 +8988,13 @@ function loadItems() {
 		return [];
 	}
 }
-function saveItems(items) {
-	ensureDir$1();
+function saveItems(root, items) {
+	ensureDir$1(root);
 	const file = {
 		version: 1,
 		items
 	};
-	writeFileSync(inventoryPath(), JSON.stringify(file, null, 2), "utf-8");
+	writeFileSync(inventoryPath(root), JSON.stringify(file, null, 2), "utf-8");
 }
 function makeId() {
 	return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -9045,24 +9066,25 @@ const InventoryManagerInputSchema = object({
 });
 var InventoryManagerTool = class {
 	name = "inventory_manager";
-	description = "Gestisci l'inventario persistente delle materie prime brassicole (malti, luppoli, lieviti, spezie, adjunct, sali acqua, zuccheri). Aggiungi/rimuovi/regola quantità, elenca, cerca e ottieni riepiloghi di scorte, valore e scadenze. I dati sono salvati in ~/.kimi-code/brewing/inventory.json.";
+	description = "Gestisci l'inventario persistente delle materie prime brassicole (malti, luppoli, lieviti, spezie, adjunct, sali acqua, zuccheri). Aggiungi/rimuovi/regola quantità, elenca, cerca e ottieni riepiloghi di scorte, valore e scadenze. I dati sono salvati per utente in .brewing-data dentro la chroot dell'utente (fallback ~/.kimi-code/brewing).";
 	parameters = toInputJsonSchema(InventoryManagerInputSchema);
 	resolveExecution(args) {
+		const root = dataRoot(args);
 		return {
 			description: `Inventory ${args.operation}${args.name ? `: ${args.name}` : ""}`,
 			approvalRule: this.name,
-			execute: () => this.execute(args)
+			execute: () => this.execute(args, root)
 		};
 	}
-	execute(args) {
+	execute(args, root) {
 		try {
 			switch (args.operation) {
-				case "add": return Promise.resolve(this.add(args));
-				case "remove": return Promise.resolve(this.remove(args));
-				case "adjust": return Promise.resolve(this.adjust(args));
-				case "list": return Promise.resolve(this.list(args));
-				case "search": return Promise.resolve(this.search(args));
-				case "stats": return Promise.resolve(this.stats());
+				case "add": return Promise.resolve(this.add(args, root));
+				case "remove": return Promise.resolve(this.remove(args, root));
+				case "adjust": return Promise.resolve(this.adjust(args, root));
+				case "list": return Promise.resolve(this.list(args, root));
+				case "search": return Promise.resolve(this.search(args, root));
+				case "stats": return Promise.resolve(this.stats(root));
 			}
 		} catch (e) {
 			return Promise.resolve({
@@ -9071,13 +9093,13 @@ var InventoryManagerTool = class {
 			});
 		}
 	}
-	add(args) {
+	add(args, root) {
 		const name = args.name?.trim();
 		if (!name) return {
 			isError: true,
 			output: "Specifica un nome per l'articolo (campo \"name\")."
 		};
-		const items = loadItems();
+		const items = loadItems(root);
 		const existing = findItem(items, name);
 		if (existing) {
 			const delta = args.quantity ?? 0;
@@ -9092,7 +9114,7 @@ var InventoryManagerTool = class {
 			if (args.storage) existing.storage = args.storage;
 			if (args.notes) existing.notes = args.notes;
 			existing.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-			saveItems(items);
+			saveItems(root, items);
 			return { output: `Riapprovvigionato **${existing.name}**: ora ${formatQty(existing)} (aggiunti ${delta} ${existing.unit}).\n${itemToLine(existing)}` };
 		}
 		const category = args.category ?? inferCategory(name);
@@ -9115,26 +9137,26 @@ var InventoryManagerTool = class {
 			updatedAt: now
 		};
 		items.push(item);
-		saveItems(items);
+		saveItems(root, items);
 		return { output: `Aggiunto **${item.name}** [${item.category}] — ${formatQty(item)}.\n${itemToLine(item)}` };
 	}
-	remove(args) {
+	remove(args, root) {
 		const name = args.name?.trim();
 		if (!name) return {
 			isError: true,
 			output: "Specifica il nome dell'articolo da rimuovere (campo \"name\")."
 		};
-		const items = loadItems();
+		const items = loadItems(root);
 		const idx = items.findIndex((i) => normalizeName$2(i.name) === normalizeName$2(name));
 		if (idx < 0) return {
 			isError: true,
 			output: `Nessun articolo trovato con nome "${name}".`
 		};
 		const [removed] = items.splice(idx, 1);
-		saveItems(items);
+		saveItems(root, items);
 		return { output: `Rimosso **${removed.name}** [${removed.category}] dall'inventario.` };
 	}
-	adjust(args) {
+	adjust(args, root) {
 		const name = args.name?.trim();
 		if (!name) return {
 			isError: true,
@@ -9144,7 +9166,7 @@ var InventoryManagerTool = class {
 			isError: true,
 			output: "Specifica il delta di quantità (campo \"quantity\", positivo per aggiungere, negativo per sottrarre)."
 		};
-		const items = loadItems();
+		const items = loadItems(root);
 		const item = findItem(items, name);
 		if (!item) return {
 			isError: true,
@@ -9153,13 +9175,13 @@ var InventoryManagerTool = class {
 		item.quantity += args.quantity;
 		if (item.quantity < 0) item.quantity = 0;
 		item.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-		saveItems(items);
+		saveItems(root, items);
 		const direction = args.quantity >= 0 ? "aggiunti" : "sottratti";
 		const status = item.quantity === 0 ? " ⚠️ ESAURITO" : "";
 		return { output: `Regolato **${item.name}**: ${direction} ${Math.abs(args.quantity)} ${item.unit} → ora ${formatQty(item)}${status}.\n${itemToLine(item)}` };
 	}
-	list(args) {
-		let items = loadItems();
+	list(args, root) {
+		let items = loadItems(root);
 		if (items.length === 0) return { output: "Inventario vuoto. Usa l'operazione \"add\" per aggiungere materie prime." };
 		if (args.category) items = items.filter((i) => i.category === args.category);
 		if (args.expiringWithinDays !== void 0) items = items.filter((i) => i.bestBefore && daysUntil(i.bestBefore) <= args.expiringWithinDays);
@@ -9181,20 +9203,20 @@ var InventoryManagerTool = class {
 		}
 		return { output: lines.join("\n") };
 	}
-	search(args) {
+	search(args, root) {
 		const q = (args.name ?? "").trim().toLowerCase();
 		if (!q) return {
 			isError: true,
 			output: "Specifica un termine di ricerca (campo \"name\")."
 		};
-		const items = loadItems().filter((i) => i.name.toLowerCase().includes(q) || (i.notes ?? "").toLowerCase().includes(q) || (i.supplier ?? "").toLowerCase().includes(q) || (i.lot ?? "").toLowerCase().includes(q));
+		const items = loadItems(root).filter((i) => i.name.toLowerCase().includes(q) || (i.notes ?? "").toLowerCase().includes(q) || (i.supplier ?? "").toLowerCase().includes(q) || (i.lot ?? "").toLowerCase().includes(q));
 		if (items.length === 0) return { output: `Nessun articolo trovato per "${q}".` };
 		const lines = [`**${items.length} risultato/i per "${q}"**`, ""];
 		for (const item of items) lines.push(`- ${itemToLine(item)}`);
 		return { output: lines.join("\n") };
 	}
-	stats() {
-		const items = loadItems();
+	stats(root) {
+		const items = loadItems(root);
 		if (items.length === 0) return { output: "Inventario vuoto. Usa l'operazione \"add\" per aggiungere materie prime." };
 		const totalValue = items.reduce((sum, i) => sum + (i.cost !== void 0 ? i.cost * i.quantity : 0), 0);
 		const expiring = items.filter((i) => i.bestBefore && daysUntil(i.bestBefore) <= 30).sort((a, b) => a.bestBefore < b.bestBefore ? -1 : 1);
@@ -12707,24 +12729,20 @@ registerTool(YamlToPdfTool);
 * Stores and retrieves brewing-related facts (user preferences, equipment,
 * recurring constraints, learned preferences) across sessions.
 *
-* File: ~/.kimi-code/brewing/memory.json
+* Data lives under the per-user data root (`.brewing-data` inside the user's
+* chroot when a user is attached, else `~/.kimi-code/brewing`).
 */
-function resolveKimiHome$1() {
-	return join(homedir(), ".kimi-code");
-}
-const MEMORY_DIR = "brewing";
 const MEMORY_FILE = "memory.json";
-function memoryPath() {
-	const home = resolveKimiHome$1();
-	return join(home, MEMORY_DIR, MEMORY_FILE);
+function memoryPath(root) {
+	return join(root, MEMORY_FILE);
 }
-function ensureDir() {
-	const dir = dirname(memoryPath());
+function ensureDir(root) {
+	const dir = dirname(memoryPath(root));
 	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 /** Read all memory entries from disk. Returns empty array if file doesn't exist. */
-function loadMemories() {
-	const path = memoryPath();
+function loadMemories(root) {
+	const path = memoryPath(root);
 	if (!existsSync(path)) return [];
 	try {
 		const raw = readFileSync(path, "utf-8");
@@ -12739,9 +12757,9 @@ function loadMemories() {
 	}
 }
 /** Save a new memory entry (or update existing by key). */
-function saveMemory(entry) {
-	ensureDir();
-	const memories = loadMemories();
+function saveMemory(root, entry) {
+	ensureDir(root);
+	const memories = loadMemories(root);
 	const now = (/* @__PURE__ */ new Date()).toISOString();
 	const existing = memories.findIndex((m) => m.key === entry.key);
 	if (existing >= 0) memories[existing] = {
@@ -12759,11 +12777,11 @@ function saveMemory(entry) {
 		version: 1,
 		entries: memories
 	};
-	writeFileSync(memoryPath(), JSON.stringify(file, null, 2), "utf-8");
+	writeFileSync(memoryPath(root), JSON.stringify(file, null, 2), "utf-8");
 }
 /** Delete a memory entry by key. Returns true if deleted. */
-function deleteMemory(key) {
-	const memories = loadMemories();
+function deleteMemory(root, key) {
+	const memories = loadMemories(root);
 	const idx = memories.findIndex((m) => m.key === key);
 	if (idx < 0) return false;
 	memories.splice(idx, 1);
@@ -12771,18 +12789,18 @@ function deleteMemory(key) {
 		version: 1,
 		entries: memories
 	};
-	writeFileSync(memoryPath(), JSON.stringify(file, null, 2), "utf-8");
+	writeFileSync(memoryPath(root), JSON.stringify(file, null, 2), "utf-8");
 	return true;
 }
 /** Search memories by query (searches key, category, and content fields). */
-function searchMemories(query) {
+function searchMemories(root, query) {
 	const q = query.toLowerCase();
-	return loadMemories().filter((m) => m.key.toLowerCase().includes(q) || m.category.toLowerCase().includes(q) || m.content.toLowerCase().includes(q));
+	return loadMemories(root).filter((m) => m.key.toLowerCase().includes(q) || m.category.toLowerCase().includes(q) || m.content.toLowerCase().includes(q));
 }
 /** Get all memories grouped by category. */
-function getMemoriesByCategory() {
+function getMemoriesByCategory(root) {
 	const groups = {};
-	for (const m of loadMemories()) (groups[m.category] ??= []).push(m);
+	for (const m of loadMemories(root)) (groups[m.category] ??= []).push(m);
 	return groups;
 }
 
@@ -12842,13 +12860,14 @@ var MemorySaveTool = class {
 	description = "Persistently remember a brewing-related fact or preference across sessions. Use for equipment specs, user preferences, recurring goals, or learned constraints.";
 	parameters = toInputJsonSchema(MemorySaveInputSchema);
 	resolveExecution(args) {
+		const root = dataRoot(args);
 		return {
 			description: `Remember: ${args.key}`,
 			approvalRule: this.name,
 			execute: () => {
 				try {
 					if (!isMemoryEnabled()) return Promise.resolve({ output: "Memoria disattivata (sessione temporanea). Il dato non è stato salvato." });
-					saveMemory({
+					saveMemory(root, {
 						key: args.key,
 						category: args.category,
 						content: args.content
@@ -12889,6 +12908,7 @@ var MemorySearchTool = class {
 	description = "Search, list, or delete persisted brewing memories. Use to recall user preferences, equipment specs, and learned facts from previous sessions.";
 	parameters = toInputJsonSchema(MemorySearchInputSchema);
 	resolveExecution(args) {
+		const root = dataRoot(args);
 		return {
 			description: `Memory ${args.action}: ${args.query ?? args.category ?? "all"}`,
 			approvalRule: this.name,
@@ -12897,21 +12917,21 @@ var MemorySearchTool = class {
 					switch (args.action) {
 						case "search": {
 							const q = args.query ?? "";
-							const results = searchMemories(q);
+							const results = searchMemories(root, q);
 							if (results.length === 0) return Promise.resolve({ output: `Nessun ricordo trovato per "${q}".` });
 							const lines = [`**${results.length} ricordi trovati:**`, ""];
 							for (const m of results) lines.push(`- [${m.category}] **${m.key}**: ${m.content} (aggiornato: ${m.updatedAt.slice(0, 10)})`);
 							return Promise.resolve({ output: lines.join("\n") });
 						}
 						case "list": {
-							const all = loadMemories();
+							const all = loadMemories(root);
 							if (all.length === 0) return Promise.resolve({ output: "Nessun ricordo salvato." });
 							const lines = [`**${all.length} ricordi salvati:**`, ""];
 							for (const m of all) lines.push(`- [${m.category}] **${m.key}**: ${m.content}`);
 							return Promise.resolve({ output: lines.join("\n") });
 						}
 						case "by_category": {
-							const groups = getMemoriesByCategory();
+							const groups = getMemoriesByCategory(root);
 							const category = args.category;
 							if (category && groups[category]) {
 								const lines = [`**${category} (${groups[category].length} ricordi):**`, ""];
@@ -12931,13 +12951,13 @@ var MemorySearchTool = class {
 								isError: true,
 								output: "key is required for delete action."
 							});
-							const ok = deleteMemory(args.key);
+							const ok = deleteMemory(root, args.key);
 							return Promise.resolve({ output: ok ? `Ricordo "${args.key}" eliminato.` : `Ricordo "${args.key}" non trovato.` });
 						}
 						case "summary": {
-							const all = loadMemories();
+							const all = loadMemories(root);
 							if (all.length === 0) return Promise.resolve({ output: "Nessun ricordo salvato." });
-							const groups = getMemoriesByCategory();
+							const groups = getMemoriesByCategory(root);
 							const lines = [`**${all.length} ricordi — Riepilogo**`, ""];
 							for (const [cat, entries] of Object.entries(groups)) {
 								lines.push(`**${cat}:**`);
@@ -14073,26 +14093,24 @@ registerTool(ReferenceRecipeSearchTool);
 * Each entry records: timestamp, phase (mash/boil/fermentation/etc),
 * measurements (OG, temp, pH, etc), notes, issues, and improvements.
 *
-* Data stored in ~/.kimi-code/brewing/brewday/{recipe_key}.json
+* Data stored per-user under the data root (`.brewing-data` inside the user's
+* chroot, else `~/.kimi-code/brewing`) in `brewday/{recipe_key}.json`.
 */
-function resolveKimiHome() {
-	return join(homedir(), ".kimi-code");
+function brewdayDir(root) {
+	return join(root, "brewday");
 }
-function brewdayDir() {
-	return join(resolveKimiHome(), "brewing", "brewday");
-}
-function logFilePath(recipeKey) {
-	return join(brewdayDir(), `${sanitizeKey(recipeKey)}.json`);
+function logFilePath(root, recipeKey) {
+	return join(brewdayDir(root), `${sanitizeKey(recipeKey)}.json`);
 }
 function sanitizeKey(name) {
 	return name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 80);
 }
-function ensureBrewdayDir() {
-	const dir = brewdayDir();
+function ensureBrewdayDir(root) {
+	const dir = brewdayDir(root);
 	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
-function loadLogFile(recipeKey) {
-	const path = logFilePath(recipeKey);
+function loadLogFile(root, recipeKey) {
+	const path = logFilePath(root, recipeKey);
 	if (!existsSync(path)) return [];
 	try {
 		const raw = readFileSync(path, "utf-8");
@@ -14103,18 +14121,18 @@ function loadLogFile(recipeKey) {
 		return [];
 	}
 }
-function saveLogFile(recipeKey, logs) {
-	ensureBrewdayDir();
-	const path = logFilePath(recipeKey);
+function saveLogFile(root, recipeKey, logs) {
+	ensureBrewdayDir(root);
+	const path = logFilePath(root, recipeKey);
 	writeFileSync(path, JSON.stringify({
 		version: 1,
 		logs
 	}, null, 2), "utf-8");
 }
-function listAllRecipeKeys() {
-	ensureBrewdayDir();
+function listAllRecipeKeys(root) {
+	ensureBrewdayDir(root);
 	try {
-		return readdirSync(brewdayDir()).filter((f) => f.endsWith(".json")).map((f) => basename(f, ".json"));
+		return readdirSync(brewdayDir(root)).filter((f) => f.endsWith(".json")).map((f) => basename(f, ".json"));
 	} catch {
 		return [];
 	}
@@ -14276,22 +14294,23 @@ var BrewdayLogTool = class {
 		additionalProperties: false
 	};
 	resolveExecution(args) {
+		const root = dataRoot(args);
 		return {
 			description: args.action === "start" ? `Start brew log: ${args.recipe_name ?? "unknown"}` : `Brewday ${args.action}: ${args.recipe_name ?? ""}`,
 			approvalRule: this.name,
-			execute: () => this.execute(args)
+			execute: () => this.execute(args, root)
 		};
 	}
-	execute(args) {
+	execute(args, root) {
 		try {
 			switch (args.action) {
-				case "start": return this.handleStart(args);
+				case "start": return this.handleStart(args, root);
 				case "add_entry":
-				case "log": return this.handleAddEntry(args);
-				case "list": return this.handleList(args);
-				case "read": return this.handleRead(args);
-				case "summary": return this.handleSummary(args);
-				case "delete": return this.handleDelete(args);
+				case "log": return this.handleAddEntry(args, root);
+				case "list": return this.handleList(args, root);
+				case "read": return this.handleRead(args, root);
+				case "summary": return this.handleSummary(args, root);
+				case "delete": return this.handleDelete(args, root);
 				default: return Promise.resolve({
 					isError: true,
 					output: `Azione sconosciuta: ${args.action}`
@@ -14304,13 +14323,13 @@ var BrewdayLogTool = class {
 			});
 		}
 	}
-	handleStart(args) {
+	handleStart(args, root) {
 		if (!args.recipe_name) return Promise.resolve({
 			isError: true,
 			output: "recipe_name è obbligatorio per start."
 		});
 		const recipeKey = args.recipe_key ?? sanitizeKey(args.recipe_name);
-		const logs = loadLogFile(recipeKey);
+		const logs = loadLogFile(root, recipeKey);
 		const brewNumber = logs.length + 1;
 		const now = (/* @__PURE__ */ new Date()).toISOString();
 		const newLog = {
@@ -14329,12 +14348,12 @@ var BrewdayLogTool = class {
 			updatedAt: now
 		};
 		logs.push(newLog);
-		saveLogFile(recipeKey, logs);
+		saveLogFile(root, recipeKey, logs);
 		return Promise.resolve({ output: [
 			`✅ **Cotta #${brewNumber} avviata:** ${args.recipe_name}`,
 			`📅 Data: ${newLog.brew_date}`,
 			args.batch_size_litres ? `📦 Batch: ${args.batch_size_litres}L` : "",
-			`📂 File: \`${logFilePath(recipeKey)}\` (key: ${recipeKey})`,
+			`📂 File: \`${logFilePath(root, recipeKey)}\` (key: ${recipeKey})`,
 			"",
 			`Usa \`brewday_log action:"add_entry" recipe_name:"${args.recipe_name}" ...\` per registrare gli eventi.`
 		].filter(Boolean).join("\n") });
@@ -14346,7 +14365,7 @@ var BrewdayLogTool = class {
 			if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) return parsed;
 		} catch {}
 	}
-	handleAddEntry(args) {
+	handleAddEntry(args, root) {
 		if (!args.recipe_name) return Promise.resolve({
 			isError: true,
 			output: "recipe_name è obbligatorio."
@@ -14356,7 +14375,7 @@ var BrewdayLogTool = class {
 			output: "notes è obbligatorio per add_entry."
 		});
 		const recipeKey = args.recipe_key ?? sanitizeKey(args.recipe_name);
-		const logs = loadLogFile(recipeKey);
+		const logs = loadLogFile(root, recipeKey);
 		if (logs.length === 0) return Promise.resolve({
 			isError: true,
 			output: `Nessuna cotta trovata per "${args.recipe_name}". Usa action:"start" prima.`
@@ -14386,12 +14405,12 @@ var BrewdayLogTool = class {
 		}
 		target.entries.push(entry);
 		target.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-		saveLogFile(recipeKey, logs);
+		saveLogFile(root, recipeKey, logs);
 		return Promise.resolve({ output: [`📝 **Entry aggiunta alla Cotta #${brewNumber}** di "${args.recipe_name}"`, formatBrewdayEntry(entry)].join("\n") });
 	}
-	handleList(args) {
+	handleList(args, root) {
 		if (args.recipe_name) {
-			const logs = loadLogFile(args.recipe_key ?? sanitizeKey(args.recipe_name));
+			const logs = loadLogFile(root, args.recipe_key ?? sanitizeKey(args.recipe_name));
 			if (logs.length === 0) return Promise.resolve({ output: `Nessuna cotta registrata per "${args.recipe_name}".` });
 			const lines = [`**${logs.length} cotta/e per "${args.recipe_name}":**`, ""];
 			for (const log of logs) {
@@ -14406,11 +14425,11 @@ var BrewdayLogTool = class {
 			}
 			return Promise.resolve({ output: lines.join("\n") });
 		}
-		const keys = listAllRecipeKeys();
+		const keys = listAllRecipeKeys(root);
 		if (keys.length === 0) return Promise.resolve({ output: "Nessun diario di cotta trovato. Usa `brewday_log action:\"start\"` per iniziarne uno." });
 		const lines = [`**${keys.length} ricette con diario di cotta:**`, ""];
 		for (const key of keys.sort()) {
-			const logs = loadLogFile(key);
+			const logs = loadLogFile(root, key);
 			const name = logs[0]?.recipe_name ?? key;
 			const activeCount = logs.filter((l) => l.status === "in_progress").length;
 			const completedCount = logs.filter((l) => l.status === "completed").length;
@@ -14419,12 +14438,12 @@ var BrewdayLogTool = class {
 		}
 		return Promise.resolve({ output: lines.join("\n") });
 	}
-	handleRead(args) {
+	handleRead(args, root) {
 		if (!args.recipe_name) return Promise.resolve({
 			isError: true,
 			output: "recipe_name è obbligatorio per read."
 		});
-		const logs = loadLogFile(args.recipe_key ?? sanitizeKey(args.recipe_name));
+		const logs = loadLogFile(root, args.recipe_key ?? sanitizeKey(args.recipe_name));
 		if (logs.length === 0) return Promise.resolve({ output: `Nessuna cotta registrata per "${args.recipe_name}".` });
 		if (args.brew_number) {
 			const log = logs.find((l) => l.brew_number === args.brew_number);
@@ -14441,13 +14460,13 @@ var BrewdayLogTool = class {
 		}
 		return Promise.resolve({ output: lines.join("\n") });
 	}
-	handleSummary(args) {
+	handleSummary(args, root) {
 		if (!args.recipe_name) return Promise.resolve({
 			isError: true,
 			output: "recipe_name è obbligatorio."
 		});
 		const recipeKey = args.recipe_key ?? sanitizeKey(args.recipe_name);
-		const logs = loadLogFile(recipeKey);
+		const logs = loadLogFile(root, recipeKey);
 		const brewNumber = args.brew_number ?? logs.length;
 		const idx = logs.findIndex((l) => l.brew_number === brewNumber);
 		if (idx < 0) return Promise.resolve({
@@ -14464,7 +14483,7 @@ var BrewdayLogTool = class {
 		if (args.status) target.status = args.status;
 		if (args.summary && target.status === "in_progress") target.status = "completed";
 		target.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-		saveLogFile(recipeKey, logs);
+		saveLogFile(root, recipeKey, logs);
 		return Promise.resolve({ output: [
 			`✅ **Riepilogo aggiornato** per Cotta #${brewNumber} di "${args.recipe_name}"`,
 			`📊 Status: ${target.status}`,
@@ -14477,13 +14496,13 @@ var BrewdayLogTool = class {
 			target.summary ?? "(nessun riepilogo testuale)"
 		].filter(Boolean).join("\n") });
 	}
-	handleDelete(args) {
+	handleDelete(args, root) {
 		if (!args.recipe_name) return Promise.resolve({
 			isError: true,
 			output: "recipe_name è obbligatorio per delete."
 		});
 		const recipeKey = args.recipe_key ?? sanitizeKey(args.recipe_name);
-		const logs = loadLogFile(recipeKey);
+		const logs = loadLogFile(root, recipeKey);
 		if (args.brew_number) {
 			const idx = logs.findIndex((l) => l.brew_number === args.brew_number);
 			if (idx < 0) return Promise.resolve({
@@ -14492,14 +14511,14 @@ var BrewdayLogTool = class {
 			});
 			logs.splice(idx, 1);
 			if (logs.length === 0) {
-				const path = logFilePath(recipeKey);
+				const path = logFilePath(root, recipeKey);
 				if (existsSync(path)) unlinkSync(path);
 				return Promise.resolve({ output: `🗑️ Cotta #${args.brew_number} eliminata. File rimosso (nessuna altra cotta per "${args.recipe_name}").` });
 			}
-			saveLogFile(recipeKey, logs);
+			saveLogFile(root, recipeKey, logs);
 			return Promise.resolve({ output: `🗑️ Cotta #${args.brew_number} eliminata da "${args.recipe_name}". ${logs.length} cotta/e rimanenti.` });
 		}
-		const path = logFilePath(recipeKey);
+		const path = logFilePath(root, recipeKey);
 		if (existsSync(path)) unlinkSync(path);
 		return Promise.resolve({ output: `🗑️ Tutte le cotte per "${args.recipe_name}" eliminate.` });
 	}

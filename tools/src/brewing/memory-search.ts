@@ -9,6 +9,7 @@ import type { BuiltinTool, ToolExecution } from '../shim/tool-contract';
 import { registerTool } from '../shim/tool-registry';
 import { toInputJsonSchema } from '../shim/input-schema';
 import { loadMemories, searchMemories, getMemoriesByCategory, deleteMemory } from './memory-store';
+import { dataRoot } from './data-root';
 
 export const MemorySearchInputSchema = z.object({
   action: z.enum(['search', 'list', 'by_category', 'delete', 'summary']).describe('Action: search (by query), list (all), by_category, delete, or summary (condensed).'),
@@ -26,6 +27,7 @@ export class MemorySearchTool implements BuiltinTool<MemorySearchInput> {
   readonly parameters: Record<string, unknown> = toInputJsonSchema(MemorySearchInputSchema);
 
   resolveExecution(args: MemorySearchInput): ToolExecution {
+    const root = dataRoot(args);
     return {
       description: `Memory ${args.action}: ${args.query ?? args.category ?? 'all'}`,
       approvalRule: this.name,
@@ -34,7 +36,7 @@ export class MemorySearchTool implements BuiltinTool<MemorySearchInput> {
           switch (args.action) {
             case 'search': {
               const q = args.query ?? '';
-              const results = searchMemories(q);
+              const results = searchMemories(root, q);
               if (results.length === 0) return Promise.resolve({ output: `Nessun ricordo trovato per "${q}".` });
               const lines = [`**${results.length} ricordi trovati:**`, ''];
               for (const m of results) {
@@ -44,7 +46,7 @@ export class MemorySearchTool implements BuiltinTool<MemorySearchInput> {
             }
 
             case 'list': {
-              const all = loadMemories();
+              const all = loadMemories(root);
               if (all.length === 0) return Promise.resolve({ output: 'Nessun ricordo salvato.' });
               const lines = [`**${all.length} ricordi salvati:**`, ''];
               for (const m of all) {
@@ -54,7 +56,7 @@ export class MemorySearchTool implements BuiltinTool<MemorySearchInput> {
             }
 
             case 'by_category': {
-              const groups = getMemoriesByCategory();
+              const groups = getMemoriesByCategory(root);
               const category = args.category;
               if (category && groups[category]) {
                 const lines = [`**${category} (${groups[category].length} ricordi):**`, ''];
@@ -76,14 +78,14 @@ export class MemorySearchTool implements BuiltinTool<MemorySearchInput> {
 
             case 'delete': {
               if (!args.key) return Promise.resolve({ isError: true, output: 'key is required for delete action.' });
-              const ok = deleteMemory(args.key);
+              const ok = deleteMemory(root, args.key);
               return Promise.resolve({ output: ok ? `Ricordo "${args.key}" eliminato.` : `Ricordo "${args.key}" non trovato.` });
             }
 
             case 'summary': {
-              const all = loadMemories();
+              const all = loadMemories(root);
               if (all.length === 0) return Promise.resolve({ output: 'Nessun ricordo salvato.' });
-              const groups = getMemoriesByCategory();
+              const groups = getMemoriesByCategory(root);
               const lines = [`**${all.length} ricordi — Riepilogo**`, ''];
               for (const [cat, entries] of Object.entries(groups)) {
                 lines.push(`**${cat}:**`);

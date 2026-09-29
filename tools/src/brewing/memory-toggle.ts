@@ -8,6 +8,7 @@ import { z } from 'zod';
 import type { BuiltinTool, ToolExecution } from '../shim/tool-contract';
 import { registerTool } from '../shim/tool-registry';
 import { toInputJsonSchema } from '../shim/input-schema';
+import { userScopeKey } from './data-root';
 
 export const MemoryToggleInputSchema = z.object({
   enabled: z.boolean().describe('true = enable memory (default), false = disable (temporary session).'),
@@ -16,14 +17,14 @@ export const MemoryToggleInputSchema = z.object({
 export type MemoryToggleInput = z.infer<typeof MemoryToggleInputSchema>;
 
 /** Module-level flag: when false, memory_save is a no-op. Default true. */
-let memoryEnabled = true;
+const memoryEnabled = new Map<string, boolean>();
 
-export function isMemoryEnabled(): boolean {
-  return memoryEnabled;
+export function isMemoryEnabled(args: unknown): boolean {
+  return memoryEnabled.get(userScopeKey(args)) ?? true;
 }
 
 export function _resetMemoryEnabledForTests(): void {
-  memoryEnabled = true;
+  memoryEnabled.clear();
 }
 
 export class MemoryToggleTool implements BuiltinTool<MemoryToggleInput> {
@@ -37,7 +38,10 @@ export class MemoryToggleTool implements BuiltinTool<MemoryToggleInput> {
       description: `Memory ${args.enabled ? 'enabled' : 'disabled'}`,
       approvalRule: this.name,
       execute: () => {
-        memoryEnabled = args.enabled;
+        // The user context is supplied alongside the tool input by the MCP
+        // envelope; the public schema remains limited to `enabled`.
+        const scope = userScopeKey(args);
+        memoryEnabled.set(scope, args.enabled);
         return Promise.resolve({
           output: args.enabled
             ? 'Memoria cross-session **attivata**. Le informazioni importanti verranno ricordate tra una chat e l\'altra.'

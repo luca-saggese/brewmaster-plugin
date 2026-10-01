@@ -66,7 +66,7 @@ The plugin exposes the following tools through the `brewing` MCP server. They ap
 | `recipe_validator` | Generates a qualitative LLM review prompt for a structured recipe |
 | `yaml_validator` | Full deterministic validation of a recipe YAML file (OG/FG/IBU/EBC, volumes, grist, water, carbonation) |
 | `inventory_search` | Search the static virtual catalog of malts, hops, and yeasts (specs, substitutes) |
-| `inventory_manager` | Persistent real inventory (`~/.kimi-code/brewing/inventory.json`): add/remove/adjust/list/search/stats |
+| `inventory_manager` | Persistent real inventory (`users/<nome-utente>/.brewing-data/inventory.json`): add/remove/adjust/list/search/stats |
 | `recipe_list` | Scan the workspace for existing `.yaml`/`.yml` recipes |
 | `reference_recipe_search` | Search the library of ~98 real, verified BJCP reference recipes |
 | `brewday_log` | Structured brew-day log by phase (mash, boil, fermentation, dry hop, bottling, etc.) |
@@ -163,8 +163,13 @@ After saving a recipe YAML, the assistant runs `yaml_validator` for deterministi
 
 ## Data & Storage
 
-- **Inventory**: `~/.kimi-code/brewing/inventory.json`
-- **Cross-session memory**: persisted via `memory_save` / `memory_search` / `memory_toggle`
+- **Per-user data root**: `<sandbox>/users/<nome-utente>/.brewing-data/`
+- **Inventory**: `users/<nome-utente>/.brewing-data/inventory.json`
+- **Brew logs**: `users/<nome-utente>/.brewing-data/brewday/<recipe-key>.json`
+- **Cross-session memory**: `users/<nome-utente>/.brewing-data/memory.json`
+- The MCP caller must provide `_kimi_user.chroot` and `_kimi_user.username` (or
+  `_kimi_user.userId`). Calls without a valid user context fail instead of
+  falling back to a shared home directory.
 
 ## Development
 

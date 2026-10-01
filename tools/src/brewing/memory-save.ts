@@ -32,7 +32,7 @@ export class MemorySaveTool implements BuiltinTool<MemorySaveInput> {
       approvalRule: this.name,
       execute: () => {
         try {
-          if (!isMemoryEnabled()) {
+          if (!isMemoryEnabled(args)) {
             return Promise.resolve({ output: 'Memoria disattivata (sessione temporanea). Il dato non è stato salvato.' });
           }
           saveMemory(root, { key: args.key, category: args.category, content: args.content });

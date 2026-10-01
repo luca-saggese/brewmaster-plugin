@@ -2,7 +2,6 @@
 import readline from "node:readline";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { homedir } from "node:os";
 
 //#region node_modules/zod/v4/core/core.js
 /** A special constant with type `never` */
@@ -8929,11 +8928,11 @@ registerTool(InventorySearchTool);
 /**
 * Shared data-root resolution for the brewmaster plugin.
 *
-* Persistent brewing data (memory, inventory, brewday logs) is stored per-user
-* inside the connected user's chroot under `.brewing-data`, so a multi-user
-* server keeps each user's data separate. When no user is attached to the tool
-* call (e.g. running outside the kap-server), it falls back to the legacy
-* `~/.kimi-code/brewing` location.
+* Persistent brewing data is stored below the user's sandbox:
+* `<sandbox>/users/<username>/.brewing-data`.
+*
+* Never fall back to a process-global directory. A missing user context is an
+* error because a fallback would silently merge different users' data.
 */
 function userChroot(args) {
 	if (args === null || typeof args !== "object") return void 0;
@@ -8942,10 +8941,33 @@ function userChroot(args) {
 	const chroot = user["chroot"];
 	return typeof chroot === "string" && chroot.length > 0 ? chroot : void 0;
 }
-function dataRoot(args) {
+function userSession(args) {
+	if (args === null || typeof args !== "object") return void 0;
+	const user = args["_kimi_user"];
+	if (user === null || typeof user !== "object") return void 0;
+	return user;
+}
+function safeUserName(user) {
+	const raw = user.username ?? user.userId;
+	if (typeof raw !== "string" || raw.trim() === "") return void 0;
+	const name = raw.trim().replace(/[^a-zA-Z0-9._-]+/g, "_");
+	return name && name !== "." && name !== ".." ? name : void 0;
+}
+/** Stable key used for other per-user in-memory state. */
+function userScopeKey(args) {
+	const user = userSession(args);
 	const chroot = userChroot(args);
-	if (chroot !== void 0) return join(chroot, ".brewing-data");
-	return join(homedir(), ".kimi-code", "brewing");
+	const name = user ? safeUserName(user) : void 0;
+	if (!chroot || !name) throw new Error("Contesto utente mancante: impossibile determinare la sandbox users/<nome-utente>.");
+	return `${chroot}:${name}`;
+}
+function dataRoot(args) {
+	const user = userSession(args);
+	const chroot = userChroot(args);
+	const name = user ? safeUserName(user) : void 0;
+	if (!chroot || !name) throw new Error("Contesto utente mancante: i dati devono essere salvati in users/<nome-utente>.");
+	const userDir = basename(dirname(resolve(chroot))) === "users" && basename(resolve(chroot)) === name ? resolve(chroot) : join(resolve(chroot), "users", name);
+	return join(userDir, ".brewing-data");
 }
 
 //#endregion
@@ -12824,9 +12846,9 @@ function getMemoriesByCategory(root) {
 */
 const MemoryToggleInputSchema = object({ enabled: boolean().describe("true = enable memory (default), false = disable (temporary session).") });
 /** Module-level flag: when false, memory_save is a no-op. Default true. */
-let memoryEnabled = true;
-function isMemoryEnabled() {
-	return memoryEnabled;
+const memoryEnabled = /* @__PURE__ */ new Map();
+function isMemoryEnabled(args) {
+	return memoryEnabled.get(userScopeKey(args)) ?? true;
 }
 var MemoryToggleTool = class {
 	name = "memory_toggle";
@@ -12837,7 +12859,8 @@ var MemoryToggleTool = class {
 			description: `Memory ${args.enabled ? "enabled" : "disabled"}`,
 			approvalRule: this.name,
 			execute: () => {
-				memoryEnabled = args.enabled;
+				const scope = userScopeKey(args);
+				memoryEnabled.set(scope, args.enabled);
 				return Promise.resolve({ output: args.enabled ? "Memoria cross-session **attivata**. Le informazioni importanti verranno ricordate tra una chat e l'altra." : "Memoria cross-session **disattivata**. Questa è una sessione temporanea — nulla verrà ricordato." });
 			}
 		};
@@ -12878,7 +12901,7 @@ var MemorySaveTool = class {
 			approvalRule: this.name,
 			execute: () => {
 				try {
-					if (!isMemoryEnabled()) return Promise.resolve({ output: "Memoria disattivata (sessione temporanea). Il dato non è stato salvato." });
+					if (!isMemoryEnabled(args)) return Promise.resolve({ output: "Memoria disattivata (sessione temporanea). Il dato non è stato salvato." });
 					saveMemory(root, {
 						key: args.key,
 						category: args.category,

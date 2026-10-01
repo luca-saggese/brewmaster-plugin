@@ -5495,17 +5495,19 @@ var WaterProfileCalculatorTool = class {
 			const BOIL_OFF = args.boil_off_l_per_hour ?? 3;
 			const BOIL_HOURS = args.boil_duration_h ?? 1;
 			const TRUB_LOSS = args.trub_loss_l ?? 2;
-			let preBoilTarget = args.pre_boil_target_l;
-			if (preBoilTarget == null && args.fermenter_target_l != null) preBoilTarget = args.fermenter_target_l + BOIL_OFF * BOIL_HOURS + TRUB_LOSS;
+			const grainKg = args.grain_kg ?? 0;
+			const absorptionLoss = grainKg * ABSORPTION;
+			const derivedPreBoilTarget = args.fermenter_target_l == null ? void 0 : args.fermenter_target_l + BOIL_OFF * BOIL_HOURS + TRUB_LOSS;
+			const preBoilTarget = args.pre_boil_target_l ?? derivedPreBoilTarget;
 			let mashVol = args.mash_water_liters;
 			let spargeVol = args.sparge_water_liters;
-			if (args.grain_kg != null && args.grain_kg > 0) {
-				if (mashVol == null) mashVol = args.grain_kg * MASH_RATIO + DEAD_SPACE;
-				if (spargeVol == null && preBoilTarget != null) {
-					const absorptionLoss = args.grain_kg * ABSORPTION;
-					spargeVol = preBoilTarget + absorptionLoss - mashVol;
-					if (spargeVol < 0) spargeVol = 0;
-				}
+			if (mashVol == null && grainKg > 0) mashVol = grainKg * MASH_RATIO + DEAD_SPACE;
+			if (spargeVol == null && preBoilTarget != null && mashVol != null && grainKg > 0) {
+				spargeVol = preBoilTarget + absorptionLoss - mashVol;
+				if (spargeVol < 0) return Promise.resolve({
+					isError: true,
+					output: `Volume incompatibile: lo sparge calcolato sarebbe ${spargeVol.toFixed(1)} L. Aumentare il target pre-boil o ridurre mash, grani o assorbimento.`
+				});
 			}
 			if (mashVol == null) mashVol = 0;
 			if (spargeVol == null) spargeVol = 0;
@@ -5513,6 +5515,15 @@ var WaterProfileCalculatorTool = class {
 			if (totalVol <= 0) return Promise.resolve({
 				isError: true,
 				output: "Specificare mash_water_liters e/o sparge_water_liters, oppure grain_kg + fermenter_target_l per il calcolo automatico."
+			});
+			const grainAbsorption = absorptionLoss;
+			const preBoil = totalVol - grainAbsorption;
+			const evaporation = BOIL_OFF * BOIL_HOURS;
+			const postBoil = preBoil - evaporation;
+			const fermenterExpected = postBoil - TRUB_LOSS;
+			if (preBoil < 0 || postBoil < 0 || fermenterExpected < 0) return Promise.resolve({
+				isError: true,
+				output: `Volume incompatibile: il bilancio produce ${fermenterExpected.toFixed(1)} L nel fermentatore. Verificare acqua, assorbimento, evaporazione e trub.`
 			});
 			const MAX_GYPSUM = 3;
 			const MAX_CACL2 = 3;
@@ -5588,19 +5599,18 @@ var WaterProfileCalculatorTool = class {
 			const lines = [
 				`Profilo acqua per **${args.target_profile}** (${t.desc})`,
 				"",
-				`Volume acqua totale: ${totalVol.toFixed(1)} L (mash ${mashVol.toFixed(1)} L, sparge ${spargeVol.toFixed(1)} L)`
+				`Volume acqua totale: ${totalVol.toFixed(1)} L (mash ${mashVol.toFixed(1)} L, sparge ${spargeVol.toFixed(1)} L)`,
+				`Bilancio: pre-boil ${preBoil.toFixed(1)} L → post-boil ${postBoil.toFixed(1)} L → fermentatore previsto ${fermenterExpected.toFixed(1)} L`,
+				`Parametri impianto: rapporto mash ${MASH_RATIO} L/kg${args.mash_ratio_l_per_kg == null ? " (default)" : ""}; dead space ${DEAD_SPACE} L${args.dead_space_l == null ? " (default)" : ""}; assorbimento ${ABSORPTION} L/kg${args.grain_absorption_l_per_kg == null ? " (default)" : ""}; evaporazione ${BOIL_OFF} L/h${args.boil_off_l_per_hour == null ? " (default)" : ""} per ${BOIL_HOURS} h${args.boil_duration_h == null ? " (default)" : ""}; trub loss ${TRUB_LOSS} L${args.trub_loss_l == null ? " (default)" : ""}.`
 			];
 			if (args.grain_kg != null && args.grain_kg > 0) {
 				const pctMash = totalVol > 0 ? mashVol / totalVol * 100 : 0;
 				const pctSparge = totalVol > 0 ? spargeVol / totalVol * 100 : 0;
-				lines.push("", "Dettaglio calcolo volumi:", `  • Grani: ${args.grain_kg} kg`, `  • Rapporto mash: ${MASH_RATIO} L/kg → ${(args.grain_kg * MASH_RATIO).toFixed(1)} L`, `  • Spazio morto (dead space): ${DEAD_SPACE} L`, `  • Mash = ${(args.grain_kg * MASH_RATIO).toFixed(1)} + ${DEAD_SPACE} = ${mashVol.toFixed(1)} L`);
-				if (preBoilTarget != null) {
-					const absorptionLoss = args.grain_kg * ABSORPTION;
-					lines.push(`  • Pre-boil target: ${preBoilTarget.toFixed(1)} L`, `  • Assorbimento trebbie: ${args.grain_kg} × ${ABSORPTION} = ${absorptionLoss.toFixed(1)} L`, `  • Sparge = ${preBoilTarget.toFixed(1)} + ${absorptionLoss.toFixed(1)} − ${mashVol.toFixed(1)} = ${spargeVol.toFixed(1)} L`);
-				}
-				if (args.fermenter_target_l != null) lines.push(`  • Fermentatore target: ${args.fermenter_target_l} L`, `  • Evaporazione: ${BOIL_OFF} L/h × ${BOIL_HOURS} h = ${(BOIL_OFF * BOIL_HOURS).toFixed(1)} L`, `  • Perdite trub/trasferimento: ${TRUB_LOSS} L`, `  • Pre-boil = ${args.fermenter_target_l} + ${(BOIL_OFF * BOIL_HOURS).toFixed(1)} + ${TRUB_LOSS} = ${preBoilTarget.toFixed(1)} L`);
-				lines.push("", `Ripartizione: mash ${pctMash.toFixed(0)}% / sparge ${pctSparge.toFixed(0)}%`);
-			}
+				lines.push("", "Dettaglio calcolo volumi:", `  • Grani: ${args.grain_kg} kg`, `  • Rapporto mash: ${MASH_RATIO} L/kg${args.mash_ratio_l_per_kg == null ? " (default)" : ""}`, `  • Spazio morto (dead space): ${DEAD_SPACE} L${args.dead_space_l == null ? " (default)" : ""}`, `  • Assorbimento: ${ABSORPTION} L/kg${args.grain_absorption_l_per_kg == null ? " (default)" : ""} → ${grainAbsorption.toFixed(1)} L`, `  • Mash calcolato: ${(args.grain_kg * MASH_RATIO).toFixed(1)} + ${DEAD_SPACE} = ${(args.grain_kg * MASH_RATIO + DEAD_SPACE).toFixed(1)} L`);
+				if (preBoilTarget != null) lines.push(`  • Pre-boil target: ${preBoilTarget.toFixed(1)} L${args.pre_boil_target_l == null ? " (derivato)" : " (inserito)"}`, `  • Sparge ${args.sparge_water_liters == null ? "calcolato" : "inserito"}: ${spargeVol.toFixed(1)} L`);
+				if (args.fermenter_target_l != null) lines.push(`  • Fermentatore target: ${args.fermenter_target_l} L (inserito)`);
+				lines.push(`  • Evaporazione: ${BOIL_OFF} L/h${args.boil_off_l_per_hour == null ? " (default)" : ""} × ${BOIL_HOURS} h${args.boil_duration_h == null ? " (default)" : ""} = ${evaporation.toFixed(1)} L`, `  • Trub loss: ${TRUB_LOSS} L${args.trub_loss_l == null ? " (default)" : ""} (non include il dead space)`, `  • Pre-boil = ${totalVol.toFixed(1)} − ${grainAbsorption.toFixed(1)} = ${preBoil.toFixed(1)} L`, `  • Post-boil = ${preBoil.toFixed(1)} − ${evaporation.toFixed(1)} = ${postBoil.toFixed(1)} L`, `  • Fermentatore previsto = ${postBoil.toFixed(1)} − ${TRUB_LOSS.toFixed(1)} = ${fermenterExpected.toFixed(1)} L`, "", `Ripartizione: mash ${pctMash.toFixed(0)}% / sparge ${pctSparge.toFixed(0)}%`);
+			} else lines.push("", "Bilancio dettagliato:", `  • Assorbimento grani: ${grainAbsorption.toFixed(1)} L`, `  • Evaporazione: ${evaporation.toFixed(1)} L`, `  • Trub loss: ${TRUB_LOSS.toFixed(1)} L${args.trub_loss_l == null ? " (default)" : ""}`, `  • Pre-boil: ${preBoil.toFixed(1)} L; post-boil: ${postBoil.toFixed(1)} L; fermentatore previsto: ${fermenterExpected.toFixed(1)} L`);
 			lines.push("", "Acqua sorgente → target → risultato:", `  Ca:   ${s.ca} → ${t.ca} → ${finalCa.toFixed(1)} mg/L`, `  Mg:   ${s.mg} → ${t.mg} → ${finalMg.toFixed(1)} mg/L`, `  Na:   ${s.na} → ${t.na} → ${finalNa.toFixed(1)} mg/L`, `  Cl:   ${s.cl} → ${t.cl} → ${finalCl.toFixed(1)} mg/L`, `  SO₄:  ${s.so4} → ${t.so4} → ${finalSo4.toFixed(1)} mg/L`, `  HCO₃: ${s.hco3} → ${t.hco3} → ${finalHco3.toFixed(1)} mg/L`, "", "Aggiunte consigliate (acqua totale):");
 			const adds = [];
 			const gypsumG = g * totalVol;
@@ -5615,6 +5625,8 @@ var WaterProfileCalculatorTool = class {
 			if (adds.length === 0) adds.push("  • Nessuna aggiunta necessaria.");
 			lines.push(...adds);
 			const warnings = [];
+			if (preBoilTarget != null && Math.abs(preBoil - preBoilTarget) > .05) warnings.push(`  ⚠ Pre-boil previsto ${preBoil.toFixed(1)} L, target ${preBoilTarget.toFixed(1)} L: scostamento ${preBoil - preBoilTarget > 0 ? "+" : ""}${(preBoil - preBoilTarget).toFixed(1)} L.`);
+			if (args.fermenter_target_l != null && Math.abs(fermenterExpected - args.fermenter_target_l) > .05) warnings.push(`  ⚠ Fermentatore previsto ${fermenterExpected.toFixed(1)} L, target ${args.fermenter_target_l.toFixed(1)} L: scostamento ${fermenterExpected - args.fermenter_target_l > 0 ? "+" : ""}${(fermenterExpected - args.fermenter_target_l).toFixed(1)} L.`);
 			const so4Dev = finalSo4 - t.so4;
 			if (Math.abs(so4Dev) > 10) warnings.push(`  ⚠ SO₄ devia di ${so4Dev > 0 ? "+" : ""}${so4Dev.toFixed(0)} mg/L dal target (compromesso con Ca/Mg).`);
 			const naDev = finalNa - t.na;

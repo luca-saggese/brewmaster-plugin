@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { buildRecipeDocumentModel } from '../src/brewing/recipe-document-model.ts';
 import { YamlToDocxTool } from '../src/brewing/yaml-to-docx.ts';
 import { YamlToPdfTool } from '../src/brewing/yaml-to-pdf.ts';
+import { validateYamlFile } from '../src/brewing/yaml-validator.ts';
 
 let passed = 0;
 let failed = 0;
@@ -13,6 +14,85 @@ function assert(condition: boolean, message: string): void {
   if (condition) passed++;
   else { failed++; console.error(`FAIL: ${message}`); }
 }
+
+const VALID_RECIPE = `schema_version: "1.0"
+nome: "Operational Test Ale"
+stile: "Experimental Beer"
+parametri:
+  batch_size_litri: 20
+  og: 1.060
+  fg: 1.012
+  abv_percent: 6.3
+  ibu: 35
+  bollitura_min: 60
+  pre_boil_litri: 25
+  post_boil_litri: 20
+  fermentatore_litri: 19
+  confezionamento_litri: 17.5
+  priming_totale_g: 52.5
+grist:
+  - malto: "Pale Ale"
+    kg: 5
+luppolatura:
+  - varieta: "Cascade"
+    grammi: 30
+    tempo_min: 60
+    uso: boil
+    aa_percent: 6
+  - varieta: "Citra"
+    grammi: 40
+    tempo_min: 10
+    uso: whirlpool
+  - varieta: "Mosaic"
+    grammi: 35
+    tempo_min: 4
+    uso: dry_hop
+spezie:
+  - nome: "Coriandolo"
+    grammi: 8
+    uso: boil
+    tempo_min: 5
+  - nome: "Pepe"
+    grammi: 4
+    uso: fermentation
+    tempo_min: 48
+lievito:
+  ceppo: "US-05"
+mash:
+  temperatura_in_c: 68
+  steps:
+    - temperatura_c: 64
+      tempo_min: 30
+    - temperatura_c: 68
+      tempo_min: 30
+bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 25
+  volume_post_boil_litri: 20
+  og_pre_boil: 1.050
+  og_post_boil: 1.060
+  whirlpool_temperatura_c: 80
+fermentazione:
+  primaria_giorni: 7
+  temperatura_c: 18
+  steps:
+    - temperatura_c: 18
+      giorni: 4
+    - temperatura_c: 21
+      giorni: 3
+carbonazione:
+  metodo: bottiglia
+  co2_volumi: 2.4
+  tipo_botella: long_neck
+acqua:
+  mash_litri: 16
+  sparge_litri: 20
+  total_litri: 36
+sales:
+  gesso_g: 1
+sparge_salts:
+  cacl2_g: 1
+`;
 
 async function main(): Promise<void> {
   const fixture = join(process.cwd(), 'src/brewing/recipes/34-specialty/34C-experimental.yaml');
@@ -24,23 +104,48 @@ async function main(): Promise<void> {
   assert(model.sections.find(section => section.phase === 'fermentation')?.actions.some(action => action.action.includes('dry hop')), 'dry hop should belong to fermentation');
   assert(model.sections.find(section => section.phase === 'packaging')?.measurements.some(field => field.label.includes('FG stabile')), 'packaging should require stable FG');
 
-  const outputBase = join(tmpdir(), `brewmaster-document-${Date.now()}`);
+  const workDir = mkdtempSync(join(tmpdir(), 'brewmaster-document-'));
+  const validFixture = join(workDir, 'valid.yaml');
+  writeFileSync(validFixture, VALID_RECIPE, 'utf-8');
+  const outputBase = join(workDir, 'operational');
   const docx = `${outputBase}.docx`;
   const pdf = `${outputBase}.pdf`;
   try {
-    const docxResult = await new YamlToDocxTool().resolveExecution({ input_file: fixture, output_file: docx }).execute({ turnId: 1, toolCallId: 'docx-test', signal: new AbortController().signal });
-    const pdfResult = await new YamlToPdfTool().resolveExecution({ input_file: fixture, output_file: pdf }).execute({ turnId: 1, toolCallId: 'pdf-test', signal: new AbortController().signal });
-    const docxPayload = JSON.parse(docxResult.output) as { status: string; document_type: string; path: string; errors: string[] };
-    const pdfPayload = JSON.parse(pdfResult.output) as { status: string; document_type: string; path: string; errors: string[] };
+    const validation = validateYamlFile(validFixture);
+    assert(validation.validation_status === 'valid', 'complete fixture should pass blocking validation');
+    const validModel = buildRecipeDocumentModel(validFixture).model;
+    const packaging = validModel.sections.find(section => section.phase === 'packaging');
+    assert(packaging?.actions.some(action => action.quantity === '52.50 g'), 'priming total should use the declared total quantity');
+    assert(!packaging?.actions.some(action => action.quantity === '52 g'), 'priming must not use batch_size_liters');
+    assert(validModel.sections.find(section => section.phase === 'water')?.actions.some(action => action.moment.includes('sparge')), 'mash and sparge salts should be distinct');
+    assert(validModel.sections.find(section => section.phase === 'post_boil')?.actions.some(action => action.temperature === '80 °C'), 'whirlpool temperature should be mapped');
+    const fermentation = validModel.sections.find(section => section.phase === 'fermentation');
+    assert(fermentation?.actions.filter(action => action.action.includes('Mantenere la fermentazione')).length === 2, 'multistep fermentation should be rendered');
+    assert(fermentation?.actions.map(action => action.ingredient ?? action.action).join('|').includes('Pepe'), 'botanical additions should remain in the fermentation timeline');
+    const docxResult = await new YamlToDocxTool().resolveExecution({ input_file: validFixture, output_file: docx }).execute({ turnId: 1, toolCallId: 'docx-test', signal: new AbortController().signal });
+    const pdfResult = await new YamlToPdfTool().resolveExecution({ input_file: validFixture, output_file: pdf }).execute({ turnId: 1, toolCallId: 'pdf-test', signal: new AbortController().signal });
+    const docxPayload = JSON.parse(docxResult.output) as { status: string; document_type: string; path: string; errors: string[]; validation_status: string };
+    const pdfPayload = JSON.parse(pdfResult.output) as { status: string; document_type: string; path: string; errors: string[]; validation_status: string };
     assert(docxPayload.document_type === 'docx' && docxPayload.status !== 'error', 'DOCX result should be structured and successful');
     assert(pdfPayload.document_type === 'pdf' && pdfPayload.status !== 'error', 'PDF result should be structured and successful');
+    assert(docxPayload.validation_status === 'valid' && pdfPayload.validation_status === 'valid', 'DOCX and PDF should use the same current validation report');
     assert(existsSync(docx) && readFileSync(docx).subarray(0, 2).toString('hex') === '504b', 'DOCX should be a ZIP package');
+    const documentXml = execFileSync('unzip', ['-p', docx, 'word/document.xml']).toString();
+    assert(documentXml.includes('Operational Test Ale') && documentXml.includes('52.50 g') && documentXml.includes('80 °C'), 'DOCX XML should contain rendered operational content');
     execFileSync('unzip', ['-t', docx], { stdio: 'ignore' });
-    assert(true, 'DOCX ZIP package should be structurally valid');
+    assert(documentXml.includes('<w:tbl>') && documentXml.includes('<w:sectPr>'), 'DOCX should contain tables and section properties, not only a ZIP header');
     assert(existsSync(pdf) && readFileSync(pdf).subarray(0, 5).toString() === '%PDF-', 'PDF should have a valid header');
+    const pdfText = execFileSync('strings', [pdf]).toString();
+    assert(pdfText.includes('Operational Test Ale'), 'PDF should contain the recipe title');
+
+    const invalidFixture = join(workDir, 'invalid.yaml');
+    writeFileSync(invalidFixture, VALID_RECIPE.replace('og: 1.060', 'og: not-a-number'), 'utf-8');
+    const blockedDocx = await new YamlToDocxTool().resolveExecution({ input_file: invalidFixture, output_file: join(workDir, 'blocked.docx') }).execute({ turnId: 2, toolCallId: 'blocked-docx', signal: new AbortController().signal });
+    const blockedPdf = await new YamlToPdfTool().resolveExecution({ input_file: invalidFixture, output_file: join(workDir, 'blocked.pdf') }).execute({ turnId: 2, toolCallId: 'blocked-pdf', signal: new AbortController().signal });
+    assert(blockedDocx.isError && blockedPdf.isError, 'blocking YAML errors must prevent both document types');
+    assert(!existsSync(join(workDir, 'blocked.docx')) && !existsSync(join(workDir, 'blocked.pdf')), 'blocked generation must not leave definitive documents');
   } finally {
-    rmSync(docx, { force: true });
-    rmSync(pdf, { force: true });
+    rmSync(workDir, { recursive: true, force: true });
   }
   console.log(`${passed} passed, ${failed} failed`);
   if (failed > 0) process.exitCode = 1;

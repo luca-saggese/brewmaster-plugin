@@ -5,6 +5,7 @@ import type { BuiltinTool, ToolExecution } from '../shim/tool-contract';
 import { registerTool } from '../shim/tool-registry';
 import { toInputJsonSchema } from '../shim/input-schema';
 import { buildRecipeDocumentModel, type OperationalSection, type RecipeDocumentModel, type TargetValue } from './recipe-document-model';
+import { validateYamlFile } from './yaml-validator';
 
 export const YamlToDocxInputSchema = z.object({
   input_file: z.string().describe('Path to the recipe YAML file.'),
@@ -19,7 +20,7 @@ function paragraph(text: string, bold = false, size = 20): string {
   return `<w:p><w:r><w:rPr>${bold ? '<w:b/>' : ''}<w:sz w:val="${size}"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
 }
 function heading(text: string): string {
-  return `<w:p><w:pPr><w:keepNext/><w:pBdr><w:bottom w:val="single" w:sz="5" w:space="4" w:color="8E2F23"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="8E2F23"/><w:sz w:val="28"/></w:rPr><w:t>${escapeXml(text)}</w:t></w:r></w:p>`;
+  return `<w:p><w:pPr><w:keepNext/><w:pBdr><w:bottom w:val="single" w:sz="5" w:space="4" w:color="8E2F23"/></w:pBdr></w:pPr><w:r><w:rPr><w:b/><w:color w:val="8E2F23"/><w:sz w:val="28"/></w:rPr><w:t>${escapeXml(text)}</w:t></w:r></w:p>`;
 }
 function cell(text: string, header = false): string {
   return `<w:tc><w:tcPr><w:shd w:fill="${header ? '8E2F23' : 'F5F1ED'}"/><w:tcMar><w:top w:w="70" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:start w:w="80" w:type="dxa"/><w:end w:w="80" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:r><w:rPr>${header ? '<w:b/><w:color w:val="FFFFFF"/>' : ''}<w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p></w:tc>`;
@@ -66,6 +67,8 @@ function zip(entries: Array<{ name: string; data: Buffer }>): Buffer {
   return Buffer.concat([...local, ...central, end]);
 }
 export function yamlToDocx(inputPath: string, outputPath: string): string {
+  const validation = validateYamlFile(inputPath);
+  if (validation.validation_status === 'invalid') throw new Error(`Validazione YAML bloccante: ${validation.errors.map(error => error.message).join('; ')}`);
   const { model } = buildRecipeDocumentModel(inputPath);
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${renderModel(model)}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="850" w:bottom="850" w:left="850"/></w:sectPr></w:body></w:document>`;
   const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>';
@@ -80,7 +83,7 @@ export class YamlToDocxTool implements BuiltinTool<YamlToDocxInput> {
   resolveExecution(args: YamlToDocxInput): ToolExecution {
     const outputFile = args.output_file ?? args.input_file.replace(/\.ya?ml$/i, '') + '.docx';
     return { description: `Generate brewday DOCX from ${args.input_file}`, approvalRule: this.name, execute: () => {
-      try { if (!existsSync(args.input_file)) throw new Error(`File non trovato: ${args.input_file}`); const { model } = buildRecipeDocumentModel(args.input_file); const path = yamlToDocx(args.input_file, outputFile); const warnings = model.sections.flatMap(section => section.warnings); return Promise.resolve({ output: JSON.stringify({ status: warnings.length || model.unmappedFields.length ? 'warning' : 'ok', document_type: 'docx', path, recipe_name: model.metadata.name, schema_version: model.schemaVersion, warnings, unmapped_fields: model.unmappedFields, errors: [] }) }); }
+      try { if (!existsSync(args.input_file)) throw new Error(`File non trovato: ${args.input_file}`); const validation = validateYamlFile(args.input_file); if (validation.validation_status === 'invalid') throw new Error(`Validazione YAML bloccante: ${validation.errors.map(error => error.message).join('; ')}`); const { model } = buildRecipeDocumentModel(args.input_file); const path = yamlToDocx(args.input_file, outputFile); const warnings = [...model.sections.flatMap(section => section.warnings), ...validation.warnings.map(warning => warning.message)]; return Promise.resolve({ output: JSON.stringify({ status: warnings.length || model.unmappedFields.length ? 'warning' : 'ok', document_type: 'docx', path, recipe_name: model.metadata.name, schema_version: model.schemaVersion, validation_status: validation.validation_status, warnings, unmapped_fields: model.unmappedFields, errors: [] }) }); }
       catch (error) { return Promise.resolve({ isError: true, output: JSON.stringify({ status: 'error', document_type: 'docx', path: outputFile, recipe_name: null, schema_version: null, warnings: [], unmapped_fields: [], errors: [error instanceof Error ? error.message : String(error)] }) }); }
     } };
   }

@@ -11157,13 +11157,16 @@ const YAML_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
 	"sparge",
 	"sales",
 	"mash_salts",
+	"sparge_salts",
 	"carbonazione",
 	"spezie",
 	"zuccheri",
 	"confezionamento",
 	"obiettivi_sensoriali",
 	"vincoli_produzione",
-	"fonte"
+	"fonte",
+	"note_critiche",
+	"alternative"
 ]);
 function collectSchemaIssues(data) {
 	const issues = [];
@@ -11277,6 +11280,15 @@ function parseYamlRecipe(filePath) {
 		"azucar_g_por_litro",
 		"priming_gl"
 	]);
+	const priming_total_grams = pickNum(params, [
+		"priming_totale_g",
+		"priming_total_g",
+		"zucchero_priming_totale_g"
+	]) ?? pickNum(carbonazione, [
+		"priming_totale_g",
+		"priming_total_g",
+		"zucchero_totale_g"
+	]);
 	const grain_bill = (Array.isArray(d["grist"]) ? d["grist"] : []).map((g) => ({
 		malt: String(g["malto"] ?? ""),
 		kg: Number(g["kg"] ?? 0),
@@ -11353,8 +11365,7 @@ function parseYamlRecipe(filePath) {
 		"total_agua_litri",
 		"agua_total_litri"
 	]);
-	const sales = d["sales"] ?? d["mash_salts"];
-	const mash_salts = sales ? {
+	const saltValues = (sales) => sales ? {
 		gypsum_g: pickNum(sales, [
 			"gesso_g",
 			"gypsum_g",
@@ -11369,11 +11380,18 @@ function parseYamlRecipe(filePath) {
 			"acido_lactico"
 		])
 	} : void 0;
+	const mash_salts = saltValues(d["mash_salts"] ?? d["sales"]);
+	const sparge_salts = saltValues(d["sparge_salts"]);
 	const mashInTemp = pickNum(mash, [
 		"temperatura_in_c",
 		"mash_in_c",
 		"temperatura_strike_c",
 		"strike_c"
+	]);
+	const whirlpool_temp_c = pickNum(bollitura, [
+		"whirlpool_temperatura_c",
+		"whirlpool_temp_c",
+		"hop_stand_temperatura_c"
 	]);
 	const pre_boil_og = pickNum(bollitura, [
 		"og_pre_boil",
@@ -11395,6 +11413,11 @@ function parseYamlRecipe(filePath) {
 		"maduracion_dias",
 		"dias_maduracion"
 	]);
+	const fermentation_steps = Array.isArray(ferm["steps"]) ? ferm["steps"].map((step) => ({
+		temperature_c: Number(step["temperatura_c"] ?? step["temperature_c"] ?? 0),
+		duration_days: step["giorni"] != null || step["duration_days"] != null ? Number(step["giorni"] ?? step["duration_days"]) : void 0,
+		note: typeof step["note"] === "string" ? step["note"] : void 0
+	})).filter((step) => Number.isFinite(step.temperature_c) && step.temperature_c > 0) : void 0;
 	const serving_temp_c = pickNum(carbonazione, [
 		"temperatura_servizio_c",
 		"temperatura_servicio_c",
@@ -11439,6 +11462,7 @@ function parseYamlRecipe(filePath) {
 		carbonation_volumes: isNaN(carbonation_volumes) ? void 0 : carbonation_volumes,
 		carbonation_method,
 		priming_sugar_gl: isNaN(priming_sugar_gl) ? void 0 : priming_sugar_gl,
+		priming_total_grams: isNaN(priming_total_grams) ? void 0 : priming_total_grams,
 		impianto,
 		descrizione,
 		note,
@@ -11448,11 +11472,14 @@ function parseYamlRecipe(filePath) {
 		sparge_water_liters: isNaN(sparge_water_liters) ? void 0 : sparge_water_liters,
 		total_water_liters: isNaN(total_water_liters) ? void 0 : total_water_liters,
 		mash_salts,
+		sparge_salts,
 		mash_in_temp_c: isNaN(mashInTemp) ? void 0 : mashInTemp,
+		whirlpool_temp_c: isNaN(whirlpool_temp_c) ? void 0 : whirlpool_temp_c,
 		pre_boil_og: isNaN(pre_boil_og) ? void 0 : pre_boil_og,
 		post_boil_og: isNaN(post_boil_og) ? void 0 : post_boil_og,
 		primary_days: isNaN(primary_days) ? void 0 : primary_days,
 		conditioning_days: isNaN(conditioning_days) ? void 0 : conditioning_days,
+		fermentation_steps,
 		serving_temp_c: isNaN(serving_temp_c) ? void 0 : serving_temp_c,
 		bottle_type,
 		rawYaml: raw
@@ -11465,10 +11492,6 @@ function validateRecipe(r) {
 	const styleDeviations = [];
 	const volumeIssues = [];
 	const carbonationIssues = [];
-	const abv = (r.og - r.fg) * 131.25;
-	const totalGrainKg = r.grain_bill.reduce((s, g) => s + g.kg, 0);
-	const totalHopGrams = r.hop_schedule.reduce((s, h) => s + h.grams, 0);
-	const dryHopGrams = r.hop_schedule.filter((h) => h.use === "dry_hop").reduce((s, h) => s + h.grams, 0);
 	if (style) {
 		if (r.og < style.og_min) styleDeviations.push(`OG ${r.og.toFixed(3)} < min ${style.og_min.toFixed(3)}`);
 		if (r.og > style.og_max) styleDeviations.push(`OG ${r.og.toFixed(3)} > max ${style.og_max.toFixed(3)}`);
@@ -11476,28 +11499,11 @@ function validateRecipe(r) {
 		if (r.fg > style.fg_max) styleDeviations.push(`FG ${r.fg.toFixed(3)} > max ${style.fg_max.toFixed(3)}`);
 		if (r.ibu < style.ibu_min) styleDeviations.push(`IBU ${r.ibu} < min ${style.ibu_min}`);
 		if (r.ibu > style.ibu_max) styleDeviations.push(`IBU ${r.ibu} > max ${style.ibu_max}`);
-		if (abv < style.abv_min) styleDeviations.push(`ABV ${abv.toFixed(1)}% < min ${style.abv_min}%`);
-		if (abv > style.abv_max) styleDeviations.push(`ABV ${abv.toFixed(1)}% > max ${style.abv_max}%`);
+		if (r.abv_percent !== void 0 && r.abv_percent < style.abv_min) styleDeviations.push(`ABV ${r.abv_percent.toFixed(1)}% < min ${style.abv_min}%`);
+		if (r.abv_percent !== void 0 && r.abv_percent > style.abv_max) styleDeviations.push(`ABV ${r.abv_percent.toFixed(1)}% > max ${style.abv_max}%`);
 		if (r.ebc !== void 0 && (r.ebc < style.ebc_min || r.ebc > style.ebc_max)) styleDeviations.push(`EBC ${r.ebc} fuori range (${style.ebc_min}–${style.ebc_max})`);
 	}
 	if (style) for (const deviation of styleDeviations) warnings.push(`Deviazione BJCP: ${deviation}`);
-	const ibuRatio = r.ibu / ((r.og - 1) * 1e3);
-	const buGu = r.og > 1 ? r.ibu / ((r.og - 1) * 1e3) : 0;
-	if (ibuRatio < .2) issues.push("Rapporto IBU/OG molto basso (<0.2) — sbilanciata verso il malto.");
-	else if (ibuRatio > 1.5) issues.push("Rapporto IBU/OG molto alto (>1.5) — amaro eccessivo.");
-	else if (ibuRatio > 1) warnings.push("Rapporto IBU/OG alto — verifica lo stile.");
-	let specPct = 0, basePct = 0;
-	for (const g of r.grain_bill) {
-		const pct = g.percent ?? g.kg / totalGrainKg * 100;
-		const n = g.malt.toLowerCase();
-		if (n.includes("pilsner") || n.includes("pale") || n.includes("maris otter") || n.includes("munich") || n.includes("vienna") || n.includes("wheat") || n.includes("base") || n.includes("pils")) basePct += pct;
-		if (n.includes("crystal") || n.includes("caramel") || n.includes("chocolate") || n.includes("black") || n.includes("roast") || n.includes("special") || n.includes("cara") || n.includes("melanoidin") || n.includes("aromatic") || n.includes("biscuit")) specPct += pct;
-		if (pct > 20 && !n.includes("base") && !n.includes("pilsner") && !n.includes("pale") && !n.includes("pils")) warnings.push(`Malto "${g.malt}" al ${pct.toFixed(0)}% — percentuale alta.`);
-	}
-	if (specPct > 25) issues.push(`Malti speciali al ${specPct.toFixed(0)}% — rischio dolcezza/astringenza.`);
-	else if (specPct > 15) warnings.push(`Malti speciali al ${specPct.toFixed(0)}%.`);
-	if (basePct < 60 && totalGrainKg > 0) warnings.push(`Malto base al ${basePct.toFixed(0)}% — basso.`);
-	if (dryHopGrams > 20 * r.batch_size_liters) warnings.push(`Dry hop molto alto (${dryHopGrams}g in ${r.batch_size_liters}L) — rischio astringenza/ossidazione.`);
 	const hopUses = new Set(r.hop_schedule.map((h) => h.use));
 	for (const u of hopUses) if (!VALID_HOP_USES.has(u)) warnings.push(`Uso luppolo sconosciuto: "${u}".`);
 	const boilHops = r.hop_schedule.filter((h) => h.use === "boil");
@@ -11539,11 +11545,6 @@ function validateRecipe(r) {
 		if (r.carbonation_volumes < 1.2) carbonationIssues.push(`Carbonazione molto bassa (${r.carbonation_volumes} vol) — birra quasi piatta.`);
 		else if (r.carbonation_volumes > 4) carbonationIssues.push(`Carbonazione molto alta (${r.carbonation_volumes} vol) — rischio bottiglia esplosiva senza bottiglie adeguate.`);
 	}
-	if (r.priming_sugar_gl !== void 0 && r.carbonation_volumes !== void 0) {
-		const expectedPriming = (r.carbonation_volumes - .85) * 4 * r.batch_size_liters;
-		if (Math.abs(r.priming_sugar_gl * r.batch_size_liters - expectedPriming) > expectedPriming * .4) carbonationIssues.push(`Dosaggio priming (${r.priming_sugar_gl} g/L) incoerente con carbonazione target (${r.carbonation_volumes} vol).`);
-	}
-	if (r.abv_percent !== void 0 && Math.abs(r.abv_percent - abv) > .5) warnings.push(`ABV dichiarato (${r.abv_percent}%) ≠ calcolato (${abv.toFixed(1)}%) — differenza >0.5%.`);
 	const brewdayMissing = [];
 	if (r.mash_water_liters === void 0) brewdayMissing.push("acqua di ammostamento (acqua.mash_litri)");
 	if (r.total_water_liters === void 0) brewdayMissing.push("acqua totale (acqua.total_litri)");
@@ -11567,20 +11568,9 @@ function validateRecipe(r) {
 		else if (r.efficiency_percent < 50) warnings.push("Efficienza <50% — molto bassa, verificare la macinatura e il mash.");
 		else if (r.efficiency_percent > 85) warnings.push("Efficienza >85% — molto alta per homebrewing standard.");
 	}
-	if (totalGrainKg > 0 && r.batch_size_liters > 0) {
-		const expectedMaxOG = 1 + totalGrainKg * .08 / r.batch_size_liters;
-		if (r.og > expectedMaxOG * 1.05) warnings.push(`OG (${r.og.toFixed(3)}) troppo alto per ${totalGrainKg.toFixed(1)}kg di grani in ${r.batch_size_liters}L (max stimato ~${expectedMaxOG.toFixed(3)}).`);
-	}
 	return {
 		issues,
 		warnings,
-		abv,
-		ibuRatio,
-		specPct,
-		totalGrainKg,
-		totalHopGrams,
-		dryHopGrams,
-		buGu,
 		styleName: style?.name,
 		styleCode: style?.code,
 		styleMatch: styleDeviations.length === 0,
@@ -11600,8 +11590,9 @@ function issueFromMessage(code, path, message, source = "yaml_validator") {
 }
 function referenceStatus(reference) {
 	if (!reference) return "not_verified";
-	if (reference.ok === false || reference.status === "error") return "failed";
-	if (reference.ok === true || reference.status === "ok") return "passed";
+	const status = reference.status?.toLowerCase();
+	if (reference.ok === false || status === "error") return "failed";
+	if (reference.ok === true || status === "ok" || status === "warning") return "passed";
 	return "not_verified";
 }
 function calculatorValue(reference, key) {
@@ -11615,49 +11606,56 @@ function compareCalculatorValues(errors, checks, recipe, references) {
 			key: "estimated_og",
 			path: "parametri.og",
 			declared: recipe.og,
-			code: "BREWING_OG_MISMATCH"
+			code: "BREWING_OG_MISMATCH",
+			tolerance: .001
 		},
 		{
 			calculator: "brewing",
 			key: "estimated_fg",
 			path: "parametri.fg",
 			declared: recipe.fg,
-			code: "BREWING_FG_MISMATCH"
+			code: "BREWING_FG_MISMATCH",
+			tolerance: .001
 		},
 		{
 			calculator: "brewing",
 			key: "abv_percent",
 			path: "parametri.abv_percent",
 			declared: recipe.abv_percent,
-			code: "BREWING_ABV_MISMATCH"
+			code: "BREWING_ABV_MISMATCH",
+			tolerance: .1
 		},
 		{
 			calculator: "ibu",
 			key: "total_ibu",
 			path: "parametri.ibu",
 			declared: recipe.ibu,
-			code: "IBU_TOTAL_MISMATCH"
+			code: "IBU_TOTAL_MISMATCH",
+			tolerance: 1
 		},
 		{
 			calculator: "priming",
 			key: "packaging_volume_l",
 			path: "parametri.confezionamento_litri",
 			declared: recipe.packaging_volume_liters,
-			code: "PRIMING_VOLUME_MISMATCH"
+			code: "PRIMING_VOLUME_MISMATCH",
+			tolerance: .1
 		},
 		{
 			calculator: "priming",
 			key: "dosage_g_per_l",
 			path: "carbonazione.priming_gl",
 			declared: recipe.priming_sugar_gl,
-			code: "PRIMING_DOSAGE_MISMATCH"
+			code: "PRIMING_DOSAGE_MISMATCH",
+			tolerance: .1
 		},
 		{
 			calculator: "priming",
 			key: "target_co2_volumes",
 			path: "carbonazione.co2_volumi",
 			declared: recipe.carbonation_volumes,
-			code: "PRIMING_TARGET_MISMATCH"
+			code: "PRIMING_TARGET_MISMATCH",
+			tolerance: .05
 		}
 	];
 	for (const comparison of comparisons) {
@@ -11665,8 +11663,7 @@ function compareCalculatorValues(errors, checks, recipe, references) {
 		if (!reference || referenceStatus(reference) !== "passed" || comparison.declared === void 0) continue;
 		const expected = calculatorValue(reference, comparison.key);
 		if (typeof expected !== "number") continue;
-		const tolerance = comparison.key === "total_ibu" ? .2 : comparison.key.includes("volume") ? .1 : .01;
-		const passed = Math.abs(comparison.declared - expected) <= tolerance;
+		const passed = Math.abs(comparison.declared - expected) <= comparison.tolerance;
 		checks.push({
 			id: comparison.code,
 			status: passed ? "passed" : "failed",
@@ -11733,7 +11730,7 @@ function buildValidationReport(recipe, validation, calculatorResults) {
 			source: "priming_calculator"
 		}
 	];
-	for (const [name, reference] of Object.entries(calculatorResults ?? {})) if (reference && (reference.ok === false || reference.status === "error")) errors.push(issueFromMessage("CALCULATOR_ERROR", `calculator_references.${name}`, `Il calculator ${name} ha restituito un errore; i controlli dipendenti non sono verificati.`, name));
+	for (const [name, reference] of Object.entries(calculatorResults ?? {})) if (reference && referenceStatus(reference) === "failed") errors.push(issueFromMessage("CALCULATOR_ERROR", `calculator_references.${name}`, `Il calculator ${name} ha restituito un errore; i controlli dipendenti non sono verificati.`, name));
 	compareCalculatorValues(errors, checks, recipe, calculatorResults);
 	const validationStatus = errors.length > 0 ? "invalid" : "valid";
 	return {
@@ -11748,6 +11745,10 @@ function buildValidationReport(recipe, validation, calculatorResults) {
 		calculator_references: calculatorResults ?? null,
 		summary: validationStatus === "valid" ? "Ricetta strutturalmente valida; la conformità BJCP resta una valutazione separata." : `Ricetta non valida: ${errors.length} errore/i deterministico/i.`
 	};
+}
+function validateYamlFile(inputPath, calculatorResults) {
+	const recipe = parseYamlRecipe(inputPath);
+	return buildValidationReport(recipe, validateRecipe(recipe), calculatorResults);
 }
 var YamlValidatorTool = class {
 	name = "yaml_validator";
@@ -13194,6 +13195,185 @@ function section(phase, title) {
 		notes: []
 	};
 }
+function saltActions(phase, salts, moment, order) {
+	if (!salts) return [];
+	return [
+		[
+			"gypsum_g",
+			"Gesso",
+			"g"
+		],
+		[
+			"cacl2_g",
+			"Cloruro di calcio",
+			"g"
+		],
+		[
+			"epsom_g",
+			"Sale di Epsom",
+			"g"
+		],
+		[
+			"nahco3_g",
+			"Bicarbonato",
+			"g"
+		],
+		[
+			"lactic_acid_ml",
+			"Acido lattico",
+			"mL"
+		]
+	].flatMap(([key, label, unit]) => {
+		const value = salts[key];
+		return value === void 0 ? [] : [{
+			phase,
+			order,
+			moment,
+			action: "Aggiungere al trattamento",
+			ingredient: label,
+			quantity: quantity(value, unit)
+		}];
+	});
+}
+function nestedUnmappedFields(raw) {
+	const allowed = {
+		parametri: [
+			"batch_size_litri",
+			"og",
+			"fg",
+			"ibu",
+			"ebc",
+			"abv_percent",
+			"efficienza_percent",
+			"bollitura_min",
+			"pre_boil_litri",
+			"post_boil_litri",
+			"fermentatore_litri",
+			"confezionamento_litri",
+			"carbonazione_vol",
+			"priming_gl",
+			"priming_totale_g",
+			"priming_total_g",
+			"impianto"
+		],
+		mash: [
+			"temperatura_c",
+			"temperatura_in_c",
+			"durata_min",
+			"steps",
+			"acqua_strike_litri",
+			"spessore_l_kg",
+			"note"
+		],
+		bollitura: [
+			"durata_min",
+			"volume_pre_boil_litri",
+			"volume_post_boil_litri",
+			"og_pre_boil",
+			"og_post_boil",
+			"whirlpool_temperatura_c",
+			"whirlpool_temp_c",
+			"hop_stand_temperatura_c"
+		],
+		fermentazione: [
+			"temperatura_c",
+			"primaria_giorni",
+			"madurazione_giorni",
+			"cold_crash",
+			"cold_crash_giorni",
+			"cold_crash_temp_c",
+			"dry_hop_giorno",
+			"steps",
+			"note"
+		],
+		carbonazione: [
+			"metodo",
+			"zucchero_tipo",
+			"co2_volumi",
+			"temperatura_servizio_c",
+			"tipo_botella",
+			"priming_gl",
+			"priming_totale_g",
+			"priming_total_g",
+			"zucchero_totale_g"
+		],
+		lievito: [
+			"ceppo",
+			"forma",
+			"attenuazione_percent",
+			"laboratorio",
+			"temp_min_c",
+			"temp_max_c",
+			"temperatura_inoculo_c",
+			"temp_inoculo_c",
+			"temperatura_fermentazione",
+			"note"
+		],
+		acqua: [
+			"mash_litri",
+			"mash_agua_litri",
+			"strike_litri",
+			"sparge_litri",
+			"sparge_agua_litri",
+			"total_litri",
+			"total_agua_litri",
+			"ca",
+			"mg",
+			"na",
+			"cl",
+			"so4",
+			"hco3",
+			"ca_mg_l",
+			"mg_mg_l",
+			"na_mg_l",
+			"cl_mg_l",
+			"so4_mg_l",
+			"hco3_mg_l"
+		],
+		sparge: [
+			"sparge_litri",
+			"volumen_litri",
+			"litri",
+			"temperatura_c",
+			"temperature_c",
+			"procedura"
+		],
+		mash_salts: [
+			"gesso_g",
+			"gypsum_g",
+			"gesso",
+			"cacl2_g",
+			"cacl2",
+			"epsom_g",
+			"epsom",
+			"nahco3_g",
+			"nahco3",
+			"acido_lactico_ml",
+			"lactic_acid_ml",
+			"acido_lactico"
+		],
+		sparge_salts: [
+			"gesso_g",
+			"gypsum_g",
+			"gesso",
+			"cacl2_g",
+			"cacl2",
+			"epsom_g",
+			"epsom",
+			"nahco3_g",
+			"nahco3",
+			"acido_lactico_ml",
+			"lactic_acid_ml",
+			"acido_lactico"
+		]
+	};
+	const fields = [];
+	for (const [parent, keys] of Object.entries(allowed)) {
+		const value = record(raw[parent]);
+		for (const key of Object.keys(value)) if (!keys.includes(key)) fields.push(`${parent}.${key}`);
+	}
+	return fields;
+}
 function parseObjectives(raw) {
 	const value = raw["obiettivi_sensoriali"];
 	if (Array.isArray(value)) return value.filter((item) => typeof item === "string").map((item) => ({
@@ -13269,41 +13449,8 @@ function buildModel(recipe, raw) {
 			target("Acqua totale", recipe.total_water_liters, " L"),
 			target("pH mash target", firstNumber(mashRaw, ["ph_target", "pH_target"]), "")
 		].filter((item) => item !== void 0));
-		const salts = record(raw["mash_salts"] ?? raw["sales"]);
-		for (const [key, label, unit] of [
-			[
-				"gypsum_g",
-				"Gesso",
-				"g"
-			],
-			[
-				"cacl2_g",
-				"Cloruro di calcio",
-				"g"
-			],
-			[
-				"epsom_g",
-				"Sale di Epsom",
-				"g"
-			],
-			[
-				"nahco3_g",
-				"Bicarbonato",
-				"g"
-			],
-			[
-				"lactic_acid_ml",
-				"Acido lattico",
-				"mL"
-			]
-		]) if (num(salts[key]) !== void 0) water.actions.push({
-			phase: "water",
-			order: 10,
-			moment: "Preparazione acqua",
-			action: "Aggiungere al trattamento",
-			ingredient: label,
-			quantity: quantity(salts[key], unit)
-		});
+		water.actions.push(...saltActions("water", recipe.mash_salts, "Trattamento acqua mash", 10));
+		water.actions.push(...saltActions("water", recipe.sparge_salts, "Trattamento acqua sparge", 11));
 		if (recipe.mash_water_liters !== void 0) water.actions.push({
 			phase: "water",
 			order: 20,
@@ -13417,31 +13564,34 @@ function buildModel(recipe, raw) {
 			action: "Aggiungere e mantenere il whirlpool",
 			ingredient: hop.variety,
 			quantity: quantity(hop.grams, "g"),
+			temperature: quantity(recipe.whirlpool_temp_c, "°C"),
 			duration: hop.time_minutes ? `${hop.time_minutes} min` : void 0,
 			note: hop.note
 		}));
 		post.measurements.push(measurement("Volume post-boil misurato", "L"), measurement("Densità post-boil misurata", "SG"));
 		sections.push(post);
 	}
-	const cooling = section("cooling", "Raffreddamento, trasferimento e inoculo");
-	cooling.targets.push(...[target("Volume fermentatore", recipe.fermentation_volume_liters, " L"), target("Temperatura inoculo", firstNumber(record(raw["lievito"]), ["temperatura_inoculo_c", "temp_inoculo_c"]), " °C")].filter((item) => item !== void 0));
-	cooling.actions.push({
-		phase: "cooling",
-		order: 10,
-		moment: "Raffreddamento",
-		action: "Raffreddare il mosto alla temperatura di inoculo",
-		temperature: quantity(firstNumber(record(raw["lievito"]), ["temperatura_inoculo_c", "temp_inoculo_c"]), "°C")
-	});
-	if (recipe.yeast.strain) cooling.actions.push({
-		phase: "cooling",
-		order: 20,
-		moment: "Inoculo",
-		action: "Inoculare il lievito",
-		ingredient: recipe.yeast.strain,
-		quantity: text(record(raw["lievito"])["quantita"])
-	});
-	cooling.measurements.push(measurement("Volume effettivo nel fermentatore", "L"), measurement("OG effettiva", "SG"), measurement("Temperatura di inoculo", "°C"), measurement("Ora inoculo"));
-	sections.push(cooling);
+	if (recipe.fermentation_volume_liters !== void 0 || recipe.yeast.strain || raw["lievito"] !== void 0) {
+		const cooling = section("cooling", "Raffreddamento, trasferimento e inoculo");
+		cooling.targets.push(...[target("Volume fermentatore", recipe.fermentation_volume_liters, " L"), target("Temperatura inoculo", firstNumber(record(raw["lievito"]), ["temperatura_inoculo_c", "temp_inoculo_c"]), " °C")].filter((item) => item !== void 0));
+		cooling.actions.push({
+			phase: "cooling",
+			order: 10,
+			moment: "Raffreddamento",
+			action: "Raffreddare il mosto alla temperatura di inoculo",
+			temperature: quantity(firstNumber(record(raw["lievito"]), ["temperatura_inoculo_c", "temp_inoculo_c"]), "°C")
+		});
+		if (recipe.yeast.strain) cooling.actions.push({
+			phase: "cooling",
+			order: 20,
+			moment: "Inoculo",
+			action: "Inoculare il lievito",
+			ingredient: recipe.yeast.strain,
+			quantity: text(record(raw["lievito"])["quantita"])
+		});
+		cooling.measurements.push(measurement("Volume effettivo nel fermentatore", "L"), measurement("OG effettiva", "SG"), measurement("Temperatura di inoculo", "°C"), measurement("Ora inoculo"));
+		sections.push(cooling);
+	}
 	if (raw["fermentazione"] !== void 0) {
 		const fermentation = section("fermentation", "Fermentazione");
 		fermentation.targets.push(...[
@@ -13449,6 +13599,15 @@ function buildModel(recipe, raw) {
 			target("Fermentazione primaria", recipe.primary_days, " giorni"),
 			target("Maturazione", recipe.conditioning_days, " giorni")
 		].filter((item) => item !== void 0));
+		recipe.fermentation_steps?.forEach((step, index) => fermentation.actions.push({
+			phase: "fermentation",
+			order: 10 + index,
+			moment: `Step ${index + 1}`,
+			action: "Mantenere la fermentazione",
+			temperature: quantity(step.temperature_c, "°C"),
+			duration: quantity(step.duration_days, "giorni"),
+			note: step.note
+		}));
 		if (recipe.primary_days !== void 0) fermentation.actions.push({
 			phase: "fermentation",
 			order: 10,
@@ -13496,6 +13655,7 @@ function buildModel(recipe, raw) {
 		});
 		fermentation.measurements.push(measurement("FG reale", "SG"), measurement("Temperatura reale", "°C"), measurement("Data fine fermentazione"));
 		fermentation.warnings.push("La fermentazione è conclusa solo dopo stabilità della FG, non per sola durata nominale.");
+		fermentation.actions.sort((a, b) => a.order - b.order);
 		sections.push(fermentation);
 	}
 	if (raw["carbonazione"] !== void 0 || recipe.packaging_volume_liters !== void 0) {
@@ -13507,14 +13667,14 @@ function buildModel(recipe, raw) {
 			target("Carbonazione", recipe.carbonation_volumes, " vol CO₂"),
 			target("Priming", recipe.priming_sugar_gl, " g/L")
 		].filter((item) => item !== void 0));
-		if (method && /bott|bottiglia/i.test(method) && recipe.priming_sugar_gl !== void 0) packaging.actions.push({
+		if (method && /bott|bottiglia/i.test(method) && (recipe.priming_total_grams !== void 0 || recipe.priming_sugar_gl !== void 0)) packaging.actions.push({
 			phase: "packaging",
 			order: 20,
 			moment: "Imbottigliamento",
 			action: "Aggiungere il fermentabile di priming",
 			ingredient: firstText(carbonationRaw, ["zucchero_tipo"]) ?? "Zucchero",
-			quantity: quantity(recipe.priming_sugar_gl * recipe.batch_size_liters, "g"),
-			note: `${recipe.priming_sugar_gl} g/L`
+			quantity: quantity(recipe.priming_total_grams ?? recipe.priming_sugar_gl * (recipe.packaging_volume_liters ?? 0), "g"),
+			note: recipe.priming_total_grams !== void 0 ? "Quantità totale dichiarata" : `${recipe.priming_sugar_gl} g/L sul volume confezionato`
 		});
 		packaging.actions.unshift({
 			phase: "packaging",
@@ -13549,6 +13709,7 @@ function buildModel(recipe, raw) {
 		"sparge",
 		"sales",
 		"mash_salts",
+		"sparge_salts",
 		"carbonazione",
 		"spezie",
 		"zuccheri",
@@ -13559,7 +13720,7 @@ function buildModel(recipe, raw) {
 		"alternative",
 		"note_critiche"
 	]);
-	const unmappedFields = Object.keys(raw).filter((key) => !handled.has(key));
+	const unmappedFields = [...Object.keys(raw).filter((key) => !handled.has(key)), ...nestedUnmappedFields(raw)];
 	return {
 		schemaVersion: recipe.schema_version ?? "unspecified",
 		metadata: {
@@ -13637,7 +13798,7 @@ function paragraph(text, bold = false, size = 20) {
 	return `<w:p><w:r><w:rPr>${bold ? "<w:b/>" : ""}<w:sz w:val="${size}"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
 }
 function heading(text) {
-	return `<w:p><w:pPr><w:keepNext/><w:pBdr><w:bottom w:val="single" w:sz="5" w:space="4" w:color="8E2F23"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="8E2F23"/><w:sz w:val="28"/></w:rPr><w:t>${escapeXml(text)}</w:t></w:r></w:p>`;
+	return `<w:p><w:pPr><w:keepNext/><w:pBdr><w:bottom w:val="single" w:sz="5" w:space="4" w:color="8E2F23"/></w:pBdr></w:pPr><w:r><w:rPr><w:b/><w:color w:val="8E2F23"/><w:sz w:val="28"/></w:rPr><w:t>${escapeXml(text)}</w:t></w:r></w:p>`;
 }
 function cell(text, header = false) {
 	return `<w:tc><w:tcPr><w:shd w:fill="${header ? "8E2F23" : "F5F1ED"}"/><w:tcMar><w:top w:w="70" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:start w:w="80" w:type="dxa"/><w:end w:w="80" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:r><w:rPr>${header ? "<w:b/><w:color w:val=\"FFFFFF\"/>" : ""}<w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p></w:tc>`;
@@ -13752,6 +13913,8 @@ function zip(entries) {
 	]);
 }
 function yamlToDocx(inputPath, outputPath) {
+	const validation = validateYamlFile(inputPath);
+	if (validation.validation_status === "invalid") throw new Error(`Validazione YAML bloccante: ${validation.errors.map((error) => error.message).join("; ")}`);
 	const { model } = buildRecipeDocumentModel(inputPath);
 	const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${renderModel(model)}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="850" w:bottom="850" w:left="850"/></w:sectPr></w:body></w:document>`;
 	writeFileSync(outputPath, zip([
@@ -13782,15 +13945,18 @@ var YamlToDocxTool = class {
 			execute: () => {
 				try {
 					if (!existsSync(args.input_file)) throw new Error(`File non trovato: ${args.input_file}`);
+					const validation = validateYamlFile(args.input_file);
+					if (validation.validation_status === "invalid") throw new Error(`Validazione YAML bloccante: ${validation.errors.map((error) => error.message).join("; ")}`);
 					const { model } = buildRecipeDocumentModel(args.input_file);
 					const path = yamlToDocx(args.input_file, outputFile);
-					const warnings = model.sections.flatMap((section) => section.warnings);
+					const warnings = [...model.sections.flatMap((section) => section.warnings), ...validation.warnings.map((warning) => warning.message)];
 					return Promise.resolve({ output: JSON.stringify({
 						status: warnings.length || model.unmappedFields.length ? "warning" : "ok",
 						document_type: "docx",
 						path,
 						recipe_name: model.metadata.name,
 						schema_version: model.schemaVersion,
+						validation_status: validation.validation_status,
 						warnings,
 						unmapped_fields: model.unmappedFields,
 						errors: []
@@ -14251,6 +14417,8 @@ var BrewdayPdfRenderer = class {
 	}
 };
 function yamlToPdf(inputPath, outputPath) {
+	const validation = validateYamlFile(inputPath);
+	if (validation.validation_status === "invalid") throw new Error(`Validazione YAML bloccante: ${validation.errors.map((error) => error.message).join("; ")}`);
 	const { model } = buildRecipeDocumentModel(inputPath);
 	new BrewdayPdfRenderer().render(model, outputPath);
 	return outputPath;
@@ -14267,15 +14435,18 @@ var YamlToPdfTool = class {
 			execute: () => {
 				try {
 					if (!existsSync(args.input_file)) throw new Error(`File non trovato: ${args.input_file}`);
+					const validation = validateYamlFile(args.input_file);
+					if (validation.validation_status === "invalid") throw new Error(`Validazione YAML bloccante: ${validation.errors.map((error) => error.message).join("; ")}`);
 					const { model } = buildRecipeDocumentModel(args.input_file);
 					const path = yamlToPdf(args.input_file, outputFile);
-					const warnings = model.sections.flatMap((section) => section.warnings);
+					const warnings = [...model.sections.flatMap((section) => section.warnings), ...validation.warnings.map((warning) => warning.message)];
 					return Promise.resolve({ output: JSON.stringify({
 						status: warnings.length || model.unmappedFields.length ? "warning" : "ok",
 						document_type: "pdf",
 						path,
 						recipe_name: model.metadata.name,
 						schema_version: model.schemaVersion,
+						validation_status: validation.validation_status,
 						warnings,
 						unmapped_fields: model.unmappedFields,
 						errors: []

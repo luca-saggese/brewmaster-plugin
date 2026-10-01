@@ -6,6 +6,7 @@ import { registerTool } from '../shim/tool-registry';
 import { toInputJsonSchema } from '../shim/input-schema';
 import { PDFLite } from '../shim/pdf-lite';
 import { buildRecipeDocumentModel, type OperationalSection, type RecipeDocumentModel, type TargetValue } from './recipe-document-model';
+import { validateYamlFile } from './yaml-validator';
 
 export const YamlToPdfInputSchema = z.object({
   input_file: z.string().describe('Path to the recipe YAML file.'),
@@ -68,6 +69,8 @@ class BrewdayPdfRenderer {
 }
 
 export function yamlToPdf(inputPath: string, outputPath: string): string {
+  const validation = validateYamlFile(inputPath);
+  if (validation.validation_status === 'invalid') throw new Error(`Validazione YAML bloccante: ${validation.errors.map(error => error.message).join('; ')}`);
   const { model } = buildRecipeDocumentModel(inputPath);
   new BrewdayPdfRenderer().render(model, outputPath);
   return outputPath;
@@ -80,7 +83,7 @@ export class YamlToPdfTool implements BuiltinTool<YamlToPdfInput> {
   resolveExecution(args: YamlToPdfInput): ToolExecution {
     const outputFile = args.output_file ?? args.input_file.replace(/\.ya?ml$/i, '') + '.pdf';
     return { description: `Generate brewday PDF from ${args.input_file}`, approvalRule: this.name, execute: () => {
-      try { if (!existsSync(args.input_file)) throw new Error(`File non trovato: ${args.input_file}`); const { model } = buildRecipeDocumentModel(args.input_file); const path = yamlToPdf(args.input_file, outputFile); const warnings = model.sections.flatMap(section => section.warnings); return Promise.resolve({ output: JSON.stringify({ status: warnings.length || model.unmappedFields.length ? 'warning' : 'ok', document_type: 'pdf', path, recipe_name: model.metadata.name, schema_version: model.schemaVersion, warnings, unmapped_fields: model.unmappedFields, errors: [] }) }); }
+      try { if (!existsSync(args.input_file)) throw new Error(`File non trovato: ${args.input_file}`); const validation = validateYamlFile(args.input_file); if (validation.validation_status === 'invalid') throw new Error(`Validazione YAML bloccante: ${validation.errors.map(error => error.message).join('; ')}`); const { model } = buildRecipeDocumentModel(args.input_file); const path = yamlToPdf(args.input_file, outputFile); const warnings = [...model.sections.flatMap(section => section.warnings), ...validation.warnings.map(warning => warning.message)]; return Promise.resolve({ output: JSON.stringify({ status: warnings.length || model.unmappedFields.length ? 'warning' : 'ok', document_type: 'pdf', path, recipe_name: model.metadata.name, schema_version: model.schemaVersion, validation_status: validation.validation_status, warnings, unmapped_fields: model.unmappedFields, errors: [] }) }); }
       catch (error) { return Promise.resolve({ isError: true, output: JSON.stringify({ status: 'error', document_type: 'pdf', path: outputFile, recipe_name: null, schema_version: null, warnings: [], unmapped_fields: [], errors: [error instanceof Error ? error.message : String(error)] }) }); }
     } };
   }

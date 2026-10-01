@@ -2159,48 +2159,6 @@ function buildSpiceOutput(input: SpiceCalculatorInput): SpiceCalculationOutput {
 
 // ── Tool ─────────────────────────────────────────────────────────────────────
 
-const SPICE_CALCULATOR_PARAMETERS: Record<string, unknown> = {
-    type: 'object',
-    properties: {
-        ingredient_name: { type: 'string', description: 'Nome dell\'ingrediente botanico in italiano. Es: "Pepe nero", "Coriandolo", "Cacao in granella", "Cold brew coffee".' },
-        spice_name: { type: 'string', description: 'Alias legacy di ingredient_name (deprecato).' },
-        batch_liters: { type: 'number', exclusiveMinimum: 0, description: 'Volume della birra a cui aggiungere la spezia (L).' },
-        intensity: { type: 'string', enum: ['low', 'medium', 'high'], default: 'medium', description: 'Intensità desiderata: low (bassa), medium (media), high (alta).' },
-        form: { type: 'string', enum: ['whole', 'cracked', 'ground', 'fresh', 'dried'], default: 'cracked', description: 'Forma fisica: whole (intero), cracked (spezzato), ground (macinato), fresh (fresco), dried (essiccato).' },
-        stage: { type: 'string', enum: ['mash', 'boil', 'whirlpool', 'fermentation', 'conditioning', 'keg', 'tincture'], default: 'conditioning', description: 'Stadio di aggiunta: mash, boil (bollitura), whirlpool, fermentation, conditioning (maturazione/dry-spice), keg (fusto), tincture (tintura separata).' },
-        contact_time_hours: { type: 'number', exclusiveMinimum: 0, default: 72, description: 'Tempo di contatto previsto in ore (es. 72 per 3 giorni).' },
-        temperature_celsius: { type: 'number', minimum: 0, maximum: 100, default: 20, description: 'Temperatura durante il contatto (°C).' },
-        freshness: { type: 'string', enum: ['freshly_cracked', 'recent', 'older', 'unknown'], default: 'recent', description: 'Freschezza: freshly_cracked (appena spezzata), recent (recente), older (non freschissima), unknown (sconosciuta).' },
-        capsaicinoids_mg_per_g: { type: 'number', exclusiveMinimum: 0, description: 'Solo per peperoncino: contenuto di capsaicinoidi in mg/g.' },
-        shu: { type: 'number', exclusiveMinimum: 0, description: 'Solo per peperoncino: gradi Scoville (SHU). Es: cayenna ~40000, habanero ~200000.' },
-        roast_level: { type: 'string', enum: ['light', 'medium', 'dark'], description: 'Livello di tostatura per caffè/cacao: light (chiaro), medium (medio), dark (scuro).' },
-        wood_toast_level: { type: 'string', enum: ['untoasted', 'light', 'medium', 'heavy'], description: 'Livello di tostatura per legni (rovere): untoasted, light, medium, heavy.' },
-        liquid_strength_relative: { type: 'number', exclusiveMinimum: 0, description: 'Per dosi liquide: concentrazione relativa vs riferimento (1.0 = cold brew 1:5).' },
-        coffee_grams_per_liter: { type: 'number', exclusiveMinimum: 0, description: 'Per cold brew: grammi di caffè per litro d\'acqua usati nella preparazione.' },
-        prepared_hours_ago: { type: 'number', minimum: 0, description: 'Per dosi liquide: ore trascorse dalla preparazione del concentrato.' },
-        abv: { type: 'number', minimum: 0, maximum: 20, default: 5, description: 'ABV della birra (%).' },
-        final_gravity: { type: 'number', minimum: 1.000, maximum: 1.200, description: 'Gravità finale (es. 1.012). Opzionale.' },
-        ibu: { type: 'number', minimum: 0, maximum: 200, description: 'IBU della birra. Opzionale.' },
-        roast_intensity: { type: 'number', minimum: 0, maximum: 1, default: 0, description: 'Intensità dei malti tostati (0 = nessuno, 1 = molto tostato).' },
-        hop_aroma_intensity: { type: 'number', minimum: 0, maximum: 1, default: 0, description: 'Intensità aromatica del luppolo (0 = nessuna, 1 = molto luppolata).' },
-        acidity: { type: 'number', minimum: 0, maximum: 1, default: 0, description: 'Acidità percepita (0 = non acida, 1 = molto acida).' },
-        other_spices: {
-            type: 'array',
-            items: { type: 'string', minLength: 1 },
-            default: [],
-            description: 'Altri ingredienti botanici già presenti nella ricetta per analisi di compatibilità.',
-        },
-        other_adjuncts: {
-            type: 'array',
-            items: { type: 'string', minLength: 1 },
-            description: 'Alias di other_spices.',
-        },
-        show_details: { type: 'boolean', default: true, description: 'Mostra dettagli completi (contributi sensoriali, profilo chimico, rischi).' },
-    },
-    required: ['batch_liters'],
-    additionalProperties: false,
-};
-
 export class BotanicalAdjunctCalculatorTool implements BuiltinTool<SpiceCalculatorInput> {
     readonly name = 'botanical_adjunct_calculator' as const;
     readonly description = 'Stima il dosaggio di ingredienti botanici per birra: spezie, scorze, cacao, caffè, tè, erbe, legni. Separa dose aromatica (volatili) dalla dose chemestetica (pungenza, calore). Considera forma, stadio, tempo, temperatura, matrice della birra, interazioni e freschezza. Supporta parametri specifici per categoria: SHU per peperoncino, roast_level per caffè/cacao. Restituisce intervallo con confidenza e protocollo di aggiustamento incrementale.';

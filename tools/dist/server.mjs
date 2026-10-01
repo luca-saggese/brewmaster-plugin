@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import readline from "node:readline";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 
 //#region node_modules/zod/v4/core/core.js
 /** A special constant with type `never` */
@@ -3948,7 +3949,7 @@ const ZodRecord = /*@__PURE__*/ $constructor("ZodRecord", (inst, def) => {
 	inst.keyType = def.keyType;
 	inst.valueType = def.valueType;
 });
-function record(keyType, valueType, params) {
+function record$1(keyType, valueType, params) {
 	return new ZodRecord({
 		type: "record",
 		keyType,
@@ -9329,7 +9330,7 @@ const CalculatorReferenceSchema = object({
 	calculation: string().optional(),
 	ok: boolean().optional(),
 	status: string().optional(),
-	result: record(string(), unknown()).nullable().optional(),
+	result: record$1(string(), unknown()).nullable().optional(),
 	errors: array(unknown()).optional()
 }).passthrough();
 const YamlValidatorInputSchema = object({
@@ -11790,11 +11791,11 @@ registerTool(YamlValidatorTool);
 * Richiesta di revisione qualitativa di una ricetta gia validata.
 * Questo tool non sostituisce il YAML validator e non esegue calcoli.
 */
-const RecipePayloadSchema = record(string(), unknown());
+const RecipePayloadSchema = record$1(string(), unknown());
 const RecipeValidatorInputSchema = object({
 	normalized_recipe: RecipePayloadSchema.describe("Ricetta normalizzata restituita da yaml_validator."),
 	validation_report: RecipePayloadSchema.describe("Report JSON restituito da yaml_validator."),
-	calculator_results: record(string(), unknown()).optional().describe("Risultati strutturati pertinenti dei calculator."),
+	calculator_results: record$1(string(), unknown()).optional().describe("Risultati strutturati pertinenti dei calculator."),
 	beer_style: string().optional().describe("Stile BJCP dichiarato, se non presente nella ricetta."),
 	base_style: string().optional().describe("Stile base per categorie Specialty."),
 	sensory_objectives: array(string()).optional().describe("Obiettivi sensoriali dichiarati."),
@@ -13140,365 +13141,673 @@ function defaultUnit(category) {
 registerTool(InventoryManagerTool);
 
 //#endregion
-//#region src/brewing/yaml-to-docx.ts
-/**
-* YAML to DOCX converter — converts a beer recipe YAML file to a .docx document.
-* Pure Node.js: uses js-yaml for parsing, generates Office Open XML (docx is a zip of XML).
-*/
-const YamlToDocxInputSchema = object({
-	input_file: string().describe("Path to the recipe YAML file."),
-	output_file: string().optional().describe("Path for the output .docx file. Defaults to input_file with .docx extension.")
-});
-function escapeXml(text) {
-	return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+//#region src/brewing/recipe-document-model.ts
+function record(value) {
+	return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
-/**
-* Render a YAML value as a list of lines with proper indentation, so nested
-* objects and arrays of objects read like a JSON-serialized structure
-* instead of a flat `[object Object]` blob.
-*/
-function valueLines(value, indent) {
-	if (value == null) return ["-"];
-	if (typeof value === "string") return [value];
-	if (typeof value === "number" || typeof value === "boolean") return [String(value)];
-	if (Array.isArray(value)) {
-		if (value.length === 0) return ["-"];
-		const lines = [];
-		for (const item of value) if (typeof item === "object" && item !== null) {
-			const entries = Object.entries(item);
-			if (entries.length === 0) {
-				lines.push("• -");
-				continue;
-			}
-			const [firstKey, firstVal] = entries[0];
-			const firstLines = valueLines(firstVal, indent + 1);
-			lines.push(`• ${firstKey}: ${firstLines[0] ?? ""}`);
-			for (let i = 1; i < firstLines.length; i++) lines.push(`  ${firstLines[i]}`);
-			for (let i = 1; i < entries.length; i++) {
-				const [k, v] = entries[i];
-				const vLines = valueLines(v, indent + 1);
-				lines.push(`  ${k}: ${vLines[0] ?? ""}`);
-				for (let j = 1; j < vLines.length; j++) lines.push(`    ${vLines[j]}`);
-			}
-		} else lines.push(`• ${valueLines(item, indent + 1)[0] ?? ""}`);
-		return lines;
-	}
-	if (typeof value === "object") {
-		const entries = Object.entries(value);
-		if (entries.length === 0) return ["-"];
-		const lines = [];
-		for (const [k, v] of entries) {
-			const vLines = valueLines(v, indent + 1);
-			lines.push(`${k}: ${vLines[0] ?? ""}`);
-			for (let i = 1; i < vLines.length; i++) lines.push(`  ${vLines[i]}`);
-		}
-		return lines;
-	}
-	return [String(value)];
+function num(value) {
+	return typeof value === "number" && Number.isFinite(value) ? value : void 0;
 }
-function yamlToDocx(inputPath, outputPath) {
-	const raw = readFileSync(inputPath, "utf-8");
-	const data = load(raw) ?? {};
-	let body = "";
-	const nome = String(data["nome"] ?? "Ricetta di Birra");
-	body += `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="36"/></w:rPr><w:t xml:space="preserve">${escapeXml(nome)}</w:t></w:r></w:p>`;
-	if (data["stile"]) body += `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:i/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">${escapeXml(String(data["stile"]))}</w:t></w:r></w:p>`;
-	if (data["descrizione"]) body += `<w:p><w:r><w:rPr><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(String(data["descrizione"]))}</w:t></w:r></w:p>`;
-	function heading(text) {
-		body += `<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="4" w:color="C0392B"/></w:pBdr></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="26"/><w:color w:val="C0392B"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
+function text(value) {
+	return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function formatNumber(value, digits = 2) {
+	return value === void 0 ? void 0 : Number.isInteger(value) ? String(value) : value.toFixed(digits);
+}
+function quantity(value, unit) {
+	const n = num(value);
+	return n === void 0 ? void 0 : `${formatNumber(n)} ${unit}`;
+}
+function firstText(source, keys) {
+	for (const key of keys) {
+		const value = text(source[key]);
+		if (value) return value;
 	}
-	function kv(label, value) {
-		const lines = valueLines(value, 0);
-		if (Array.isArray(value) || typeof value === "object" && value !== null) {
-			body += `<w:p><w:r><w:rPr><w:b/><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(label)}:</w:t></w:r></w:p>`;
-			for (const line of lines) body += `<w:p><w:r><w:rPr><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r></w:p>`;
-		} else body += `<w:p><w:r><w:rPr><w:b/><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(label)}: </w:t></w:r><w:r><w:rPr><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">${escapeXml(lines[0] ?? "-")}</w:t></w:r></w:p>`;
+}
+function firstNumber(source, keys) {
+	for (const key of keys) {
+		const value = num(source[key]);
+		if (value !== void 0) return value;
 	}
-	function simpleTable(header, rows) {
-		body += "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/><w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"C0392B\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"C0392B\"/></w:tblBorders></w:tblPr><w:tblGrid>";
-		const colWidth = Math.floor(9e3 / header.length);
-		for (let i = 0; i < header.length; i++) body += `<w:gridCol w:w="${colWidth}"/>`;
-		body += "</w:tblGrid>";
-		body += "<w:tr>";
-		for (const h of header) body += `<w:tc><w:tcPr><w:shd w:fill="C0392B" w:val="clear"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:color w:val="FFFFFF"/><w:sz w:val="19"/></w:rPr><w:t xml:space="preserve">${escapeXml(h)}</w:t></w:r></w:p></w:tc>`;
-		body += "</w:tr>";
-		for (const row of rows) {
-			body += "<w:tr>";
-			for (let c = 0; c < header.length; c++) body += `<w:tc><w:p><w:r><w:rPr><w:sz w:val="19"/></w:rPr><w:t xml:space="preserve">${escapeXml(row[c] ?? "-")}</w:t></w:r></w:p></w:tc>`;
-			body += "</w:tr>";
-		}
-		body += "</w:tbl>";
+}
+function target(label, value, suffix = "") {
+	if (value === void 0 || value === null || value === "") return void 0;
+	return {
+		label,
+		value: `${String(value)}${suffix}`
+	};
+}
+function measurement(label, unit) {
+	return {
+		label,
+		unit
+	};
+}
+function section(phase, title) {
+	return {
+		phase,
+		title,
+		actions: [],
+		targets: [],
+		measurements: [],
+		warnings: [],
+		notes: []
+	};
+}
+function parseObjectives(raw) {
+	const value = raw["obiettivi_sensoriali"];
+	if (Array.isArray(value)) return value.filter((item) => typeof item === "string").map((item) => ({
+		label: "Obiettivo sensoriale",
+		value: item
+	}));
+	if (typeof value === "string") return [{
+		label: "Obiettivo sensoriale",
+		value
+	}];
+	return [];
+}
+function buildModel(recipe, raw) {
+	raw["parametri"];
+	const mashRaw = record(raw["mash"]);
+	const waterRaw = record(raw["acqua"] ?? raw["agua"]);
+	raw["bollitura"];
+	const fermentationRaw = record(raw["fermentazione"]);
+	raw["confezionamento"];
+	const carbonationRaw = record(raw["carbonazione"]);
+	const sections = [];
+	const preparation = section("preparation", "Preparazione degli ingredienti");
+	recipe.grain_bill.forEach((grain) => preparation.actions.push({
+		phase: "preparation",
+		order: 10,
+		moment: "Prima della cotta",
+		action: "Preparare il malto",
+		ingredient: grain.malt,
+		quantity: quantity(grain.kg, "kg"),
+		note: [grain.percent !== void 0 ? `${grain.percent}%` : void 0, grain.note].filter(Boolean).join(" — ") || void 0
+	}));
+	recipe.hop_schedule.forEach((hop) => preparation.actions.push({
+		phase: "preparation",
+		order: 20,
+		moment: "Prima della cotta",
+		action: "Pesare e predisporre il luppolo",
+		ingredient: hop.variety,
+		quantity: quantity(hop.grams, "g"),
+		note: [hop.aa_percent !== void 0 ? `AA ${hop.aa_percent}%` : void 0, hop.note].filter(Boolean).join(" — ") || void 0
+	}));
+	recipe.spezie?.forEach((spice) => preparation.actions.push({
+		phase: "preparation",
+		order: 30,
+		moment: "Prima della cotta",
+		action: "Preparare l'adjunct",
+		ingredient: spice.nome,
+		quantity: quantity(spice.grammi, "g"),
+		note: spice.note
+	}));
+	recipe.zuccheri?.forEach((sugar) => preparation.actions.push({
+		phase: "preparation",
+		order: 40,
+		moment: "Prima della cotta",
+		action: "Pesare lo zucchero/fermentabile",
+		ingredient: sugar.tipo,
+		quantity: quantity(sugar.grammi, "g"),
+		note: sugar.note
+	}));
+	if (recipe.yeast.strain) preparation.actions.push({
+		phase: "preparation",
+		order: 50,
+		moment: "Prima dell'inoculo",
+		action: "Preparare il lievito",
+		ingredient: recipe.yeast.strain,
+		note: firstText(record(raw["lievito"]), ["forma", "note"])
+	});
+	sections.push(preparation);
+	if (Object.keys(waterRaw).length > 0 || recipe.mash_water_liters !== void 0 || recipe.sparge_water_liters !== void 0) {
+		const water = section("water", "Preparazione dell'acqua");
+		water.targets.push(...[
+			target("Acqua mash", recipe.mash_water_liters, " L"),
+			target("Acqua sparge", recipe.sparge_water_liters, " L"),
+			target("Acqua totale", recipe.total_water_liters, " L"),
+			target("pH mash target", firstNumber(mashRaw, ["ph_target", "pH_target"]), "")
+		].filter((item) => item !== void 0));
+		const salts = record(raw["mash_salts"] ?? raw["sales"]);
+		for (const [key, label, unit] of [
+			[
+				"gypsum_g",
+				"Gesso",
+				"g"
+			],
+			[
+				"cacl2_g",
+				"Cloruro di calcio",
+				"g"
+			],
+			[
+				"epsom_g",
+				"Sale di Epsom",
+				"g"
+			],
+			[
+				"nahco3_g",
+				"Bicarbonato",
+				"g"
+			],
+			[
+				"lactic_acid_ml",
+				"Acido lattico",
+				"mL"
+			]
+		]) if (num(salts[key]) !== void 0) water.actions.push({
+			phase: "water",
+			order: 10,
+			moment: "Preparazione acqua",
+			action: "Aggiungere al trattamento",
+			ingredient: label,
+			quantity: quantity(salts[key], unit)
+		});
+		if (recipe.mash_water_liters !== void 0) water.actions.push({
+			phase: "water",
+			order: 20,
+			moment: "Mash-in",
+			action: "Preparare il volume di acqua mash",
+			quantity: quantity(recipe.mash_water_liters, "L"),
+			note: "Per sistemi all-in-one, il volume sotto il cestello appartiene all’acqua mash."
+		});
+		if (recipe.sparge_water_liters !== void 0) water.actions.push({
+			phase: "water",
+			order: 30,
+			moment: "Sparge",
+			action: "Preparare il volume di acqua sparge",
+			quantity: quantity(recipe.sparge_water_liters, "L")
+		});
+		water.measurements.push(measurement("pH mash reale", "pH"));
+		sections.push(water);
 	}
-	const params = data["parametri"];
-	if (params && Object.keys(params).length > 0) {
-		heading("Parametri");
-		for (const [k, v] of Object.entries(params)) kv(k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), v);
+	if (raw["mash"] !== void 0) {
+		const mash = section("mash", "Mash-in e ammostamento");
+		mash.targets.push(...[
+			target("Temperatura mash-in", recipe.mash_in_temp_c, " °C"),
+			target("Temperatura mash", recipe.mash_temp_c, " °C"),
+			target("Volume acqua mash", recipe.mash_water_liters, " L")
+		].filter((item) => item !== void 0));
+		const steps = Array.isArray(mashRaw["steps"]) ? mashRaw["steps"] : [];
+		if (steps.length > 0) steps.forEach((step, index) => mash.actions.push({
+			phase: "mash",
+			order: 20 + index,
+			moment: `Step ${index + 1}`,
+			action: "Mantenere il mash",
+			temperature: quantity(step["temperatura_c"], "°C"),
+			duration: quantity(step["tempo_min"], "min"),
+			note: text(step["note"])
+		}));
+		else if (recipe.mash_temp_c !== void 0 && firstNumber(mashRaw, ["durata_min"]) !== void 0) mash.actions.push({
+			phase: "mash",
+			order: 20,
+			moment: "Mash",
+			action: "Mantenere il mash",
+			temperature: quantity(recipe.mash_temp_c, "°C"),
+			duration: quantity(firstNumber(mashRaw, ["durata_min"]), "min"),
+			note: recipe.mash_temp_c ? text(mashRaw["note"]) : void 0
+		});
+		mash.measurements.push(measurement("pH mash reale", "pH"));
+		sections.push(mash);
 	}
-	const grist = data["grist"];
-	if (grist && grist.length > 0) {
-		heading("Grist");
-		simpleTable([
-			"Malto",
-			"Kg",
-			"%",
-			"Note"
-		], grist.map((g) => [
-			String(g["malto"] ?? ""),
-			String(g["kg"] ?? ""),
-			String(g["percent"] ?? ""),
-			String(g["note"] ?? "")
-		]));
+	if (recipe.sparge_water_liters !== void 0 || raw["sparge"] !== void 0) {
+		const sparge = section("sparge", "Sparge e checkpoint pre-boil");
+		const spargeRaw = record(raw["sparge"]);
+		sparge.targets.push(...[
+			target("Acqua sparge", recipe.sparge_water_liters, " L"),
+			target("Volume pre-boil", recipe.pre_boil_volume_liters, " L"),
+			target("Densità pre-boil", recipe.pre_boil_og),
+			target("Temperatura sparge", firstNumber(spargeRaw, ["temperatura_c", "temperature_c"]), " °C")
+		].filter((item) => item !== void 0));
+		sparge.actions.push({
+			phase: "sparge",
+			order: 10,
+			moment: "Sparge",
+			action: text(spargeRaw["procedura"]) ?? "Eseguire lo sparge previsto dalla ricetta",
+			quantity: quantity(recipe.sparge_water_liters, "L"),
+			temperature: quantity(firstNumber(spargeRaw, ["temperatura_c", "temperature_c"]), "°C")
+		});
+		sparge.measurements.push(measurement("Volume misurato", "L"), measurement("Densità misurata", "SG"), measurement("pH reale", "pH"));
+		sections.push(sparge);
 	}
-	const hops = data["luppolatura"];
-	if (hops && hops.length > 0) {
-		heading("Luppolatura");
-		simpleTable([
-			"Varietà",
-			"g",
-			"Tempo",
-			"Uso",
-			"AA%",
-			"IBU",
-			"Note"
-		], hops.map((h) => [
-			String(h["varieta"] ?? ""),
-			String(h["grammi"] ?? ""),
-			String(h["tempo_min"] ?? ""),
-			String(h["uso"] ?? ""),
-			String(h["aa_percent"] ?? ""),
-			String(h["ibu_stimati"] ?? ""),
-			String(h["note"] ?? "")
-		]));
+	if (recipe.boil_time_minutes !== void 0 || recipe.hop_schedule.some((hop) => [
+		"boil",
+		"first_wort",
+		"flameout"
+	].includes(hop.use)) || recipe.spezie?.some((spice) => spice.uso === "boil")) {
+		const boil = section("boil", "Bollitura — timeline cronologica");
+		boil.targets.push(...[target("Durata bollitura", recipe.boil_time_minutes, " min"), target("Volume pre-boil", recipe.pre_boil_volume_liters, " L")].filter((item) => item !== void 0));
+		const boilMinutes = recipe.boil_time_minutes ?? 60;
+		recipe.hop_schedule.filter((hop) => [
+			"first_wort",
+			"boil",
+			"flameout"
+		].includes(hop.use)).forEach((hop) => {
+			const moment = hop.use === "first_wort" ? "First Wort" : hop.time_minutes === 0 ? "T 0 — Flameout" : `T −${hop.time_minutes} min`;
+			boil.actions.push({
+				phase: "boil",
+				order: hop.use === "first_wort" ? -1 : boilMinutes - hop.time_minutes,
+				moment,
+				action: `Aggiungere (${hop.use})`,
+				ingredient: hop.variety,
+				quantity: quantity(hop.grams, "g"),
+				note: [hop.aa_percent !== void 0 ? `AA ${hop.aa_percent}%` : void 0, hop.note].filter(Boolean).join(" — ") || void 0
+			});
+		});
+		recipe.spezie?.filter((spice) => spice.uso === "boil").forEach((spice) => boil.actions.push({
+			phase: "boil",
+			order: boilMinutes - (spice.tempo_min ?? 0),
+			moment: spice.tempo_min ? `T −${spice.tempo_min} min` : "T 0 — Fine bollitura",
+			action: "Aggiungere botanica",
+			ingredient: spice.nome,
+			quantity: quantity(spice.grammi, "g"),
+			note: spice.note
+		}));
+		boil.actions.sort((a, b) => a.order - b.order);
+		sections.push(boil);
 	}
-	for (const sec of [
-		"lievito",
-		"acqua",
-		"mash",
-		"bollitura",
-		"fermentazione",
-		"carbonazione"
-	]) {
-		const obj = data[sec];
-		if (obj && Object.keys(obj).length > 0) {
-			heading(sec.charAt(0).toUpperCase() + sec.slice(1));
-			for (const [k, v] of Object.entries(obj)) kv(k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), v);
-		}
+	if (recipe.post_boil_volume_liters !== void 0 || recipe.hop_schedule.some((hop) => ["whirlpool", "hop_stand"].includes(hop.use))) {
+		const post = section("post_boil", "Post-boil e whirlpool");
+		post.targets.push(...[target("Volume post-boil", recipe.post_boil_volume_liters, " L"), target("Densità post-boil", recipe.post_boil_og)].filter((item) => item !== void 0));
+		recipe.hop_schedule.filter((hop) => ["whirlpool", "hop_stand"].includes(hop.use)).forEach((hop) => post.actions.push({
+			phase: "post_boil",
+			order: 10,
+			moment: "Whirlpool",
+			action: "Aggiungere e mantenere il whirlpool",
+			ingredient: hop.variety,
+			quantity: quantity(hop.grams, "g"),
+			duration: hop.time_minutes ? `${hop.time_minutes} min` : void 0,
+			note: hop.note
+		}));
+		post.measurements.push(measurement("Volume post-boil misurato", "L"), measurement("Densità post-boil misurata", "SG"));
+		sections.push(post);
 	}
+	const cooling = section("cooling", "Raffreddamento, trasferimento e inoculo");
+	cooling.targets.push(...[target("Volume fermentatore", recipe.fermentation_volume_liters, " L"), target("Temperatura inoculo", firstNumber(record(raw["lievito"]), ["temperatura_inoculo_c", "temp_inoculo_c"]), " °C")].filter((item) => item !== void 0));
+	cooling.actions.push({
+		phase: "cooling",
+		order: 10,
+		moment: "Raffreddamento",
+		action: "Raffreddare il mosto alla temperatura di inoculo",
+		temperature: quantity(firstNumber(record(raw["lievito"]), ["temperatura_inoculo_c", "temp_inoculo_c"]), "°C")
+	});
+	if (recipe.yeast.strain) cooling.actions.push({
+		phase: "cooling",
+		order: 20,
+		moment: "Inoculo",
+		action: "Inoculare il lievito",
+		ingredient: recipe.yeast.strain,
+		quantity: text(record(raw["lievito"])["quantita"])
+	});
+	cooling.measurements.push(measurement("Volume effettivo nel fermentatore", "L"), measurement("OG effettiva", "SG"), measurement("Temperatura di inoculo", "°C"), measurement("Ora inoculo"));
+	sections.push(cooling);
+	if (raw["fermentazione"] !== void 0) {
+		const fermentation = section("fermentation", "Fermentazione");
+		fermentation.targets.push(...[
+			target("Temperatura fermentazione", recipe.fermentation_temp_c, " °C"),
+			target("Fermentazione primaria", recipe.primary_days, " giorni"),
+			target("Maturazione", recipe.conditioning_days, " giorni")
+		].filter((item) => item !== void 0));
+		if (recipe.primary_days !== void 0) fermentation.actions.push({
+			phase: "fermentation",
+			order: 10,
+			moment: `Giorni 0–${recipe.primary_days}`,
+			action: "Fermentazione primaria",
+			temperature: quantity(recipe.fermentation_temp_c, "°C"),
+			duration: `${recipe.primary_days} giorni`,
+			note: text(fermentationRaw["note"])
+		});
+		if (Boolean(fermentationRaw["cold_crash"])) fermentation.actions.push({
+			phase: "fermentation",
+			order: 30,
+			moment: "Cold crash",
+			action: "Raffreddare per il cold crash",
+			temperature: quantity(firstNumber(fermentationRaw, ["cold_crash_temp_c"]), "°C"),
+			duration: quantity(firstNumber(fermentationRaw, ["cold_crash_giorni"]), "giorni")
+		});
+		recipe.hop_schedule.filter((hop) => hop.use === "dry_hop").forEach((hop) => fermentation.actions.push({
+			phase: "fermentation",
+			order: 20,
+			moment: text(fermentationRaw["dry_hop_giorno"]) ? `Giorno ${String(fermentationRaw["dry_hop_giorno"])}` : "Dry hop",
+			action: "Aggiungere dry hop",
+			ingredient: hop.variety,
+			quantity: quantity(hop.grams, "g"),
+			note: hop.note
+		}));
+		recipe.spezie?.filter((spice) => [
+			"secondary",
+			"fermentation",
+			"conditioning",
+			"tincture",
+			"post_fermentation"
+		].includes(spice.uso)).forEach((spice) => {
+			const isTincture = spice.uso === "tincture" || /tintur/i.test(spice.note ?? "");
+			fermentation.actions.push({
+				phase: "fermentation",
+				order: 25,
+				moment: isTincture ? "Dopo bench trial" : "Aggiunta in fermentazione/secondaria",
+				action: isTincture ? "Dosare la tintura dopo bench trial" : "Aggiungere botanica",
+				ingredient: spice.nome,
+				quantity: quantity(spice.grammi, "g"),
+				note: spice.note
+			});
+			if (isTincture) fermentation.warnings.push(`La dose di ${spice.nome} resta da determinare sperimentalmente con bench trial.`);
+		});
+		fermentation.measurements.push(measurement("FG reale", "SG"), measurement("Temperatura reale", "°C"), measurement("Data fine fermentazione"));
+		fermentation.warnings.push("La fermentazione è conclusa solo dopo stabilità della FG, non per sola durata nominale.");
+		sections.push(fermentation);
+	}
+	if (raw["carbonazione"] !== void 0 || recipe.packaging_volume_liters !== void 0) {
+		const packaging = section("packaging", "Confezionamento e maturazione");
+		const method = recipe.carbonation_method ?? firstText(carbonationRaw, ["metodo"]);
+		packaging.targets.push(...[
+			target("Metodo", method),
+			target("Volume confezionamento", recipe.packaging_volume_liters, " L"),
+			target("Carbonazione", recipe.carbonation_volumes, " vol CO₂"),
+			target("Priming", recipe.priming_sugar_gl, " g/L")
+		].filter((item) => item !== void 0));
+		if (method && /bott|bottiglia/i.test(method) && recipe.priming_sugar_gl !== void 0) packaging.actions.push({
+			phase: "packaging",
+			order: 20,
+			moment: "Imbottigliamento",
+			action: "Aggiungere il fermentabile di priming",
+			ingredient: firstText(carbonationRaw, ["zucchero_tipo"]) ?? "Zucchero",
+			quantity: quantity(recipe.priming_sugar_gl * recipe.batch_size_liters, "g"),
+			note: `${recipe.priming_sugar_gl} g/L`
+		});
+		packaging.actions.unshift({
+			phase: "packaging",
+			order: 10,
+			moment: "Prima del confezionamento",
+			action: "Verificare stabilità della FG"
+		});
+		packaging.measurements.push(measurement("FG stabile verificata", "SG"), measurement("Volume reale confezionato", "L"), measurement("Data confezionamento"), measurement("Quantità effettivamente utilizzata", "g"));
+		sections.push(packaging);
+	}
+	const alternatives = Array.isArray(raw["alternative"]) ? raw["alternative"].map((item) => [
+		text(item["descrizione"]),
+		text(item["cambiamenti"]),
+		text(item["impatto"])
+	].filter(Boolean).join(" — ")).filter(Boolean) : [];
 	const handled = /* @__PURE__ */ new Set([
+		"schema_version",
 		"nome",
 		"stile",
+		"codice_bjcp",
 		"descrizione",
+		"note",
 		"parametri",
 		"grist",
 		"luppolatura",
 		"lievito",
-		"acqua",
 		"mash",
-		"bollitura",
 		"fermentazione",
+		"bollitura",
+		"acqua",
+		"agua",
+		"sparge",
+		"sales",
+		"mash_salts",
 		"carbonazione",
-		"note_critiche",
-		"alternative"
+		"spezie",
+		"zuccheri",
+		"confezionamento",
+		"obiettivi_sensoriali",
+		"vincoli_produzione",
+		"fonte",
+		"alternative",
+		"note_critiche"
 	]);
-	for (const [key, value] of Object.entries(data)) {
-		if (handled.has(key)) continue;
-		if (value == null) continue;
-		heading(key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
-		if (Array.isArray(value)) for (const item of value) if (typeof item === "object" && item !== null) for (const line of valueLines(item, 0)) body += `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r></w:p>`;
-		else body += `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">• ${escapeXml(String(item))}</w:t></w:r></w:p>`;
-		else if (typeof value === "object" && value !== null) for (const [k, v] of Object.entries(value)) kv(k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), v);
-		else body += `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${escapeXml(String(value))}</w:t></w:r></w:p>`;
+	const unmappedFields = Object.keys(raw).filter((key) => !handled.has(key));
+	return {
+		schemaVersion: recipe.schema_version ?? "unspecified",
+		metadata: {
+			name: recipe.recipe_name,
+			style: recipe.beer_style,
+			brewDate: measurement("Data della cotta"),
+			equipment: recipe.impianto,
+			description: recipe.descrizione
+		},
+		objectives: parseObjectives(raw),
+		summaryTargets: [
+			target("Batch target", recipe.batch_size_liters, " L"),
+			target("Volume pre-boil", recipe.pre_boil_volume_liters, " L"),
+			target("Volume post-boil", recipe.post_boil_volume_liters, " L"),
+			target("Volume fermentatore", recipe.fermentation_volume_liters, " L"),
+			target("Volume confezionato", recipe.packaging_volume_liters, " L"),
+			target("OG", recipe.og),
+			target("FG", recipe.fg),
+			target("ABV", recipe.abv_percent, "%"),
+			target("IBU", recipe.ibu),
+			target("EBC", recipe.ebc),
+			target("Efficienza", recipe.efficiency_percent, "%"),
+			target("Bollitura", recipe.boil_time_minutes, " min")
+		].filter((item) => item !== void 0),
+		sections,
+		notes: [recipe.note, ...Array.isArray(raw["note_critiche"]) ? raw["note_critiche"].filter((item) => typeof item === "string") : []].filter((item) => Boolean(item)),
+		alternatives,
+		unmappedFields
+	};
+}
+function buildRecipeDocumentModel(inputPath) {
+	const rawText = readFileSync(inputPath, "utf-8");
+	const loaded = load(rawText);
+	if (loaded === null || typeof loaded !== "object" || Array.isArray(loaded)) throw new Error("Il file YAML non contiene un oggetto ricetta valido.");
+	const raw = loaded;
+	const parserData = { ...raw };
+	delete parserData["note_critiche"];
+	delete parserData["alternative"];
+	const parserDirectory = mkdtempSync(join(tmpdir(), "brewmaster-document-"));
+	const parserPath = join(parserDirectory, "recipe.yaml");
+	writeFileSync(parserPath, dump(parserData), "utf-8");
+	let recipe;
+	try {
+		recipe = parseYamlRecipe(parserPath);
+	} finally {
+		rmSync(parserDirectory, {
+			recursive: true,
+			force: true
+		});
 	}
-	const notes = data["note_critiche"];
-	if (notes) {
-		heading("Note Critiche");
-		const items = Array.isArray(notes) ? notes : String(notes).split("\n");
-		for (const n of items) {
-			const trimmed = String(n).trim();
-			if (!trimmed) continue;
-			body += `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">• ${escapeXml(trimmed)}</w:t></w:r></w:p>`;
-		}
+	const errors = [];
+	if (raw["mash"] !== void 0) {
+		const mash = record(raw["mash"]);
+		if (recipe.mash_temp_c === void 0 && recipe.mash_steps === void 0) errors.push("mash.temperatura_c o mash.steps");
+		if (recipe.mash_steps === void 0 && firstNumber(mash, ["durata_min"]) === void 0) errors.push("mash.durata_min");
 	}
-	const alts = data["alternative"];
-	if (alts && alts.length > 0) {
-		heading("Alternative");
-		for (const a of alts) {
-			body += `<w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">• ${escapeXml(String(a["descrizione"] ?? ""))}</w:t></w:r></w:p>`;
-			if (a["cambiamenti"]) body += `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">  Cambiamenti: ${escapeXml(String(a["cambiamenti"]))}</w:t></w:r></w:p>`;
-			if (a["impatto"]) body += `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">  Impatto: ${escapeXml(String(a["impatto"]))}</w:t></w:r></w:p>`;
-		}
+	if (recipe.boil_time_minutes !== void 0 && recipe.pre_boil_volume_liters === void 0) errors.push("parametri.pre_boil_litri o bollitura.volume_pre_boil_litri");
+	if (errors.length > 0) throw new Error(`Esportazione incompleta: dati indispensabili mancanti: ${errors.join(", ")}`);
+	return {
+		recipe,
+		model: buildModel(recipe, raw)
+	};
+}
+
+//#endregion
+//#region src/brewing/yaml-to-docx.ts
+const YamlToDocxInputSchema = object({
+	input_file: string().describe("Path to the recipe YAML file."),
+	output_file: string().optional().describe("Path for the output .docx file.")
+});
+function escapeXml(value) {
+	return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+function paragraph(text, bold = false, size = 20) {
+	return `<w:p><w:r><w:rPr>${bold ? "<w:b/>" : ""}<w:sz w:val="${size}"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
+}
+function heading(text) {
+	return `<w:p><w:pPr><w:keepNext/><w:pBdr><w:bottom w:val="single" w:sz="5" w:space="4" w:color="8E2F23"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="8E2F23"/><w:sz w:val="28"/></w:rPr><w:t>${escapeXml(text)}</w:t></w:r></w:p>`;
+}
+function cell(text, header = false) {
+	return `<w:tc><w:tcPr><w:shd w:fill="${header ? "8E2F23" : "F5F1ED"}"/><w:tcMar><w:top w:w="70" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:start w:w="80" w:type="dxa"/><w:end w:w="80" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:r><w:rPr>${header ? "<w:b/><w:color w:val=\"FFFFFF\"/>" : ""}<w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p></w:tc>`;
+}
+function table(headers, rows) {
+	return `<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblLayout w:type="autofit"/><w:tblBorders><w:top w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="2"/><w:insideV w:val="single" w:sz="2"/></w:tblBorders></w:tblPr><w:tblGrid>${headers.map(() => "<w:gridCol w:w=\"1800\"/>").join("")}</w:tblGrid>${`<w:tr>${headers.map((item) => cell(item, true)).join("")}</w:tr>`}${rows.map((row) => `<w:tr>${headers.map((_, index) => cell(row[index] ?? "")).join("")}</w:tr>`).join("")}</w:tbl>`;
+}
+function targetRows$1(values) {
+	return values.map((item) => [item.label, item.value]);
+}
+function renderSection(section) {
+	let output = heading(section.title);
+	if (section.targets.length) output += table(["TARGET", "Valore"], targetRows$1(section.targets));
+	if (section.actions.length) output += table([
+		"Momento",
+		"Azione / ingrediente",
+		"Quantità",
+		"Temperatura / durata",
+		"Nota"
+	], section.actions.map((action) => [
+		action.moment,
+		[action.action, action.ingredient].filter(Boolean).join(": "),
+		action.quantity ?? "",
+		[action.temperature, action.duration].filter(Boolean).join(" / "),
+		action.note ?? ""
+	]));
+	if (section.measurements.length) output += table(["MISURATO", "Valore reale"], section.measurements.map((item) => [`${item.label}${item.unit ? ` (${item.unit})` : ""}`, "____________________________"]));
+	for (const warning of section.warnings) output += paragraph(`ATTENZIONE: ${warning}`);
+	for (const note of section.notes) output += paragraph(`NOTA: ${note}`);
+	return output;
+}
+function renderModel(model) {
+	let body = `<w:p><w:pPr><w:jc w:val="center"/><w:keepNext/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="8E2F23"/><w:sz w:val="36"/></w:rPr><w:t>${escapeXml(model.metadata.name)}</w:t></w:r></w:p>`;
+	body += `<w:p><w:pPr><w:jc w:val="center"/><w:keepNext/></w:pPr><w:r><w:rPr><w:i/><w:sz w:val="22"/></w:rPr><w:t>${escapeXml(model.metadata.style)}</w:t></w:r></w:p>`;
+	if (model.metadata.description) body += paragraph(model.metadata.description);
+	body += heading("A. Scheda iniziale");
+	body += table(["Campo", "TARGET / dato"], [
+		["Data della cotta", "____________________________"],
+		["Impianto", model.metadata.equipment ?? ""],
+		...targetRows$1(model.summaryTargets),
+		...targetRows$1(model.objectives)
+	]);
+	for (const section of model.sections) body += renderSection(section);
+	if (model.notes.length) {
+		body += heading("Note informative");
+		for (const note of model.notes) body += paragraph(`NOTA: ${note}`);
 	}
-	body += `<w:p><w:r><w:rPr><w:i/><w:sz w:val="16"/><w:color w:val="999999"/></w:rPr><w:t xml:space="preserve">Generato da Maestra Birraia AI</w:t></w:r></w:p>`;
-	const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<w:body>${body}</w:body></w:document>`;
-	const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>`;
-	const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`;
-	function crc32(data) {
-		let crc = 4294967295;
-		for (let i = 0; i < data.length; i++) {
-			crc ^= data[i];
-			for (let j = 0; j < 8; j++) crc = crc >>> 1 ^ (crc & 1 ? 3988292384 : 0);
-		}
-		return (crc ^ 4294967295) >>> 0;
+	if (model.alternatives.length) {
+		body += heading("Alternative non selezionate");
+		for (const alternative of model.alternatives) body += paragraph(alternative);
 	}
-	function buildZip(entries) {
-		const chunks = [];
-		const localHeaders = [];
-		let offset = 0;
-		for (const entry of entries) {
-			const nameBuf = Buffer.from(entry.name, "utf-8");
-			const crc = crc32(entry.data);
-			const header = Buffer.alloc(30 + nameBuf.length);
-			let pos = 0;
-			header.writeUInt32LE(67324752, pos);
-			pos += 4;
-			header.writeUInt16LE(20, pos);
-			pos += 2;
-			header.writeUInt16LE(2048, pos);
-			pos += 2;
-			header.writeUInt16LE(0, pos);
-			pos += 2;
-			header.writeUInt16LE(0, pos);
-			pos += 2;
-			header.writeUInt16LE(0, pos);
-			pos += 2;
-			header.writeUInt32LE(crc, pos);
-			pos += 4;
-			header.writeUInt32LE(entry.data.length, pos);
-			pos += 4;
-			header.writeUInt32LE(entry.data.length, pos);
-			pos += 4;
-			header.writeUInt16LE(nameBuf.length, pos);
-			pos += 2;
-			header.writeUInt16LE(0, pos);
-			pos += 2;
-			nameBuf.copy(header, pos);
-			chunks.push(header);
-			chunks.push(entry.data);
-			localHeaders.push({
-				offset,
-				name: entry.name,
-				crc,
-				size: entry.data.length
-			});
-			offset += header.length + entry.data.length;
-		}
-		const cdChunks = [];
-		let cdOffset = offset;
-		for (const lh of localHeaders) {
-			const nameBuf = Buffer.from(lh.name, "utf-8");
-			const cd = Buffer.alloc(46 + nameBuf.length);
-			let pos = 0;
-			cd.writeUInt32LE(33639248, pos);
-			pos += 4;
-			cd.writeUInt16LE(20, pos);
-			pos += 2;
-			cd.writeUInt16LE(20, pos);
-			pos += 2;
-			cd.writeUInt16LE(2048, pos);
-			pos += 2;
-			cd.writeUInt16LE(0, pos);
-			pos += 2;
-			cd.writeUInt16LE(0, pos);
-			pos += 2;
-			cd.writeUInt16LE(0, pos);
-			pos += 2;
-			cd.writeUInt32LE(lh.crc, pos);
-			pos += 4;
-			cd.writeUInt32LE(lh.size, pos);
-			pos += 4;
-			cd.writeUInt32LE(lh.size, pos);
-			pos += 4;
-			cd.writeUInt16LE(nameBuf.length, pos);
-			pos += 2;
-			cd.writeUInt16LE(0, pos);
-			pos += 2;
-			cd.writeUInt16LE(0, pos);
-			pos += 2;
-			cd.writeUInt16LE(0, pos);
-			pos += 2;
-			cd.writeUInt16LE(0, pos);
-			pos += 2;
-			cd.writeUInt32LE(0, pos);
-			pos += 4;
-			cd.writeUInt32LE(lh.offset, pos);
-			pos += 4;
-			nameBuf.copy(cd, pos);
-			cdChunks.push(cd);
-			cdOffset += cd.length;
-		}
-		const eocd = Buffer.alloc(22);
-		let pos = 0;
-		eocd.writeUInt32LE(101010256, pos);
-		pos += 4;
-		eocd.writeUInt16LE(0, pos);
-		pos += 2;
-		eocd.writeUInt16LE(0, pos);
-		pos += 2;
-		eocd.writeUInt16LE(entries.length, pos);
-		pos += 2;
-		eocd.writeUInt16LE(entries.length, pos);
-		pos += 2;
-		eocd.writeUInt32LE(cdOffset - offset, pos);
-		pos += 4;
-		eocd.writeUInt32LE(offset, pos);
-		pos += 4;
-		eocd.writeUInt16LE(0, pos);
-		return Buffer.concat([
-			...chunks,
-			...cdChunks,
-			eocd
-		]);
+	if (model.unmappedFields.length) {
+		body += heading("Campi YAML non mappati");
+		body += paragraph(model.unmappedFields.join(", "));
 	}
-	const zip = buildZip([
+	return body;
+}
+function crc32(data) {
+	let crc = 4294967295;
+	for (const byte of data) {
+		crc ^= byte;
+		for (let bit = 0; bit < 8; bit++) crc = crc >>> 1 ^ (crc & 1 ? 3988292384 : 0);
+	}
+	return (crc ^ 4294967295) >>> 0;
+}
+function zip(entries) {
+	const local = [], central = [], offsets = [];
+	let offset = 0;
+	for (const entry of entries) {
+		const name = Buffer.from(entry.name, "utf8");
+		const header = Buffer.alloc(30 + name.length);
+		header.writeUInt32LE(67324752, 0);
+		header.writeUInt16LE(20, 4);
+		header.writeUInt16LE(2048, 6);
+		header.writeUInt32LE(crc32(entry.data), 14);
+		header.writeUInt32LE(entry.data.length, 18);
+		header.writeUInt32LE(entry.data.length, 22);
+		header.writeUInt16LE(name.length, 26);
+		name.copy(header, 30);
+		offsets.push(offset);
+		local.push(header, entry.data);
+		offset += header.length + entry.data.length;
+	}
+	const centralStart = offset;
+	for (let index = 0; index < entries.length; index++) {
+		const entry = entries[index];
+		const name = Buffer.from(entry.name, "utf8");
+		const header = Buffer.alloc(46 + name.length);
+		header.writeUInt32LE(33639248, 0);
+		header.writeUInt16LE(20, 4);
+		header.writeUInt16LE(20, 6);
+		header.writeUInt16LE(2048, 8);
+		header.writeUInt32LE(crc32(entry.data), 16);
+		header.writeUInt32LE(entry.data.length, 20);
+		header.writeUInt32LE(entry.data.length, 24);
+		header.writeUInt16LE(name.length, 28);
+		header.writeUInt32LE(offsets[index], 42);
+		name.copy(header, 46);
+		central.push(header);
+		offset += header.length;
+	}
+	const end = Buffer.alloc(22);
+	end.writeUInt32LE(101010256, 0);
+	end.writeUInt16LE(entries.length, 8);
+	end.writeUInt16LE(entries.length, 10);
+	end.writeUInt32LE(offset - centralStart, 12);
+	end.writeUInt32LE(centralStart, 16);
+	return Buffer.concat([
+		...local,
+		...central,
+		end
+	]);
+}
+function yamlToDocx(inputPath, outputPath) {
+	const { model } = buildRecipeDocumentModel(inputPath);
+	const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${renderModel(model)}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="850" w:bottom="850" w:left="850"/></w:sectPr></w:body></w:document>`;
+	writeFileSync(outputPath, zip([
 		{
 			name: "[Content_Types].xml",
-			data: Buffer.from(contentTypesXml, "utf-8")
+			data: Buffer.from("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/></Types>")
 		},
 		{
 			name: "_rels/.rels",
-			data: Buffer.from(relsXml, "utf-8")
+			data: Buffer.from("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/></Relationships>")
 		},
 		{
 			name: "word/document.xml",
-			data: Buffer.from(documentXml, "utf-8")
+			data: Buffer.from(documentXml)
 		}
-	]);
-	writeFileSync(outputPath, zip);
-	return `DOCX saved: ${outputPath}`;
+	]));
+	return outputPath;
 }
 var YamlToDocxTool = class {
 	name = "yaml_to_docx";
-	description = "Convert a beer recipe YAML file to a .docx (Word) document. Pure Node.js — generates valid Office Open XML, no external dependencies beyond js-yaml.";
+	description = "Genera una scheda operativa di cotta DOCX compilabile da una ricetta YAML, usando il modello operativo condiviso.";
 	parameters = toInputJsonSchema(YamlToDocxInputSchema);
 	resolveExecution(args) {
-		const inputFile = args.input_file;
-		const outputFile = args.output_file ?? inputFile.replace(/\.ya?ml$/i, "") + ".docx";
+		const outputFile = args.output_file ?? args.input_file.replace(/\.ya?ml$/i, "") + ".docx";
 		return {
-			description: `Convert ${inputFile} → DOCX`,
+			description: `Generate brewday DOCX from ${args.input_file}`,
 			approvalRule: this.name,
 			execute: () => {
 				try {
-					if (!existsSync(inputFile)) return Promise.resolve({
-						isError: true,
-						output: `File not found: ${inputFile}`
-					});
-					const result = yamlToDocx(inputFile, outputFile);
-					return Promise.resolve({ output: result });
+					if (!existsSync(args.input_file)) throw new Error(`File non trovato: ${args.input_file}`);
+					const { model } = buildRecipeDocumentModel(args.input_file);
+					const path = yamlToDocx(args.input_file, outputFile);
+					const warnings = model.sections.flatMap((section) => section.warnings);
+					return Promise.resolve({ output: JSON.stringify({
+						status: warnings.length || model.unmappedFields.length ? "warning" : "ok",
+						document_type: "docx",
+						path,
+						recipe_name: model.metadata.name,
+						schema_version: model.schemaVersion,
+						warnings,
+						unmapped_fields: model.unmappedFields,
+						errors: []
+					}) });
 				} catch (error) {
 					return Promise.resolve({
 						isError: true,
-						output: error instanceof Error ? error.message : String(error)
+						output: JSON.stringify({
+							status: "error",
+							document_type: "docx",
+							path: outputFile,
+							recipe_name: null,
+							schema_version: null,
+							warnings: [],
+							unmapped_fields: [],
+							errors: [error instanceof Error ? error.message : String(error)]
+						})
 					});
 				}
 			}
@@ -13803,337 +14112,187 @@ var PDFLite = class {
 
 //#endregion
 //#region src/brewing/yaml-to-pdf.ts
-/**
-* YAML to PDF converter — converts a beer recipe YAML to a styled PDF.
-* Uses the dependency-free `PDFLite` shim (see ../shim/pdf-lite.ts) instead of
-* pdfkit, so the MCP server can ship as a single bundled file.
-*/
 const YamlToPdfInputSchema = object({
 	input_file: string().describe("Path to the recipe YAML file."),
 	output_file: string().optional().describe("Path for the output .pdf file.")
 });
-const MARGIN = 50;
-const USABLE_W = 495;
-const COLOR_PRIMARY = "#c0392b";
-const COLOR_TEXT = "#1a1a1a";
-const COLOR_MUTED = "#7f8c8d";
-function yamlToPdf(inputPath, outputPath) {
-	const raw = readFileSync(inputPath, "utf-8");
-	const data = load(raw) ?? {};
-	const doc = new PDFLite({
+const MARGIN = 42;
+const USABLE_W = 511;
+const PRIMARY = "#8e2f23";
+const TEXT = "#1a1a1a";
+const MUTED = "#68615d";
+function wrapCount(value, width) {
+	return Math.max(1, Math.ceil(value.length / Math.max(1, Math.floor(width / 5.2))));
+}
+function targetRows(values) {
+	return values.map((item) => [item.label, item.value]);
+}
+var BrewdayPdfRenderer = class {
+	doc = new PDFLite({
 		size: "A4",
 		margins: {
-			top: 50,
-			bottom: 50,
-			left: 50,
-			right: 50
+			top: MARGIN,
+			bottom: MARGIN,
+			left: MARGIN,
+			right: MARGIN
 		}
 	});
-	let y = doc.y;
-	doc.font("Helvetica-Bold").fontSize(22).fillColor(COLOR_PRIMARY).text(String(data["nome"] ?? "Ricetta di Birra"), MARGIN, y, { align: "center" });
-	y = doc.y + 12;
-	if (data["stile"]) {
-		doc.font("Helvetica-Oblique").fontSize(12).fillColor(COLOR_MUTED).text(String(data["stile"]), MARGIN, y, { align: "center" });
-		y = doc.y + 16;
+	widths = [115, 396];
+	ensure(height) {
+		if (this.doc.y + height > 800) this.doc.addPage();
 	}
-	if (data["descrizione"]) {
-		y += 4;
-		doc.font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text(String(data["descrizione"]), MARGIN, y, {
+	title(text) {
+		this.ensure(35);
+		this.doc.font("Helvetica-Bold").fontSize(14).fillColor(PRIMARY).text(text, MARGIN, this.doc.y + 6, { width: USABLE_W });
+		this.doc.moveTo(MARGIN, this.doc.y + 2).lineTo(553, this.doc.y + 2).strokeColor(PRIMARY).lineWidth(1).stroke();
+		this.doc.y += 8;
+	}
+	paragraph(text, bold = false) {
+		this.ensure(24);
+		this.doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(9.5).fillColor(TEXT).text(text, MARGIN, this.doc.y + 2, {
 			width: USABLE_W,
-			align: "left"
+			lineGap: 2
 		});
-		y = doc.y + 12;
+		this.doc.y += 3;
 	}
-	function section(title) {
-		if (doc.y > 762) doc.addPage();
-		const sy = doc.y + 6;
-		doc.font("Helvetica-Bold").fontSize(14).fillColor(COLOR_PRIMARY).text(title, MARGIN, sy);
-		doc.moveTo(MARGIN, doc.y + 3).lineTo(545, doc.y + 3).strokeColor(COLOR_PRIMARY).lineWidth(1.5).stroke();
-		return doc.y + 9;
-	}
-	/**
-	* Render a YAML value as a list of lines with proper indentation, so nested
-	* objects and arrays of objects read like a JSON-serialized structure
-	* instead of a flat `[object Object]` blob.
-	*/
-	function valueLines(value, indent) {
-		if (value == null) return ["-"];
-		if (typeof value === "string") return [value];
-		if (typeof value === "number" || typeof value === "boolean") return [String(value)];
-		if (Array.isArray(value)) {
-			if (value.length === 0) return ["-"];
-			const lines = [];
-			for (const item of value) if (typeof item === "object" && item !== null) {
-				const entries = Object.entries(item);
-				if (entries.length === 0) {
-					lines.push("• -");
-					continue;
-				}
-				const [firstKey, firstVal] = entries[0];
-				const firstLines = valueLines(firstVal, indent + 1);
-				lines.push(`• ${firstKey}: ${firstLines[0] ?? ""}`);
-				for (let i = 1; i < firstLines.length; i++) lines.push(`  ${firstLines[i]}`);
-				for (let i = 1; i < entries.length; i++) {
-					const [k, v] = entries[i];
-					const vLines = valueLines(v, indent + 1);
-					lines.push(`  ${k}: ${vLines[0] ?? ""}`);
-					for (let j = 1; j < vLines.length; j++) lines.push(`    ${vLines[j]}`);
-				}
-			} else lines.push(`• ${valueLines(item, indent + 1)[0] ?? ""}`);
-			return lines;
-		}
-		if (typeof value === "object") {
-			const entries = Object.entries(value);
-			if (entries.length === 0) return ["-"];
-			const lines = [];
-			for (const [k, v] of entries) {
-				const vLines = valueLines(v, indent + 1);
-				lines.push(`${k}: ${vLines[0] ?? ""}`);
-				for (let i = 1; i < vLines.length; i++) lines.push(`  ${vLines[i]}`);
+	table(headers, rows) {
+		const widths = headers.length === 2 ? this.widths : headers.map(() => USABLE_W / headers.length);
+		let headerPending = true;
+		const drawHeader = () => {
+			this.ensure(24);
+			let x = MARGIN;
+			headers.forEach((header, index) => {
+				const width = widths[index];
+				this.doc.rect(x, this.doc.y, width, 22).fill(PRIMARY);
+				this.doc.font("Helvetica-Bold").fontSize(8).fillColor("#ffffff").text(header, x + 3, this.doc.y + 5, { width: width - 6 });
+				x += width;
+			});
+			this.doc.y += 22;
+			headerPending = false;
+		};
+		drawHeader();
+		for (const row of rows) {
+			const lines = row.map((value, index) => wrapCount(value, widths[index] - 8));
+			const height = Math.max(20, Math.max(...lines) * 11 + 8);
+			if (this.doc.y + height > 800) {
+				this.doc.addPage();
+				headerPending = true;
 			}
-			return lines;
-		}
-		return [String(value)];
-	}
-	function kv(label, value) {
-		const lines = valueLines(value, 0);
-		const isComplex = Array.isArray(value) || typeof value === "object" && value !== null;
-		if (doc.y > 792) doc.addPage();
-		if (isComplex) {
-			doc.font("Helvetica-Bold").fontSize(10).fillColor("#555555").text(label + ":", MARGIN, doc.y + 1, { lineGap: 4 });
-			for (const line of lines) {
-				if (doc.y > 792) doc.addPage();
-				doc.font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text(line, 62, doc.y + 1, {
-					width: 483,
-					lineGap: 4
+			if (headerPending) drawHeader();
+			let x = MARGIN;
+			row.forEach((value, index) => {
+				const width = widths[index];
+				this.doc.rect(x, this.doc.y, width, height).fill("#f5f1ed");
+				this.doc.font("Helvetica").fontSize(8.5).fillColor(TEXT).text(value, x + 3, this.doc.y + 5, {
+					width: width - 6,
+					lineGap: 1
 				});
-			}
-		} else doc.font("Helvetica-Bold").fontSize(10).fillColor("#555555").text(label + ": ", MARGIN, doc.y + 1, {
-			continued: true,
-			lineGap: 4
-		}).font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text(lines[0] ?? "-", { lineGap: 4 });
-		return doc.y;
-	}
-	/**
-	* Render a top-level section generically: an array of strings becomes a
-	* bulleted list (one line per item), an array of objects becomes a list of
-	* indented blocks, and a plain object becomes key/value lines.
-	*/
-	function renderSection(title, value) {
-		doc.y = section(title);
-		if (Array.isArray(value)) for (const item of value) if (typeof item === "object" && item !== null) {
-			const lines = valueLines(item, 0);
-			for (const line of lines) {
-				if (doc.y > 792) doc.addPage();
-				doc.font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text(line, 60, doc.y + 1, {
-					width: 485,
-					lineGap: 4
-				});
-			}
-			doc.y += 2;
-		} else {
-			if (doc.y > 792) doc.addPage();
-			doc.font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text("• " + String(item), 60, doc.y + 1, {
-				width: 485,
-				lineGap: 4
+				x += width;
 			});
+			this.doc.y += height;
 		}
-		else if (typeof value === "object" && value !== null) for (const [k, v] of Object.entries(value)) {
-			const label = k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-			doc.y = kv(label, v);
-		}
-		else {
-			if (doc.y > 792) doc.addPage();
-			doc.font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text(String(value), 60, doc.y + 1, {
-				width: 485,
-				lineGap: 4
-			});
-		}
-		return doc.y + 4;
+		this.doc.y += 7;
 	}
-	function simpleTable(header, rows, colWidths) {
-		if (doc.y > 722) doc.addPage();
-		const tableTop = doc.y + 4;
-		const rowH = 18;
-		let x = MARGIN;
-		for (let c = 0; c < header.length; c++) {
-			doc.rect(x, tableTop, colWidths[c], rowH).fill(COLOR_PRIMARY);
-			doc.font("Helvetica-Bold").fontSize(9).fillColor("#ffffff").text(header[c], x + 3, tableTop + 4, {
-				width: colWidths[c] - 6,
-				align: "left"
-			});
-			x += colWidths[c];
-		}
-		let ry = tableTop + rowH;
-		for (let ri = 0; ri < rows.length; ri++) {
-			if (ry > 782) {
-				doc.addPage();
-				ry = MARGIN;
-			}
-			x = MARGIN;
-			const fill = ri % 2 === 0 ? "#fafafa" : "#ffffff";
-			for (let c = 0; c < header.length; c++) {
-				doc.rect(x, ry, colWidths[c], rowH).fill(fill);
-				doc.font("Helvetica").fontSize(9).fillColor(COLOR_TEXT).text(rows[ri]?.[c] ?? "-", x + 3, ry + 4, { width: colWidths[c] - 6 });
-				x += colWidths[c];
-			}
-			ry += rowH;
-		}
-		return ry + 6;
+	section(section) {
+		this.title(section.title);
+		if (section.targets.length) this.table(["TARGET", "Valore"], targetRows(section.targets));
+		if (section.actions.length) this.table([
+			"Momento",
+			"Azione / ingrediente",
+			"Quantità",
+			"Temp. / durata",
+			"Nota"
+		], section.actions.map((action) => [
+			action.moment,
+			[action.action, action.ingredient].filter(Boolean).join(": "),
+			action.quantity ?? "",
+			[action.temperature, action.duration].filter(Boolean).join(" / "),
+			action.note ?? ""
+		]));
+		if (section.measurements.length) this.table(["MISURATO", "Valore reale"], section.measurements.map((item) => [`${item.label}${item.unit ? ` (${item.unit})` : ""}`, "____________________________"]));
+		for (const warning of section.warnings) this.paragraph(`ATTENZIONE: ${warning}`);
+		for (const note of section.notes) this.paragraph(`NOTA: ${note}`);
 	}
-	const params = data["parametri"];
-	if (params && Object.keys(params).length > 0) {
-		y = section("Parametri");
-		for (const [k, v] of Object.entries(params)) y = kv(k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), v);
-		y += 6;
-	}
-	const grist = data["grist"];
-	if (grist && grist.length > 0) {
-		y = section("Grist");
-		y = simpleTable([
-			"Malto",
-			"Kg",
-			"%",
-			"Note"
-		], grist.map((g) => [
-			String(g["malto"] ?? ""),
-			String(g["kg"] ?? ""),
-			String(g["percent"] ?? ""),
-			String(g["note"] ?? "")
-		]), [
-			200,
-			50,
-			50,
-			195
+	render(model, outputPath) {
+		this.doc.font("Helvetica-Bold").fontSize(22).fillColor(PRIMARY).text(model.metadata.name, MARGIN, this.doc.y, {
+			width: USABLE_W,
+			align: "center"
+		});
+		this.doc.font("Helvetica-Oblique").fontSize(11).fillColor(MUTED).text(model.metadata.style, MARGIN, this.doc.y + 4, {
+			width: USABLE_W,
+			align: "center"
+		});
+		if (model.metadata.description) this.paragraph(model.metadata.description);
+		this.title("A. Scheda iniziale");
+		this.table(["Campo", "TARGET / dato"], [
+			["Data della cotta", "____________________________"],
+			["Impianto", model.metadata.equipment ?? ""],
+			...targetRows(model.summaryTargets),
+			...targetRows(model.objectives)
 		]);
-	}
-	const hops = data["luppolatura"];
-	if (hops && hops.length > 0) {
-		y = section("Luppolatura");
-		y = simpleTable([
-			"Varietà",
-			"g",
-			"Tempo",
-			"Uso",
-			"AA%",
-			"IBU",
-			"Note"
-		], hops.map((h) => [
-			String(h["varieta"] ?? ""),
-			String(h["grammi"] ?? ""),
-			String(h["tempo_min"] ?? ""),
-			String(h["uso"] ?? ""),
-			String(h["aa_percent"] ?? ""),
-			String(h["ibu_stimati"] ?? ""),
-			String(h["note"] ?? "")
-		]), [
-			110,
-			45,
-			50,
-			55,
-			45,
-			45,
-			145
-		]);
-	}
-	for (const sec of [
-		"lievito",
-		"acqua",
-		"mash",
-		"bollitura",
-		"fermentazione",
-		"carbonazione"
-	]) {
-		const obj = data[sec];
-		if (obj && Object.keys(obj).length > 0) {
-			doc.y = section(sec.charAt(0).toUpperCase() + sec.slice(1));
-			for (const [k, v] of Object.entries(obj)) y = kv(k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), v);
-			y += 4;
+		for (const section of model.sections) this.section(section);
+		if (model.notes.length) {
+			this.title("Note informative");
+			for (const note of model.notes) this.paragraph(`NOTA: ${note}`);
 		}
-	}
-	const notes = data["note_critiche"];
-	if (notes) {
-		y = section("Note Critiche");
-		const items = Array.isArray(notes) ? notes : String(notes).split("\n");
-		for (const n of items) {
-			const trimmed = String(n).trim();
-			if (!trimmed) continue;
-			if (doc.y > 802) doc.addPage();
-			doc.font("Helvetica").fontSize(10).fillColor(COLOR_TEXT).text("• " + trimmed, 60, doc.y + 2, {
-				width: 485,
-				lineGap: 4
-			});
+		if (model.alternatives.length) {
+			this.title("Alternative non selezionate");
+			for (const alternative of model.alternatives) this.paragraph(alternative);
 		}
-		y = doc.y;
-	}
-	const alts = data["alternative"];
-	if (alts && alts.length > 0) {
-		y = section("Alternative");
-		for (const a of alts) {
-			if (doc.y > 792) doc.addPage();
-			doc.font("Helvetica-Bold").fontSize(10).fillColor(COLOR_TEXT).text("• " + String(a["descrizione"] ?? ""), 60, doc.y + 2, {
-				width: 485,
-				lineGap: 4
-			});
-			if (a["cambiamenti"]) doc.font("Helvetica").fontSize(9).fillColor(COLOR_MUTED).text("Cambiamenti: " + String(a["cambiamenti"]), 70, doc.y + 1, {
-				width: 475,
-				lineGap: 4
-			});
-			if (a["impatto"]) doc.font("Helvetica").fontSize(9).fillColor(COLOR_MUTED).text("Impatto: " + String(a["impatto"]), 70, doc.y + 1, {
-				width: 475,
-				lineGap: 4
-			});
-			doc.y += 2;
+		if (model.unmappedFields.length) {
+			this.title("Campi YAML non mappati");
+			this.paragraph(model.unmappedFields.join(", "));
 		}
+		this.doc.font("Helvetica-Oblique").fontSize(7.5).fillColor(MUTED).text("Scheda operativa generata da Maestra Birraia AI", MARGIN, Math.min(this.doc.y + 10, 800), {
+			width: USABLE_W,
+			align: "center"
+		});
+		this.doc.save(outputPath);
 	}
-	const handled = /* @__PURE__ */ new Set([
-		"nome",
-		"stile",
-		"descrizione",
-		"parametri",
-		"grist",
-		"luppolatura",
-		"lievito",
-		"acqua",
-		"mash",
-		"bollitura",
-		"fermentazione",
-		"carbonazione",
-		"note_critiche",
-		"alternative"
-	]);
-	for (const [key, value] of Object.entries(data)) {
-		if (handled.has(key)) continue;
-		if (value == null) continue;
-		y = renderSection(key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), value);
-	}
-	doc.y += 10;
-	doc.font("Helvetica-Oblique").fontSize(8).fillColor(COLOR_MUTED).text("Generato da Maestra Birraia AI — Kimi Code Brewing Assistant", MARGIN, doc.y, { align: "center" });
-	doc.save(outputPath);
+};
+function yamlToPdf(inputPath, outputPath) {
+	const { model } = buildRecipeDocumentModel(inputPath);
+	new BrewdayPdfRenderer().render(model, outputPath);
 	return outputPath;
 }
 var YamlToPdfTool = class {
 	name = "yaml_to_pdf";
-	description = "Convert a beer recipe YAML file to a professionally styled PDF document. Uses pdfkit for reliable PDF generation.";
+	description = "Genera una scheda operativa di cotta PDF A4 con PDFLite, usando lo stesso modello operativo del DOCX.";
 	parameters = toInputJsonSchema(YamlToPdfInputSchema);
 	resolveExecution(args) {
-		const inputFile = args.input_file;
-		const outputFile = args.output_file ?? inputFile.replace(/\.ya?ml$/i, "") + ".pdf";
+		const outputFile = args.output_file ?? args.input_file.replace(/\.ya?ml$/i, "") + ".pdf";
 		return {
-			description: `Convert ${inputFile} → PDF`,
+			description: `Generate brewday PDF from ${args.input_file}`,
 			approvalRule: this.name,
 			execute: () => {
 				try {
-					if (!existsSync(inputFile)) return Promise.resolve({
-						isError: true,
-						output: `File not found: ${inputFile}`
-					});
-					const result = yamlToPdf(inputFile, outputFile);
-					return Promise.resolve({ output: `PDF saved: ${result}` });
+					if (!existsSync(args.input_file)) throw new Error(`File non trovato: ${args.input_file}`);
+					const { model } = buildRecipeDocumentModel(args.input_file);
+					const path = yamlToPdf(args.input_file, outputFile);
+					const warnings = model.sections.flatMap((section) => section.warnings);
+					return Promise.resolve({ output: JSON.stringify({
+						status: warnings.length || model.unmappedFields.length ? "warning" : "ok",
+						document_type: "pdf",
+						path,
+						recipe_name: model.metadata.name,
+						schema_version: model.schemaVersion,
+						warnings,
+						unmapped_fields: model.unmappedFields,
+						errors: []
+					}) });
 				} catch (error) {
 					return Promise.resolve({
 						isError: true,
-						output: error instanceof Error ? error.message : String(error)
+						output: JSON.stringify({
+							status: "error",
+							document_type: "pdf",
+							path: outputFile,
+							recipe_name: null,
+							schema_version: null,
+							warnings: [],
+							unmapped_fields: [],
+							errors: [error instanceof Error ? error.message : String(error)]
+						})
 					});
 				}
 			}

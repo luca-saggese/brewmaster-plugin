@@ -1,0 +1,314 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import * as yaml from 'js-yaml';
+
+import { parseYamlRecipe, type ParsedRecipe } from './yaml-validator';
+
+export type DocumentPhase =
+  | 'preparation'
+  | 'water'
+  | 'mash'
+  | 'sparge'
+  | 'boil'
+  | 'post_boil'
+  | 'cooling'
+  | 'fermentation'
+  | 'packaging';
+
+export interface TargetValue {
+  readonly label: string;
+  readonly value: string;
+}
+
+export interface MeasurementField {
+  readonly label: string;
+  readonly unit?: string;
+}
+
+export interface OperationalAction {
+  readonly phase: DocumentPhase;
+  readonly order: number;
+  readonly moment: string;
+  readonly action: string;
+  readonly ingredient?: string;
+  readonly quantity?: string;
+  readonly temperature?: string;
+  readonly duration?: string;
+  readonly note?: string;
+}
+
+export interface OperationalSection {
+  readonly phase: DocumentPhase;
+  readonly title: string;
+  readonly actions: OperationalAction[];
+  readonly targets: TargetValue[];
+  readonly measurements: MeasurementField[];
+  readonly warnings: string[];
+  readonly notes: string[];
+}
+
+export interface RecipeDocumentModel {
+  readonly schemaVersion: string;
+  readonly metadata: {
+    readonly name: string;
+    readonly style: string;
+    readonly brewDate: MeasurementField;
+    readonly equipment?: string;
+    readonly description?: string;
+  };
+  readonly objectives: TargetValue[];
+  readonly summaryTargets: TargetValue[];
+  readonly sections: OperationalSection[];
+  readonly notes: string[];
+  readonly alternatives: string[];
+  readonly unmappedFields: string[];
+}
+
+export interface RecipeDocumentResult {
+  readonly model: RecipeDocumentModel;
+  readonly recipe: ParsedRecipe;
+}
+
+type RecordValue = Record<string, unknown>;
+
+function record(value: unknown): RecordValue {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as RecordValue : {};
+}
+
+function num(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function formatNumber(value: number | undefined, digits = 2): string | undefined {
+  return value === undefined ? undefined : Number.isInteger(value) ? String(value) : value.toFixed(digits);
+}
+
+function quantity(value: unknown, unit: string): string | undefined {
+  const n = num(value);
+  return n === undefined ? undefined : `${formatNumber(n)} ${unit}`;
+}
+
+function firstText(source: RecordValue, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = text(source[key]);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function firstNumber(source: RecordValue, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = num(source[key]);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+function target(label: string, value: unknown, suffix = ''): TargetValue | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  return { label, value: `${String(value)}${suffix}` };
+}
+
+function measurement(label: string, unit?: string): MeasurementField {
+  return { label, unit };
+}
+
+function section(phase: DocumentPhase, title: string): OperationalSection {
+  return { phase, title, actions: [], targets: [], measurements: [], warnings: [], notes: [] };
+}
+
+function requireValue(errors: string[], value: unknown, path: string): void {
+  if (value === undefined || value === null || value === '') errors.push(path);
+}
+
+function parseObjectives(raw: RecordValue): TargetValue[] {
+  const value = raw['obiettivi_sensoriali'];
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string').map(item => ({ label: 'Obiettivo sensoriale', value: item }));
+  if (typeof value === 'string') return [{ label: 'Obiettivo sensoriale', value }];
+  return [];
+}
+
+function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel {
+  const params = record(raw['parametri']);
+  const mashRaw = record(raw['mash']);
+  const waterRaw = record(raw['acqua'] ?? raw['agua']);
+  const boilRaw = record(raw['bollitura']);
+  const fermentationRaw = record(raw['fermentazione']);
+  const packagingRaw = record(raw['confezionamento']);
+  const carbonationRaw = record(raw['carbonazione']);
+  const sections: OperationalSection[] = [];
+
+  const preparation = section('preparation', 'Preparazione degli ingredienti');
+  recipe.grain_bill.forEach(grain => preparation.actions.push({
+    phase: 'preparation', order: 10, moment: 'Prima della cotta', action: 'Preparare il malto', ingredient: grain.malt,
+    quantity: quantity(grain.kg, 'kg'), note: [grain.percent !== undefined ? `${grain.percent}%` : undefined, grain.note].filter(Boolean).join(' — ') || undefined,
+  }));
+  recipe.hop_schedule.forEach(hop => preparation.actions.push({
+    phase: 'preparation', order: 20, moment: 'Prima della cotta', action: 'Pesare e predisporre il luppolo', ingredient: hop.variety,
+    quantity: quantity(hop.grams, 'g'), note: [hop.aa_percent !== undefined ? `AA ${hop.aa_percent}%` : undefined, hop.note].filter(Boolean).join(' — ') || undefined,
+  }));
+  recipe.spezie?.forEach(spice => preparation.actions.push({
+    phase: 'preparation', order: 30, moment: 'Prima della cotta', action: 'Preparare l\'adjunct', ingredient: spice.nome,
+    quantity: quantity(spice.grammi, 'g'), note: spice.note,
+  }));
+  recipe.zuccheri?.forEach(sugar => preparation.actions.push({
+    phase: 'preparation', order: 40, moment: 'Prima della cotta', action: 'Pesare lo zucchero/fermentabile', ingredient: sugar.tipo,
+    quantity: quantity(sugar.grammi, 'g'), note: sugar.note,
+  }));
+  if (recipe.yeast.strain) preparation.actions.push({ phase: 'preparation', order: 50, moment: 'Prima dell\'inoculo', action: 'Preparare il lievito', ingredient: recipe.yeast.strain, note: firstText(record(raw['lievito']), ['forma', 'note']) });
+  sections.push(preparation);
+
+  if (Object.keys(waterRaw).length > 0 || recipe.mash_water_liters !== undefined || recipe.sparge_water_liters !== undefined) {
+    const water = section('water', 'Preparazione dell\'acqua');
+    water.targets.push(...[
+      target('Acqua mash', recipe.mash_water_liters, ' L'), target('Acqua sparge', recipe.sparge_water_liters, ' L'), target('Acqua totale', recipe.total_water_liters, ' L'),
+      target('pH mash target', firstNumber(mashRaw, ['ph_target', 'pH_target']), ''),
+    ].filter((item): item is TargetValue => item !== undefined));
+    const salts = record(raw['mash_salts'] ?? raw['sales']);
+    for (const [key, label, unit] of [['gypsum_g', 'Gesso', 'g'], ['cacl2_g', 'Cloruro di calcio', 'g'], ['epsom_g', 'Sale di Epsom', 'g'], ['nahco3_g', 'Bicarbonato', 'g'], ['lactic_acid_ml', 'Acido lattico', 'mL']] as const) {
+      if (num(salts[key]) !== undefined) water.actions.push({ phase: 'water', order: 10, moment: 'Preparazione acqua', action: 'Aggiungere al trattamento', ingredient: label, quantity: quantity(salts[key], unit) });
+    }
+    if (recipe.mash_water_liters !== undefined) water.actions.push({ phase: 'water', order: 20, moment: 'Mash-in', action: 'Preparare il volume di acqua mash', quantity: quantity(recipe.mash_water_liters, 'L'), note: 'Per sistemi all-in-one, il volume sotto il cestello appartiene all’acqua mash.' });
+    if (recipe.sparge_water_liters !== undefined) water.actions.push({ phase: 'water', order: 30, moment: 'Sparge', action: 'Preparare il volume di acqua sparge', quantity: quantity(recipe.sparge_water_liters, 'L') });
+    water.measurements.push(measurement('pH mash reale', 'pH'));
+    sections.push(water);
+  }
+
+  if (raw['mash'] !== undefined) {
+    const mash = section('mash', 'Mash-in e ammostamento');
+    mash.targets.push(...[
+      target('Temperatura mash-in', recipe.mash_in_temp_c, ' °C'), target('Temperatura mash', recipe.mash_temp_c, ' °C'), target('Volume acqua mash', recipe.mash_water_liters, ' L'),
+    ].filter((item): item is TargetValue => item !== undefined));
+    const steps = Array.isArray(mashRaw['steps']) ? mashRaw['steps'] as RecordValue[] : [];
+    if (steps.length > 0) steps.forEach((step, index) => mash.actions.push({ phase: 'mash', order: 20 + index, moment: `Step ${index + 1}`, action: 'Mantenere il mash', temperature: quantity(step['temperatura_c'], '°C'), duration: quantity(step['tempo_min'], 'min'), note: text(step['note']) }));
+    else if (recipe.mash_temp_c !== undefined && firstNumber(mashRaw, ['durata_min']) !== undefined) mash.actions.push({ phase: 'mash', order: 20, moment: 'Mash', action: 'Mantenere il mash', temperature: quantity(recipe.mash_temp_c, '°C'), duration: quantity(firstNumber(mashRaw, ['durata_min']), 'min'), note: recipe.mash_temp_c ? text(mashRaw['note']) : undefined });
+    mash.measurements.push(measurement('pH mash reale', 'pH'));
+    sections.push(mash);
+  }
+
+  if (recipe.sparge_water_liters !== undefined || raw['sparge'] !== undefined) {
+    const sparge = section('sparge', 'Sparge e checkpoint pre-boil');
+    const spargeRaw = record(raw['sparge']);
+    sparge.targets.push(...[
+      target('Acqua sparge', recipe.sparge_water_liters, ' L'), target('Volume pre-boil', recipe.pre_boil_volume_liters, ' L'), target('Densità pre-boil', recipe.pre_boil_og), target('Temperatura sparge', firstNumber(spargeRaw, ['temperatura_c', 'temperature_c']), ' °C'),
+    ].filter((item): item is TargetValue => item !== undefined));
+    sparge.actions.push({ phase: 'sparge', order: 10, moment: 'Sparge', action: text(spargeRaw['procedura']) ?? 'Eseguire lo sparge previsto dalla ricetta', quantity: quantity(recipe.sparge_water_liters, 'L'), temperature: quantity(firstNumber(spargeRaw, ['temperatura_c', 'temperature_c']), '°C') });
+    sparge.measurements.push(measurement('Volume misurato', 'L'), measurement('Densità misurata', 'SG'), measurement('pH reale', 'pH'));
+    sections.push(sparge);
+  }
+
+  if (recipe.boil_time_minutes !== undefined || recipe.hop_schedule.some(hop => ['boil', 'first_wort', 'flameout'].includes(hop.use)) || recipe.spezie?.some(spice => spice.uso === 'boil')) {
+    const boil = section('boil', 'Bollitura — timeline cronologica');
+    boil.targets.push(...[
+      target('Durata bollitura', recipe.boil_time_minutes, ' min'), target('Volume pre-boil', recipe.pre_boil_volume_liters, ' L'),
+    ].filter((item): item is TargetValue => item !== undefined));
+    const boilMinutes = recipe.boil_time_minutes ?? 60;
+    recipe.hop_schedule.filter(hop => ['first_wort', 'boil', 'flameout'].includes(hop.use)).forEach(hop => {
+      const moment = hop.use === 'first_wort' ? 'First Wort' : hop.time_minutes === 0 ? 'T 0 — Flameout' : `T −${hop.time_minutes} min`;
+      boil.actions.push({ phase: 'boil', order: hop.use === 'first_wort' ? -1 : boilMinutes - hop.time_minutes, moment, action: `Aggiungere (${hop.use})`, ingredient: hop.variety, quantity: quantity(hop.grams, 'g'), note: [hop.aa_percent !== undefined ? `AA ${hop.aa_percent}%` : undefined, hop.note].filter(Boolean).join(' — ') || undefined });
+    });
+    recipe.spezie?.filter(spice => spice.uso === 'boil').forEach(spice => boil.actions.push({ phase: 'boil', order: boilMinutes - (spice.tempo_min ?? 0), moment: spice.tempo_min ? `T −${spice.tempo_min} min` : 'T 0 — Fine bollitura', action: 'Aggiungere botanica', ingredient: spice.nome, quantity: quantity(spice.grammi, 'g'), note: spice.note }));
+    boil.actions.sort((a, b) => a.order - b.order);
+    sections.push(boil);
+  }
+
+  if (recipe.post_boil_volume_liters !== undefined || recipe.hop_schedule.some(hop => ['whirlpool', 'hop_stand'].includes(hop.use))) {
+    const post = section('post_boil', 'Post-boil e whirlpool');
+    post.targets.push(...[
+      target('Volume post-boil', recipe.post_boil_volume_liters, ' L'), target('Densità post-boil', recipe.post_boil_og),
+    ].filter((item): item is TargetValue => item !== undefined));
+    recipe.hop_schedule.filter(hop => ['whirlpool', 'hop_stand'].includes(hop.use)).forEach(hop => post.actions.push({ phase: 'post_boil', order: 10, moment: 'Whirlpool', action: 'Aggiungere e mantenere il whirlpool', ingredient: hop.variety, quantity: quantity(hop.grams, 'g'), duration: hop.time_minutes ? `${hop.time_minutes} min` : undefined, note: hop.note }));
+    post.measurements.push(measurement('Volume post-boil misurato', 'L'), measurement('Densità post-boil misurata', 'SG'));
+    sections.push(post);
+  }
+
+  const cooling = section('cooling', 'Raffreddamento, trasferimento e inoculo');
+  cooling.targets.push(...[
+    target('Volume fermentatore', recipe.fermentation_volume_liters, ' L'), target('Temperatura inoculo', firstNumber(record(raw['lievito']), ['temperatura_inoculo_c', 'temp_inoculo_c']), ' °C'),
+  ].filter((item): item is TargetValue => item !== undefined));
+  cooling.actions.push({ phase: 'cooling', order: 10, moment: 'Raffreddamento', action: 'Raffreddare il mosto alla temperatura di inoculo', temperature: quantity(firstNumber(record(raw['lievito']), ['temperatura_inoculo_c', 'temp_inoculo_c']), '°C') });
+  if (recipe.yeast.strain) cooling.actions.push({ phase: 'cooling', order: 20, moment: 'Inoculo', action: 'Inoculare il lievito', ingredient: recipe.yeast.strain, quantity: text(record(raw['lievito'])['quantita']) });
+  cooling.measurements.push(measurement('Volume effettivo nel fermentatore', 'L'), measurement('OG effettiva', 'SG'), measurement('Temperatura di inoculo', '°C'), measurement('Ora inoculo'));
+  sections.push(cooling);
+
+  if (raw['fermentazione'] !== undefined) {
+    const fermentation = section('fermentation', 'Fermentazione');
+    fermentation.targets.push(...[
+      target('Temperatura fermentazione', recipe.fermentation_temp_c, ' °C'), target('Fermentazione primaria', recipe.primary_days, ' giorni'), target('Maturazione', recipe.conditioning_days, ' giorni'),
+    ].filter((item): item is TargetValue => item !== undefined));
+    if (recipe.primary_days !== undefined) fermentation.actions.push({ phase: 'fermentation', order: 10, moment: `Giorni 0–${recipe.primary_days}`, action: 'Fermentazione primaria', temperature: quantity(recipe.fermentation_temp_c, '°C'), duration: `${recipe.primary_days} giorni`, note: text(fermentationRaw['note']) });
+    if (Boolean(fermentationRaw['cold_crash'])) fermentation.actions.push({ phase: 'fermentation', order: 30, moment: 'Cold crash', action: 'Raffreddare per il cold crash', temperature: quantity(firstNumber(fermentationRaw, ['cold_crash_temp_c']), '°C'), duration: quantity(firstNumber(fermentationRaw, ['cold_crash_giorni']), 'giorni') });
+    recipe.hop_schedule.filter(hop => hop.use === 'dry_hop').forEach(hop => fermentation.actions.push({ phase: 'fermentation', order: 20, moment: text(fermentationRaw['dry_hop_giorno']) ? `Giorno ${String(fermentationRaw['dry_hop_giorno'])}` : 'Dry hop', action: 'Aggiungere dry hop', ingredient: hop.variety, quantity: quantity(hop.grams, 'g'), note: hop.note }));
+    recipe.spezie?.filter(spice => ['secondary', 'fermentation', 'conditioning', 'tincture', 'post_fermentation'].includes(spice.uso)).forEach(spice => {
+      const isTincture = spice.uso === 'tincture' || /tintur/i.test(spice.note ?? '');
+      fermentation.actions.push({ phase: 'fermentation', order: 25, moment: isTincture ? 'Dopo bench trial' : 'Aggiunta in fermentazione/secondaria', action: isTincture ? 'Dosare la tintura dopo bench trial' : 'Aggiungere botanica', ingredient: spice.nome, quantity: quantity(spice.grammi, 'g'), note: spice.note });
+      if (isTincture) fermentation.warnings.push(`La dose di ${spice.nome} resta da determinare sperimentalmente con bench trial.`);
+    });
+    fermentation.measurements.push(measurement('FG reale', 'SG'), measurement('Temperatura reale', '°C'), measurement('Data fine fermentazione'));
+    fermentation.warnings.push('La fermentazione è conclusa solo dopo stabilità della FG, non per sola durata nominale.');
+    sections.push(fermentation);
+  }
+
+  if (raw['carbonazione'] !== undefined || recipe.packaging_volume_liters !== undefined) {
+    const packaging = section('packaging', 'Confezionamento e maturazione');
+    const method = recipe.carbonation_method ?? firstText(carbonationRaw, ['metodo']);
+    packaging.targets.push(...[
+      target('Metodo', method), target('Volume confezionamento', recipe.packaging_volume_liters, ' L'), target('Carbonazione', recipe.carbonation_volumes, ' vol CO₂'), target('Priming', recipe.priming_sugar_gl, ' g/L'),
+    ].filter((item): item is TargetValue => item !== undefined));
+    if (method && /bott|bottiglia/i.test(method) && recipe.priming_sugar_gl !== undefined) packaging.actions.push({ phase: 'packaging', order: 20, moment: 'Imbottigliamento', action: 'Aggiungere il fermentabile di priming', ingredient: firstText(carbonationRaw, ['zucchero_tipo']) ?? 'Zucchero', quantity: quantity(recipe.priming_sugar_gl * recipe.batch_size_liters, 'g'), note: `${recipe.priming_sugar_gl} g/L` });
+    packaging.actions.unshift({ phase: 'packaging', order: 10, moment: 'Prima del confezionamento', action: 'Verificare stabilità della FG' });
+    packaging.measurements.push(measurement('FG stabile verificata', 'SG'), measurement('Volume reale confezionato', 'L'), measurement('Data confezionamento'), measurement('Quantità effettivamente utilizzata', 'g')); 
+    sections.push(packaging);
+  }
+
+  const alternatives = Array.isArray(raw['alternative']) ? (raw['alternative'] as RecordValue[]).map(item => [text(item['descrizione']), text(item['cambiamenti']), text(item['impatto'])].filter(Boolean).join(' — ')).filter(Boolean) : [];
+  const handled = new Set(['schema_version', 'nome', 'stile', 'codice_bjcp', 'descrizione', 'note', 'parametri', 'grist', 'luppolatura', 'lievito', 'mash', 'fermentazione', 'bollitura', 'acqua', 'agua', 'sparge', 'sales', 'mash_salts', 'carbonazione', 'spezie', 'zuccheri', 'confezionamento', 'obiettivi_sensoriali', 'vincoli_produzione', 'fonte', 'alternative', 'note_critiche']);
+  const unmappedFields = Object.keys(raw).filter(key => !handled.has(key));
+  return {
+    schemaVersion: recipe.schema_version ?? 'unspecified',
+    metadata: { name: recipe.recipe_name, style: recipe.beer_style, brewDate: measurement('Data della cotta'), equipment: recipe.impianto, description: recipe.descrizione },
+    objectives: parseObjectives(raw),
+    summaryTargets: [
+      target('Batch target', recipe.batch_size_liters, ' L'), target('Volume pre-boil', recipe.pre_boil_volume_liters, ' L'), target('Volume post-boil', recipe.post_boil_volume_liters, ' L'), target('Volume fermentatore', recipe.fermentation_volume_liters, ' L'), target('Volume confezionato', recipe.packaging_volume_liters, ' L'), target('OG', recipe.og), target('FG', recipe.fg), target('ABV', recipe.abv_percent, '%'), target('IBU', recipe.ibu), target('EBC', recipe.ebc), target('Efficienza', recipe.efficiency_percent, '%'), target('Bollitura', recipe.boil_time_minutes, ' min'),
+    ].filter((item): item is TargetValue => item !== undefined),
+    sections,
+    notes: [recipe.note, ...(Array.isArray(raw['note_critiche']) ? raw['note_critiche'].filter((item): item is string => typeof item === 'string') : [])].filter((item): item is string => Boolean(item)),
+    alternatives,
+    unmappedFields,
+  };
+}
+
+export function buildRecipeDocumentModel(inputPath: string): RecipeDocumentResult {
+  const rawText = readFileSync(inputPath, 'utf-8');
+  const loaded = yaml.load(rawText);
+  if (loaded === null || typeof loaded !== 'object' || Array.isArray(loaded)) throw new Error('Il file YAML non contiene un oggetto ricetta valido.');
+  const raw = loaded as RecordValue;
+  // These fields are document metadata, not recipe-calculation inputs. Keep
+  // them in the raw model while excluding them from the canonical parser.
+  const parserData = { ...raw };
+  delete parserData['note_critiche'];
+  delete parserData['alternative'];
+  const parserDirectory = mkdtempSync(join(tmpdir(), 'brewmaster-document-'));
+  const parserPath = join(parserDirectory, 'recipe.yaml');
+  writeFileSync(parserPath, yaml.dump(parserData), 'utf-8');
+  let recipe: ParsedRecipe;
+  try {
+    recipe = parseYamlRecipe(parserPath);
+  } finally {
+    rmSync(parserDirectory, { recursive: true, force: true });
+  }
+  const errors: string[] = [];
+  if (raw['mash'] !== undefined) {
+    const mash = record(raw['mash']);
+    if (recipe.mash_temp_c === undefined && recipe.mash_steps === undefined) errors.push('mash.temperatura_c o mash.steps');
+    if (recipe.mash_steps === undefined && firstNumber(mash, ['durata_min']) === undefined) errors.push('mash.durata_min');
+  }
+  if (recipe.boil_time_minutes !== undefined && recipe.pre_boil_volume_liters === undefined) errors.push('parametri.pre_boil_litri o bollitura.volume_pre_boil_litri');
+  if (errors.length > 0) throw new Error(`Esportazione incompleta: dati indispensabili mancanti: ${errors.join(', ')}`);
+  return { recipe, model: buildModel(recipe, raw) };
+}

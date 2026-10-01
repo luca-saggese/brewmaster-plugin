@@ -14053,9 +14053,6 @@ function heading(text, level = 1) {
 		size
 	})}</w:p>`;
 }
-function pageBreak() {
-	return "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>";
-}
 function cell(text, width, header = false, align = "left") {
 	return `<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/><w:shd w:fill="${header ? PRIMARY$1 : PALE}"/><w:vAlign w:val="center"/><w:tcMar><w:top w:w="120" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/><w:start w:w="120" w:type="dxa"/><w:end w:w="120" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:pPr><w:spacing w:after="0"/><w:jc w:val="${align}"/></w:pPr>${run(text, {
 		bold: header,
@@ -14169,9 +14166,9 @@ function renderModel(model) {
 	});
 	if (model.objectives.length) body += table(["OBIETTIVO PRODUTTIVO", "DESCRIZIONE"], targetRows$1(model.objectives), [3300, 6338]);
 	body += heading("Macrofasi", 2) + table(["N.", "FASE"], model.sections.map((section, index) => [String(index + 1), section.title]), [900, 8738], ["center", "left"]);
-	for (const section of model.sections) body += pageBreak() + renderSection(section);
+	for (const section of model.sections) body += renderSection(section);
 	if (model.notes.length) {
-		body += pageBreak() + heading("Note e avvertenze", 1);
+		body += heading("Note e avvertenze", 1);
 		for (const note of model.notes) body += paragraph(`NOTA  ${note}`, { color: "52606D" });
 	}
 	if (model.alternatives.length) {

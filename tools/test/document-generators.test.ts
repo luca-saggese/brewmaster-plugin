@@ -142,6 +142,7 @@ async function main(): Promise<void> {
     assert(existsSync(docx) && readFileSync(docx).subarray(0, 2).toString('hex') === '504b', 'DOCX should be a ZIP package');
     const documentXml = execFileSync('unzip', ['-p', docx, 'word/document.xml']).toString();
     assert(documentXml.includes('Operational Test Ale') && documentXml.includes('52.50 g') && documentXml.includes('80 °C'), 'DOCX XML should contain rendered operational content');
+    assert(!documentXml.includes('w:type="page"'), 'DOCX should not force page breaks between operational sections');
     execFileSync('unzip', ['-t', docx], { stdio: 'ignore' });
     assertDocxXmlIsValid(docx, workDir);
     assert(documentXml.includes('<w:tbl>') && documentXml.includes('<w:sectPr>'), 'DOCX should contain tables and section properties, not only a ZIP header');

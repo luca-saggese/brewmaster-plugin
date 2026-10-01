@@ -70,8 +70,8 @@ function renderModel(model: RecipeDocumentModel): string {
   if (model.metadata.description) body += paragraph(model.metadata.description, { size: 19, after: 120 });
   if (model.objectives.length) body += table(['OBIETTIVO PRODUTTIVO', 'DESCRIZIONE'], targetRows(model.objectives), [3300, 6338]);
   body += heading('Macrofasi', 2) + table(['N.', 'FASE'], model.sections.map((section, index) => [String(index + 1), section.title]), [900, 8738], ['center', 'left']);
-  for (const section of model.sections) body += pageBreak() + renderSection(section);
-  if (model.notes.length) { body += pageBreak() + heading('Note e avvertenze', 1); for (const note of model.notes) body += paragraph(`NOTA  ${note}`, { color: '52606D' }); }
+  for (const section of model.sections) body += renderSection(section);
+  if (model.notes.length) { body += heading('Note e avvertenze', 1); for (const note of model.notes) body += paragraph(`NOTA  ${note}`, { color: '52606D' }); }
   if (model.alternatives.length) { body += heading('Alternative non selezionate', 1); for (const alternative of model.alternatives) body += paragraph(alternative); }
   if (model.unmappedFields.length) { body += heading('Campi YAML non mappati', 1); body += paragraph(model.unmappedFields.join(', '), { bold: true, color: '8B2E2E' }); }
   return body;

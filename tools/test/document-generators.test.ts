@@ -15,6 +15,16 @@ function assert(condition: boolean, message: string): void {
   else { failed++; console.error(`FAIL: ${message}`); }
 }
 
+function assertDocxXmlIsValid(docx: string, workDir: string): void {
+  const entries = execFileSync('unzip', ['-Z1', docx]).toString().split('\n').filter(entry => /(?:\.xml|\.rels)$/.test(entry));
+  for (const [index, entry] of entries.entries()) {
+    const xmlPath = join(workDir, `xml-${index}.xml`);
+    const unzipEntry = entry === '[Content_Types].xml' ? '[[]Content_Types].xml' : entry;
+    writeFileSync(xmlPath, execFileSync('unzip', ['-p', docx, unzipEntry]));
+    execFileSync('xmllint', ['--noout', xmlPath], { stdio: 'ignore' });
+  }
+}
+
 const VALID_RECIPE = `schema_version: "1.0"
 nome: "Operational Test Ale"
 stile: "Experimental Beer"
@@ -133,12 +143,32 @@ async function main(): Promise<void> {
     const documentXml = execFileSync('unzip', ['-p', docx, 'word/document.xml']).toString();
     assert(documentXml.includes('Operational Test Ale') && documentXml.includes('52.50 g') && documentXml.includes('80 °C'), 'DOCX XML should contain rendered operational content');
     execFileSync('unzip', ['-t', docx], { stdio: 'ignore' });
+    assertDocxXmlIsValid(docx, workDir);
     assert(documentXml.includes('<w:tbl>') && documentXml.includes('<w:sectPr>'), 'DOCX should contain tables and section properties, not only a ZIP header');
     assert(existsSync(pdf) && readFileSync(pdf).subarray(0, 5).toString() === '%PDF-', 'PDF should have a valid header');
     const pdfText = execFileSync('strings', [pdf]).toString();
     assert(pdfText.includes('Operational Test Ale'), 'PDF should contain the recipe title');
     const pdfInfo = execFileSync('pdfinfo', [pdf]).toString();
     assert(Number(pdfInfo.match(/^Pages:\s+(\d+)/m)?.[1] ?? 0) > 1, 'PDF should be genuinely multipage');
+
+    const habaneroFixture = '/Users/lvx/habanero-dark-speziata.yaml';
+    if (existsSync(habaneroFixture)) {
+      const habaneroModel = buildRecipeDocumentModel(habaneroFixture).model;
+      const preparation = habaneroModel.sections.find(section => section.phase === 'preparation');
+      const postBoil = habaneroModel.sections.find(section => section.phase === 'post_boil');
+      const cooling = habaneroModel.sections.find(section => section.phase === 'cooling');
+      const habaneroDocx = join(workDir, 'habanero-dark-speziata.docx');
+      await new YamlToDocxTool().resolveExecution({ input_file: habaneroFixture, output_file: habaneroDocx }).execute({ turnId: 3, toolCallId: 'habanero-docx', signal: new AbortController().signal });
+      const habaneroXml = execFileSync('unzip', ['-p', habaneroDocx, 'word/document.xml']).toString();
+      assert(preparation?.actions.some(action => action.ingredient?.includes('Habanero')), 'Habanero should be present in preparation');
+      assert(preparation?.actions.some(action => action.ingredient?.includes('Finocchio') && action.quantity === '3.80 g'), 'fennel quantity should be preserved');
+      assert(preparation?.actions.some(action => action.ingredient?.includes('Liquirizia') && action.quantity === '0.90 g'), 'licorice quantity should be preserved');
+      assert(postBoil?.actions.some(action => action.temperature === '80 °C' && action.duration === '20 min'), 'whirlpool target should be preserved');
+      assert(cooling?.actions.some(action => action.ingredient?.includes('US-05') && action.quantity === '100 mL') && cooling?.actions.some(action => action.temperature === '21 °C'), 'slurry and inoculation temperature should be preserved');
+      assert(habaneroXml.includes('Habanero') && habaneroXml.includes('Finocchio') && habaneroXml.includes('Liquirizia'), 'Habanero DOCX should contain the three botanicals');
+      assert(habaneroModel.unmappedFields.length === 0, 'Habanero should not leave operational fields unmapped');
+      assertDocxXmlIsValid(habaneroDocx, workDir);
+    }
 
     const missingPrimingVolume = join(workDir, 'missing-priming-volume.yaml');
     writeFileSync(missingPrimingVolume, VALID_RECIPE.replace('confezionamento_litri: 17.5\n  priming_totale_g: 52.5', 'priming_gl: 3'), 'utf-8');

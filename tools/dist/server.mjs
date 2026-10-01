@@ -11288,7 +11288,8 @@ function parseYamlRecipe(filePath) {
 	]) ?? pickNum(carbonazione, [
 		"priming_totale_g",
 		"priming_total_g",
-		"zucchero_totale_g"
+		"zucchero_totale_g",
+		"zucchero_grammi"
 	]);
 	const grain_bill = (Array.isArray(d["grist"]) ? d["grist"] : []).map((g) => ({
 		malt: String(g["malto"] ?? ""),
@@ -13249,6 +13250,28 @@ function firstNumber(source, keys) {
 		if (value !== void 0) return value;
 	}
 }
+function numberFromText(value) {
+	if (typeof value === "number" && Number.isFinite(value)) return value;
+	if (typeof value !== "string") return void 0;
+	const match = value.match(/-?\d+(?:[.,]\d+)?/);
+	return match ? Number(match[0].replace(",", ".")) : void 0;
+}
+function rawBoilAdditions(raw) {
+	const boil = record(raw["bollitura"]);
+	return (Array.isArray(boil["aggiunte_bollitura"]) ? boil["aggiunte_bollitura"] : []).map((item) => {
+		const addition = record(item);
+		return {
+			ingredient: text(addition["ingrediente"]) ?? "Aggiunta non nominata",
+			grams: num(addition["grammi"]),
+			use: text(addition["uso"]) ?? "boil",
+			form: text(addition["forma"]),
+			timeMinutes: num(addition["tempo_min"]),
+			durationMinutes: num(addition["durata_whirlpool_min"]),
+			temperatureC: num(addition["temperatura_whirlpool_c"]),
+			note: text(addition["nota"])
+		};
+	});
+}
 function target(label, value, suffix = "") {
 	if (value === void 0 || value === null || value === "") return void 0;
 	return {
@@ -13332,29 +13355,45 @@ function nestedUnmappedFields(raw) {
 			"priming_gl",
 			"priming_totale_g",
 			"priming_total_g",
-			"impianto"
+			"impianto",
+			"bu_gu",
+			"colore",
+			"corpo",
+			"volume_fermentatore"
 		],
 		mash: [
+			"tipo",
 			"temperatura_c",
 			"temperatura_in_c",
+			"temperatura_strike_c",
 			"durata_min",
 			"steps",
 			"acqua_strike_litri",
 			"spessore_l_kg",
-			"note"
+			"ph_target",
+			"sparge",
+			"note",
+			"nota"
 		],
 		bollitura: [
 			"durata_min",
 			"volume_pre_boil_litri",
 			"volume_post_boil_litri",
+			"perdita_evaporazione_litri",
+			"perdita_trub_litri",
 			"og_pre_boil",
 			"og_post_boil",
+			"whirlpool",
 			"whirlpool_temperatura_c",
 			"whirlpool_temp_c",
-			"hop_stand_temperatura_c"
+			"whirlpool_durata_min",
+			"hop_stand_temperatura_c",
+			"aggiunte_bollitura",
+			"nota"
 		],
 		fermentazione: [
 			"temperatura_c",
+			"temperatura_controllo",
 			"primaria_giorni",
 			"madurazione_giorni",
 			"cold_crash",
@@ -13362,22 +13401,29 @@ function nestedUnmappedFields(raw) {
 			"cold_crash_temp_c",
 			"dry_hop_giorno",
 			"steps",
-			"note"
+			"note",
+			"nota"
 		],
 		carbonazione: [
 			"metodo",
 			"zucchero_tipo",
+			"zucchero_grammi",
+			"zucchero_g_per_litro",
 			"co2_volumi",
 			"temperatura_servizio_c",
 			"tipo_botella",
 			"priming_gl",
 			"priming_totale_g",
 			"priming_total_g",
-			"zucchero_totale_g"
+			"zucchero_totale_g",
+			"preparazione"
 		],
 		lievito: [
 			"ceppo",
 			"forma",
+			"quantita_ml",
+			"quantita_g",
+			"quantita",
 			"attenuazione_percent",
 			"laboratorio",
 			"temp_min_c",
@@ -13385,9 +13431,13 @@ function nestedUnmappedFields(raw) {
 			"temperatura_inoculo_c",
 			"temp_inoculo_c",
 			"temperatura_fermentazione",
+			"durata_primaria_giorni",
 			"note"
 		],
 		acqua: [
+			"fonte",
+			"profilo_originale",
+			"sales",
 			"mash_litri",
 			"mash_agua_litri",
 			"strike_litri",
@@ -13406,7 +13456,10 @@ function nestedUnmappedFields(raw) {
 			"na_mg_l",
 			"cl_mg_l",
 			"so4_mg_l",
-			"hco3_mg_l"
+			"hco3_mg_l",
+			"rapporto_so4_cl",
+			"ph_target",
+			"nota"
 		],
 		sparge: [
 			"sparge_litri",
@@ -13465,13 +13518,14 @@ function parseObjectives(raw) {
 	return [];
 }
 function buildModel(recipe, raw) {
-	raw["parametri"];
+	const params = record(raw["parametri"]);
 	const mashRaw = record(raw["mash"]);
 	const waterRaw = record(raw["acqua"] ?? raw["agua"]);
-	raw["bollitura"];
+	const boilRaw = record(raw["bollitura"]);
 	const fermentationRaw = record(raw["fermentazione"]);
 	raw["confezionamento"];
 	const carbonationRaw = record(raw["carbonazione"]);
+	const boilAdditions = rawBoilAdditions(raw);
 	const sections = [];
 	const preparation = section("preparation", "Preparazione degli ingredienti");
 	recipe.grain_bill.forEach((grain) => preparation.actions.push({
@@ -13501,6 +13555,19 @@ function buildModel(recipe, raw) {
 		quantity: quantity(spice.grammi, "g"),
 		note: spice.note
 	}));
+	boilAdditions.forEach((addition) => preparation.actions.push({
+		phase: "preparation",
+		order: 35,
+		moment: "Prima della cotta",
+		action: "Preparare l'aggiunta botanica",
+		ingredient: addition.ingredient,
+		quantity: quantity(addition.grams, "g"),
+		note: [
+			addition.form,
+			addition.use === "whirlpool" ? "da usare in whirlpool" : void 0,
+			addition.note
+		].filter(Boolean).join(" — ") || void 0
+	}));
 	recipe.zuccheri?.forEach((sugar) => preparation.actions.push({
 		phase: "preparation",
 		order: 40,
@@ -13525,10 +13592,28 @@ function buildModel(recipe, raw) {
 			target("Acqua mash", recipe.mash_water_liters, " L"),
 			target("Acqua sparge", recipe.sparge_water_liters, " L"),
 			target("Acqua totale", recipe.total_water_liters, " L"),
-			target("pH mash target", firstNumber(mashRaw, ["ph_target", "pH_target"]), "")
+			target("pH mash target", firstNumber(mashRaw, ["ph_target", "pH_target"]), ""),
+			target("Rapporto SO₄:Cl", firstNumber(waterRaw, ["rapporto_so4_cl"]), "")
 		].filter((item) => item !== void 0));
+		const originalProfile = record(waterRaw["profilo_originale"]);
+		water.notes.push(...[
+			text(waterRaw["fonte"]) ? `Fonte: ${text(waterRaw["fonte"])}` : void 0,
+			text(waterRaw["nota"]),
+			numberFromText(originalProfile["ph"]) !== void 0 ? `pH fonte: ${numberFromText(originalProfile["ph"])}` : void 0
+		].filter((item) => Boolean(item)));
 		water.actions.push(...saltActions("water", recipe.mash_salts, "Trattamento acqua mash", 10));
 		water.actions.push(...saltActions("water", recipe.sparge_salts, "Trattamento acqua sparge", 11));
+		(Array.isArray(waterRaw["sales"]) ? waterRaw["sales"] : []).forEach((item, index) => {
+			const sale = record(item);
+			water.actions.push({
+				phase: "water",
+				order: 15 + index,
+				moment: "Trattamento acqua mash",
+				action: "Pesare e aggiungere il sale",
+				ingredient: text(sale["sale"]),
+				quantity: quantity(sale["grammi"], "g")
+			});
+		});
 		if (recipe.mash_water_liters !== void 0) water.actions.push({
 			phase: "water",
 			order: 20,
@@ -13552,7 +13637,8 @@ function buildModel(recipe, raw) {
 		mash.targets.push(...[
 			target("Temperatura mash-in", recipe.mash_in_temp_c, " °C"),
 			target("Temperatura mash", recipe.mash_temp_c, " °C"),
-			target("Volume acqua mash", recipe.mash_water_liters, " L")
+			target("Volume acqua mash", recipe.mash_water_liters, " L"),
+			target("Spessore mash", firstNumber(mashRaw, ["spessore_l_kg"]), " L/kg")
 		].filter((item) => item !== void 0));
 		const steps = Array.isArray(mashRaw["steps"]) ? mashRaw["steps"] : [];
 		if (steps.length > 0) steps.forEach((step, index) => mash.actions.push({
@@ -13574,17 +13660,19 @@ function buildModel(recipe, raw) {
 			note: recipe.mash_temp_c ? text(mashRaw["note"]) : void 0
 		});
 		mash.measurements.push(measurement("pH mash reale", "pH"));
+		if (text(mashRaw["tipo"]) || text(mashRaw["note"]) || text(mashRaw["nota"])) mash.notes.push(...[text(mashRaw["tipo"]) ? `Metodo: ${text(mashRaw["tipo"])}` : void 0, text(mashRaw["note"]) ?? text(mashRaw["nota"])].filter((item) => Boolean(item)));
 		sections.push(mash);
 	}
 	if (recipe.sparge_water_liters !== void 0 || raw["sparge"] !== void 0) {
 		const sparge = section("sparge", "Sparge e checkpoint pre-boil");
-		const spargeRaw = record(raw["sparge"]);
+		const spargeRaw = record(raw["sparge"] ?? mashRaw["sparge"]);
 		sparge.targets.push(...[
 			target("Acqua sparge", recipe.sparge_water_liters, " L"),
 			target("Volume pre-boil", recipe.pre_boil_volume_liters, " L"),
 			target("Densità pre-boil", recipe.pre_boil_og),
 			target("Temperatura sparge", firstNumber(spargeRaw, ["temperatura_c", "temperature_c"]), " °C")
 		].filter((item) => item !== void 0));
+		if (text(spargeRaw["tipo"])) sparge.notes.push(`Metodo: ${text(spargeRaw["tipo"])}`);
 		sparge.actions.push({
 			phase: "sparge",
 			order: 10,
@@ -13600,9 +13688,19 @@ function buildModel(recipe, raw) {
 		"boil",
 		"first_wort",
 		"flameout"
-	].includes(hop.use)) || recipe.spezie?.some((spice) => spice.uso === "boil")) {
+	].includes(hop.use)) || recipe.spezie?.some((spice) => spice.uso === "boil") || boilAdditions.some((addition) => [
+		"boil",
+		"first_wort",
+		"flameout"
+	].includes(addition.use))) {
 		const boil = section("boil", "Bollitura — timeline cronologica");
-		boil.targets.push(...[target("Durata bollitura", recipe.boil_time_minutes, " min"), target("Volume pre-boil", recipe.pre_boil_volume_liters, " L")].filter((item) => item !== void 0));
+		boil.targets.push(...[
+			target("Durata bollitura", recipe.boil_time_minutes, " min"),
+			target("Volume pre-boil", recipe.pre_boil_volume_liters, " L"),
+			target("Perdita evaporazione", firstNumber(boilRaw, ["perdita_evaporazione_litri"]), " L"),
+			target("Perdita trub", firstNumber(boilRaw, ["perdita_trub_litri"]), " L")
+		].filter((item) => item !== void 0));
+		if (text(boilRaw["nota"])) boil.notes.push(text(boilRaw["nota"]));
 		const boilMinutes = recipe.boil_time_minutes ?? 60;
 		recipe.hop_schedule.filter((hop) => [
 			"first_wort",
@@ -13629,10 +13727,23 @@ function buildModel(recipe, raw) {
 			quantity: quantity(spice.grammi, "g"),
 			note: spice.note
 		}));
+		boilAdditions.filter((addition) => [
+			"boil",
+			"first_wort",
+			"flameout"
+		].includes(addition.use)).forEach((addition) => boil.actions.push({
+			phase: "boil",
+			order: boilMinutes - (addition.timeMinutes ?? 0),
+			moment: addition.timeMinutes ? `T −${addition.timeMinutes} min` : "T 0 — Fine bollitura",
+			action: "Aggiungere botanica",
+			ingredient: addition.ingredient,
+			quantity: quantity(addition.grams, "g"),
+			note: [addition.form, addition.note].filter(Boolean).join(" — ") || void 0
+		}));
 		boil.actions.sort((a, b) => a.order - b.order);
 		sections.push(boil);
 	}
-	if (recipe.post_boil_volume_liters !== void 0 || recipe.hop_schedule.some((hop) => ["whirlpool", "hop_stand"].includes(hop.use))) {
+	if (recipe.post_boil_volume_liters !== void 0 || recipe.hop_schedule.some((hop) => ["whirlpool", "hop_stand"].includes(hop.use)) || boilAdditions.some((addition) => ["whirlpool", "hop_stand"].includes(addition.use))) {
 		const post = section("post_boil", "Post-boil e whirlpool");
 		post.targets.push(...[target("Volume post-boil", recipe.post_boil_volume_liters, " L"), target("Densità post-boil", recipe.post_boil_og)].filter((item) => item !== void 0));
 		recipe.hop_schedule.filter((hop) => ["whirlpool", "hop_stand"].includes(hop.use)).forEach((hop) => post.actions.push({
@@ -13646,26 +13757,58 @@ function buildModel(recipe, raw) {
 			duration: hop.time_minutes ? `${hop.time_minutes} min` : void 0,
 			note: hop.note
 		}));
+		boilAdditions.filter((addition) => ["whirlpool", "hop_stand"].includes(addition.use)).forEach((addition, index) => post.actions.push({
+			phase: "post_boil",
+			order: 20 + index,
+			moment: "Inizio whirlpool",
+			action: "Aggiungere e mantenere nel whirlpool",
+			ingredient: addition.ingredient,
+			quantity: quantity(addition.grams, "g"),
+			temperature: quantity(addition.temperatureC ?? recipe.whirlpool_temp_c, "°C"),
+			duration: quantity(addition.durationMinutes ?? firstNumber(boilRaw, ["whirlpool_durata_min"]), "min"),
+			note: [
+				addition.form,
+				addition.note,
+				"Rimuovere al termine del whirlpool"
+			].filter(Boolean).join(" — ") || void 0
+		}));
 		post.measurements.push(measurement("Volume post-boil misurato", "L"), measurement("Densità post-boil misurata", "SG"));
 		sections.push(post);
 	}
 	if (recipe.fermentation_volume_liters !== void 0 || recipe.yeast.strain || raw["lievito"] !== void 0) {
 		const cooling = section("cooling", "Raffreddamento, trasferimento e inoculo");
-		cooling.targets.push(...[target("Volume fermentatore", recipe.fermentation_volume_liters, " L"), target("Temperatura inoculo", firstNumber(record(raw["lievito"]), ["temperatura_inoculo_c", "temp_inoculo_c"]), " °C")].filter((item) => item !== void 0));
-		cooling.actions.push({
+		const yeastRaw = record(raw["lievito"]);
+		const inoculationTemperature = firstNumber(yeastRaw, ["temperatura_inoculo_c", "temp_inoculo_c"]) ?? numberFromText(yeastRaw["temperatura_fermentazione"]) ?? recipe.fermentation_temp_c;
+		cooling.targets.push(...[target("Volume fermentatore", recipe.fermentation_volume_liters, " L"), target("Temperatura inoculo", inoculationTemperature, " °C")].filter((item) => item !== void 0));
+		if (inoculationTemperature !== void 0) cooling.actions.push({
 			phase: "cooling",
 			order: 10,
 			moment: "Raffreddamento",
 			action: "Raffreddare il mosto alla temperatura di inoculo",
-			temperature: quantity(firstNumber(record(raw["lievito"]), ["temperatura_inoculo_c", "temp_inoculo_c"]), "°C")
+			temperature: quantity(inoculationTemperature, "°C")
 		});
+		else {
+			cooling.actions.push({
+				phase: "cooling",
+				order: 10,
+				moment: "Raffreddamento",
+				action: "Definire la temperatura target di inoculo prima di raffreddare"
+			});
+			cooling.warnings.push("Temperatura target di inoculo non dichiarata: completare il dato prima della cotta.");
+		}
+		const yeastQuantity = firstNumber(yeastRaw, [
+			"quantita_ml",
+			"quantita_g",
+			"quantita"
+		]);
 		if (recipe.yeast.strain) cooling.actions.push({
 			phase: "cooling",
 			order: 20,
 			moment: "Inoculo",
 			action: "Inoculare il lievito",
 			ingredient: recipe.yeast.strain,
-			quantity: text(record(raw["lievito"])["quantita"])
+			quantity: quantity(yeastQuantity, yeastRaw["forma"]?.toString().toLowerCase().includes("slurry") ? "mL" : "g"),
+			note: [text(yeastRaw["forma"]), yeastQuantity === void 0 ? "Quantità da determinare; non presumere un dosaggio." : void 0].filter(Boolean).join(" — ") || void 0
 		});
 		cooling.measurements.push(measurement("Volume effettivo nel fermentatore", "L"), measurement("OG effettiva", "SG"), measurement("Temperatura di inoculo", "°C"), measurement("Ora inoculo"));
 		sections.push(cooling);
@@ -13733,6 +13876,8 @@ function buildModel(recipe, raw) {
 		});
 		fermentation.measurements.push(measurement("FG reale", "SG"), measurement("Temperatura reale", "°C"), measurement("Data fine fermentazione"));
 		fermentation.warnings.push("La fermentazione è conclusa solo dopo stabilità della FG, non per sola durata nominale.");
+		if (text(fermentationRaw["temperatura_controllo"])) fermentation.notes.push(`Controllo temperatura: ${text(fermentationRaw["temperatura_controllo"])}`);
+		if (text(fermentationRaw["note"]) || text(fermentationRaw["nota"])) fermentation.notes.push(text(fermentationRaw["note"]) ?? text(fermentationRaw["nota"]));
 		fermentation.actions.sort((a, b) => a.order - b.order);
 		sections.push(fermentation);
 	}
@@ -13753,6 +13898,15 @@ function buildModel(recipe, raw) {
 			ingredient: firstText(carbonationRaw, ["zucchero_tipo"]) ?? "Zucchero",
 			quantity: quantity(recipe.priming_total_grams ?? recipe.priming_sugar_gl * (recipe.packaging_volume_liters ?? 0), "g"),
 			note: recipe.priming_total_grams !== void 0 ? "Quantità totale dichiarata" : `${recipe.priming_sugar_gl} g/L sul volume confezionato`
+		});
+		if (text(carbonationRaw["preparazione"])) packaging.actions.push({
+			phase: "packaging",
+			order: 15,
+			moment: "Preparazione priming",
+			action: "Preparare la soluzione di priming",
+			ingredient: firstText(carbonationRaw, ["zucchero_tipo"]),
+			quantity: quantity(recipe.priming_total_grams, "g"),
+			note: text(carbonationRaw["preparazione"])
 		});
 		packaging.actions.unshift({
 			phase: "packaging",
@@ -13821,10 +13975,17 @@ function buildModel(recipe, raw) {
 			target("IBU", recipe.ibu),
 			target("EBC", recipe.ebc),
 			target("Efficienza", recipe.efficiency_percent, "%"),
+			target("BU:GU", firstNumber(params, ["bu_gu"]), ""),
+			target("Colore", text(params["colore"])),
+			target("Corpo", text(params["corpo"])),
 			target("Bollitura", recipe.boil_time_minutes, " min")
 		].filter((item) => item !== void 0),
 		sections,
-		notes: [recipe.note, ...Array.isArray(raw["note_critiche"]) ? raw["note_critiche"].filter((item) => typeof item === "string") : []].filter((item) => Boolean(item)),
+		notes: [
+			recipe.note,
+			...Array.isArray(raw["note"]) ? raw["note"].filter((item) => typeof item === "string") : [],
+			...Array.isArray(raw["note_critiche"]) ? raw["note_critiche"].filter((item) => typeof item === "string") : []
+		].filter((item) => Boolean(item)),
 		alternatives,
 		unmappedFields
 	};
@@ -13870,68 +14031,159 @@ const YamlToDocxInputSchema = object({
 	input_file: string().describe("Path to the recipe YAML file."),
 	output_file: string().optional().describe("Path for the output .docx file.")
 });
+const PAGE_WIDTH = 9638;
+const PRIMARY$1 = "243447";
+const PALE = "F6F8F9";
+const TEXT$1 = "1F2933";
 function escapeXml(value) {
 	return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
-function paragraph(text, bold = false, size = 20) {
-	return `<w:p><w:r><w:rPr>${bold ? "<w:b/>" : ""}<w:sz w:val="${size}"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
+function run(text, options = {}) {
+	const properties = `<w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/>${options.bold ? "<w:b/>" : ""}${options.italic ? "<w:i/>" : ""}${options.color ? `<w:color w:val="${options.color}"/>` : ""}<w:sz w:val="${options.size ?? 20}"/></w:rPr>`;
+	return String(text).split(/\r?\n/).map((line, index) => `${index > 0 ? "<w:br/>" : ""}<w:r>${properties}<w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r>`).join("");
 }
-function heading(text) {
-	return `<w:p><w:pPr><w:keepNext/><w:pBdr><w:bottom w:val="single" w:sz="5" w:space="4" w:color="8E2F23"/></w:pBdr></w:pPr><w:r><w:rPr><w:b/><w:color w:val="8E2F23"/><w:sz w:val="28"/></w:rPr><w:t>${escapeXml(text)}</w:t></w:r></w:p>`;
+function paragraph(text, options = {}) {
+	return `<w:p><w:pPr><w:spacing w:before="${options.before ?? 40}" w:after="${options.after ?? 80}" w:line="260" w:lineRule="auto"/>${options.keepNext ? "<w:keepNext/>" : ""}${options.align ? `<w:jc w:val="${options.align}"/>` : ""}</w:pPr>${run(text, options)}</w:p>`;
 }
-function cell(text, header = false) {
-	return `<w:tc><w:tcPr><w:shd w:fill="${header ? "8E2F23" : "F5F1ED"}"/><w:tcMar><w:top w:w="70" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:start w:w="80" w:type="dxa"/><w:end w:w="80" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:r><w:rPr>${header ? "<w:b/><w:color w:val=\"FFFFFF\"/>" : ""}<w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p></w:tc>`;
+function heading(text, level = 1) {
+	const size = level === 1 ? 30 : 25;
+	return `<w:p><w:pPr><w:keepNext/><w:spacing w:before="${level === 1 ? 240 : 160}" w:after="100"/><w:outlineLvl w:val="${level - 1}"/><w:pBdr><w:bottom w:val="single" w:sz="8" w:space="6" w:color="${PRIMARY$1}"/></w:pBdr></w:pPr>${run(text, {
+		bold: true,
+		color: PRIMARY$1,
+		size
+	})}</w:p>`;
 }
-function table(headers, rows) {
-	return `<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblLayout w:type="autofit"/><w:tblBorders><w:top w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="2"/><w:insideV w:val="single" w:sz="2"/></w:tblBorders></w:tblPr><w:tblGrid>${headers.map(() => "<w:gridCol w:w=\"1800\"/>").join("")}</w:tblGrid>${`<w:tr>${headers.map((item) => cell(item, true)).join("")}</w:tr>`}${rows.map((row) => `<w:tr>${headers.map((_, index) => cell(row[index] ?? "")).join("")}</w:tr>`).join("")}</w:tbl>`;
+function pageBreak() {
+	return "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>";
+}
+function cell(text, width, header = false, align = "left") {
+	return `<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/><w:shd w:fill="${header ? PRIMARY$1 : PALE}"/><w:vAlign w:val="center"/><w:tcMar><w:top w:w="120" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/><w:start w:w="120" w:type="dxa"/><w:end w:w="120" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:pPr><w:spacing w:after="0"/><w:jc w:val="${align}"/></w:pPr>${run(text, {
+		bold: header,
+		color: header ? "FFFFFF" : TEXT$1,
+		size: header ? 17 : 18
+	})}</w:p></w:tc>`;
+}
+function table(headers, rows, widths, aligns = []) {
+	const grid = widths.map((width) => `<w:gridCol w:w="${width}"/>`).join("");
+	const header = `<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>${headers.map((item, index) => cell(item, widths[index], true, aligns[index] ?? "left")).join("")}</w:tr>`;
+	const body = rows.map((row) => `<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="420" w:hRule="atLeast"/></w:trPr>${widths.map((width, index) => cell(row[index] ?? "", width, false, aligns[index] ?? "left")).join("")}</w:tr>`).join("");
+	return `<w:tbl><w:tblPr><w:tblW w:w="${PAGE_WIDTH}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="100" w:type="dxa"/><w:bottom w:w="100" w:type="dxa"/><w:start w:w="100" w:type="dxa"/><w:end w:w="100" w:type="dxa"/></w:tblCellMar><w:tblBorders><w:top w:val="single" w:sz="6" w:color="9AA8B2"/><w:bottom w:val="single" w:sz="6" w:color="9AA8B2"/><w:insideH w:val="single" w:sz="3" w:color="C9D2D8"/><w:insideV w:val="single" w:sz="3" w:color="C9D2D8"/></w:tblBorders></w:tblPr><w:tblGrid>${grid}</w:tblGrid>${header}${body}</w:tbl><w:p><w:pPr><w:spacing w:after="80"/></w:pPr></w:p>`;
 }
 function targetRows$1(values) {
 	return values.map((item) => [item.label, item.value]);
 }
-function renderSection(section) {
-	let output = heading(section.title);
-	if (section.targets.length) output += table(["TARGET", "Valore"], targetRows$1(section.targets));
-	if (section.actions.length) output += table([
-		"Momento",
-		"Azione / ingrediente",
-		"Quantità",
-		"Temperatura / durata",
-		"Nota"
-	], section.actions.map((action) => [
+function checkpointRows(section) {
+	return section.measurements.map((item) => [
+		`${item.label}${item.unit ? ` (${item.unit})` : ""}`,
+		"________________________",
+		""
+	]);
+}
+function actionRows(section) {
+	return section.actions.map((action) => [
+		"☐",
 		action.moment,
-		[action.action, action.ingredient].filter(Boolean).join(": "),
+		action.action,
+		action.ingredient ?? "",
 		action.quantity ?? "",
 		[action.temperature, action.duration].filter(Boolean).join(" / "),
 		action.note ?? ""
-	]));
-	if (section.measurements.length) output += table(["MISURATO", "Valore reale"], section.measurements.map((item) => [`${item.label}${item.unit ? ` (${item.unit})` : ""}`, "____________________________"]));
-	for (const warning of section.warnings) output += paragraph(`ATTENZIONE: ${warning}`);
-	for (const note of section.notes) output += paragraph(`NOTA: ${note}`);
+	]);
+}
+function renderSection(section) {
+	let output = heading(section.title, 1);
+	if (section.targets.length) output += heading("Target di fase", 2) + table(["PARAMETRO", "TARGET"], targetRows$1(section.targets), [5300, 4338]);
+	if (section.actions.length) {
+		output += heading("Operazioni e checklist", 2);
+		output += table([
+			"CHECK",
+			"MOMENTO",
+			"OPERAZIONE",
+			"INGREDIENTE",
+			"QUANTITÀ",
+			"PARAMETRI",
+			"NOTE"
+		], actionRows(section), [
+			600,
+			1350,
+			2200,
+			1750,
+			950,
+			1250,
+			1538
+		], [
+			"center",
+			"left",
+			"left",
+			"left",
+			"right",
+			"left",
+			"left"
+		]);
+	}
+	if (section.measurements.length) output += heading("Checkpoint compilabili", 2) + table([
+		"PARAMETRO",
+		"MISURATO",
+		"NOTE"
+	], checkpointRows(section), [
+		4100,
+		2500,
+		3038
+	]);
+	for (const warning of section.warnings) output += paragraph(`ATTENZIONE  ${warning}`, {
+		bold: true,
+		color: "8B2E2E",
+		before: 100,
+		after: 100
+	});
+	for (const note of section.notes) output += paragraph(`NOTA  ${note}`, { color: "52606D" });
 	return output;
 }
 function renderModel(model) {
-	let body = `<w:p><w:pPr><w:jc w:val="center"/><w:keepNext/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="8E2F23"/><w:sz w:val="36"/></w:rPr><w:t>${escapeXml(model.metadata.name)}</w:t></w:r></w:p>`;
-	body += `<w:p><w:pPr><w:jc w:val="center"/><w:keepNext/></w:pPr><w:r><w:rPr><w:i/><w:sz w:val="22"/></w:rPr><w:t>${escapeXml(model.metadata.style)}</w:t></w:r></w:p>`;
-	if (model.metadata.description) body += paragraph(model.metadata.description);
-	body += heading("A. Scheda iniziale");
-	body += table(["Campo", "TARGET / dato"], [
+	let body = paragraph(model.metadata.name, {
+		bold: true,
+		color: PRIMARY$1,
+		size: 36,
+		align: "center",
+		keepNext: true,
+		before: 100,
+		after: 40
+	});
+	body += paragraph(model.metadata.style, {
+		italic: true,
+		color: "52606D",
+		size: 22,
+		align: "center",
+		keepNext: true,
+		after: 180
+	});
+	body += heading("A. Riepilogo operativo", 1);
+	body += table(["CAMPO", "VALORE"], [
 		["Data della cotta", "____________________________"],
 		["Impianto", model.metadata.equipment ?? ""],
-		...targetRows$1(model.summaryTargets),
-		...targetRows$1(model.objectives)
-	]);
-	for (const section of model.sections) body += renderSection(section);
+		...targetRows$1(model.summaryTargets)
+	], [3300, 6338]);
+	if (model.metadata.description) body += paragraph(model.metadata.description, {
+		size: 19,
+		after: 120
+	});
+	if (model.objectives.length) body += table(["OBIETTIVO PRODUTTIVO", "DESCRIZIONE"], targetRows$1(model.objectives), [3300, 6338]);
+	body += heading("Macrofasi", 2) + table(["N.", "FASE"], model.sections.map((section, index) => [String(index + 1), section.title]), [900, 8738], ["center", "left"]);
+	for (const section of model.sections) body += pageBreak() + renderSection(section);
 	if (model.notes.length) {
-		body += heading("Note informative");
-		for (const note of model.notes) body += paragraph(`NOTA: ${note}`);
+		body += pageBreak() + heading("Note e avvertenze", 1);
+		for (const note of model.notes) body += paragraph(`NOTA  ${note}`, { color: "52606D" });
 	}
 	if (model.alternatives.length) {
-		body += heading("Alternative non selezionate");
+		body += heading("Alternative non selezionate", 1);
 		for (const alternative of model.alternatives) body += paragraph(alternative);
 	}
 	if (model.unmappedFields.length) {
-		body += heading("Campi YAML non mappati");
-		body += paragraph(model.unmappedFields.join(", "));
+		body += heading("Campi YAML non mappati", 1);
+		body += paragraph(model.unmappedFields.join(", "), {
+			bold: true,
+			color: "8B2E2E"
+		});
 	}
 	return body;
 }
@@ -13995,11 +14247,20 @@ function yamlToDocx(inputPath, outputPath) {
 	const validation = validateYamlFile(inputPath);
 	if (validation.validation_status === "invalid") throw new Error(`Validazione YAML bloccante: ${validation.errors.map((error) => error.message).join("; ")}`);
 	const { model } = buildRecipeDocumentModel(inputPath);
-	const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${renderModel(model)}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="850" w:bottom="850" w:left="850"/></w:sectPr></w:body></w:document>`;
+	const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${renderModel(model)}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/><w:headerReference w:type="default" r:id="rId2"/><w:footerReference w:type="default" r:id="rId3"/></w:sectPr></w:body></w:document>`;
+	const headerXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="right"/><w:spacing w:after="0"/></w:pPr>${run("SCHEDA OPERATIVA · BREWMASTER", {
+		bold: true,
+		color: PRIMARY$1,
+		size: 16
+	})}</w:p></w:hdr>`;
+	const footerXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><w:ftr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:p><w:pPr><w:jc w:val=\"center\"/><w:spacing w:after=\"0\"/></w:pPr>" + run("Pagina ", {
+		color: "52606D",
+		size: 16
+	}) + "<w:fldSimple w:instr=\"PAGE\"><w:r><w:rPr><w:color w:val=\"52606D\"/><w:sz w:val=\"16\"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple></w:p></w:ftr>";
 	writeFileSync(outputPath, zip([
 		{
 			name: "[Content_Types].xml",
-			data: Buffer.from("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/></Types>")
+			data: Buffer.from("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/><Override PartName=\"/word/header1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml\"/><Override PartName=\"/word/footer1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml\"/></Types>")
 		},
 		{
 			name: "_rels/.rels",
@@ -14008,6 +14269,18 @@ function yamlToDocx(inputPath, outputPath) {
 		{
 			name: "word/document.xml",
 			data: Buffer.from(documentXml)
+		},
+		{
+			name: "word/_rels/document.xml.rels",
+			data: Buffer.from("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header\" Target=\"header1.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer\" Target=\"footer1.xml\"/></Relationships>")
+		},
+		{
+			name: "word/header1.xml",
+			data: Buffer.from(headerXml)
+		},
+		{
+			name: "word/footer1.xml",
+			data: Buffer.from(footerXml)
 		}
 	]));
 	return outputPath;

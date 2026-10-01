@@ -433,7 +433,7 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
   const priming_sugar_gl = pickNum(params, ['priming_gl', 'priming_g_l'])
     ?? pickNum(carbonazione, ['zucchero_g_per_litro', 'azucar_g_por_litro', 'priming_gl']);
   const priming_total_grams = pickNum(params, ['priming_totale_g', 'priming_total_g', 'zucchero_priming_totale_g'])
-    ?? pickNum(carbonazione, ['priming_totale_g', 'priming_total_g', 'zucchero_totale_g']);
+    ?? pickNum(carbonazione, ['priming_totale_g', 'priming_total_g', 'zucchero_totale_g', 'zucchero_grammi']);
 
   // Grist → grain_bill
   const grist = Array.isArray(d['grist']) ? d['grist'] as Array<Record<string, unknown>> : [];

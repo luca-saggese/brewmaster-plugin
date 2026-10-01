@@ -4129,11 +4129,7 @@ function closeObjectNodes(value) {
 //#endregion
 //#region src/brewing/brewing-calculator.ts
 /**
-* Brewing calculator — complete brewing math engine.
-*
-* Single coherent volume chain (packaged → fermenter → cold post-boil →
-* hot post-boil → pre-boil → mash/sparge) plus ABV, attenuation, efficiency,
-* strike water, pitching rate, gravity correction, dilution, and boil-off.
+* Brewing calculator — brewing math from already-resolved process volumes.
 */
 const MALT_POTENTIAL = {
 	"pilsner malt": 307,
@@ -4176,61 +4172,147 @@ const DEFAULT_RATES = {
 	hybrid: 1,
 	lager: 1.5
 };
-const SUCROSE_YIELD = 384;
+const MISSING_WATER_VOLUMES = "Mancano i volumi necessari per questo calcolo. Eseguire prima water_profile_calculator e passare i risultati tramite water_volumes.";
+function sgToPoints(sg) {
+	return (sg - 1) * 1e3;
+}
+function pointsToSg(points) {
+	return 1 + points / 1e3;
+}
+function sgToPlato(sg) {
+	return -616.868 + 1111.14 * sg - 630.272 * sg * sg + 135.997 * sg * sg * sg;
+}
+function calculateExtractPoints(gravity, volume) {
+	return sgToPoints(gravity) * volume;
+}
+function calculateGravityFromExtract(extractPoints, volume) {
+	if (volume <= 0) throw new Error("Il volume deve essere maggiore di zero.");
+	return pointsToSg(extractPoints / volume);
+}
+const FERMENTABLE_POTENTIALS = {
+	sucrose: 384,
+	dextrose: 370,
+	dme: 370,
+	lme: 300
+};
 const BrewingCalculatorInputSchema = object({
 	calculation: _enum([
 		"abv",
 		"attenuation",
 		"efficiency",
+		"mash_efficiency",
+		"brewhouse_efficiency",
+		"estimated_og",
+		"estimated_pre_boil_gravity",
+		"estimated_fg",
 		"strike_water",
-		"mash_water_volume",
-		"sparge_water_volume",
-		"total_water_volume",
-		"pre_boil_volume",
-		"post_boil_volume",
 		"pitching_rate",
 		"gravity_correction",
 		"dilution",
-		"boil_off"
+		"gravity_balance",
+		"boil_correction",
+		"gravity_temperature_correction"
 	]),
 	og: number().min(.99).max(1.3).optional(),
 	fg: number().min(.99).max(1.2).optional(),
-	batch_size_liters: number().positive().max(200).optional().describe("Target packaged beer volume in liters."),
+	batch_size_liters: number().positive().max(200).optional().describe("Legacy/general liquid volume. It is never used as an implicit process-volume fallback."),
+	water_volumes: object({
+		mash_l: number().nonnegative().describe("Mash water volume, in the declared volume_reference."),
+		sparge_l: number().nonnegative().describe("Sparge water volume, in the declared volume_reference."),
+		total_water_l: number().nonnegative().describe("Total process water already resolved by the Water Calculator."),
+		pre_boil_l: number().nonnegative().describe("Wort volume immediately before boiling, in the declared volume_reference."),
+		post_boil_l: number().nonnegative().describe("Wort volume immediately after boiling, in the declared volume_reference."),
+		fermenter_l: number().nonnegative().describe("Expected wort volume transferred to the fermenter, in the declared volume_reference."),
+		packaged_l: number().nonnegative().optional().describe("Expected packaged beer volume, if available."),
+		volume_reference: _enum(["hot", "cold"]).describe("Temperature reference shared by every volume in this object; no conversion is performed.")
+	}).optional().describe("Volumes already resolved by water_profile_calculator. Brewing Calculator never reconstructs missing values."),
 	grain_bill_kg: array(object({
 		malt: string().min(1),
-		kg: number().positive()
+		kg: number().positive(),
+		potential_pt_l_per_kg: number().positive().optional()
 	})).optional(),
 	grain_bill: array(object({
 		malt: string().min(1),
-		kg: number().positive()
+		kg: number().positive(),
+		potential_pt_l_per_kg: number().positive().optional()
 	})).optional(),
+	efficiency_type: _enum(["mash", "brewhouse"]).optional().describe("Efficiency model: mash uses pre-boil volume; brewhouse uses fermenter volume."),
+	additional_fermentables: array(object({
+		name: string().min(1),
+		kg: number().positive(),
+		potential_pt_l_per_kg: number().positive()
+	})).optional().describe("Fermentables added after mash. Counted separately only for brewhouse efficiency."),
 	measured_gravity: number().min(.99).max(1.3).optional(),
 	mash_temp_c: number().min(35).max(80).optional(),
 	grain_temp_c: number().min(-10).max(45).optional(),
-	mash_thickness_l_per_kg: number().min(1.5).max(10).optional(),
-	mash_deadspace_liters: number().min(0).max(30).optional().describe("Volume under the basket/false bottom in liters (default 0)."),
-	mash_loss_liters: number().min(0).max(20).optional().describe("Non-recoverable mash loss in liters (default 0)."),
-	grain_absorption_l_per_kg: number().min(.3).max(1.5).optional().describe("Grain absorption in L/kg (default 0.8)."),
-	sparge_water_volume: number().nonnegative().max(200).optional().describe("User-provided sparge water volume in liters. When given, it overrides the calculated sparge volume for total_water_volume."),
-	boil_duration_minutes: number().min(0).max(300).optional(),
-	boil_off_rate_l_per_h: number().min(0).max(20).optional(),
-	trub_loss_liters: number().min(0).max(30).optional().describe("Trub/kettle loss in liters (default 1.5)."),
-	fermenter_loss_liters: number().min(0).max(30).optional().describe("Fermenter-to-package loss in liters (default 0.5)."),
-	wort_shrinkage_percent: number().min(0).max(10).optional().describe("Wort shrinkage from hot to cold (default 4%)."),
+	strike_mode: _enum(["theoretical", "calibrated"]).optional(),
+	strike_temperature_correction_c: number().min(-20).max(20).optional().describe("Empirical additive correction for the installed system; no default is applied."),
+	pre_boil_gravity: number().min(.99).max(1.3).optional(),
+	mash_efficiency_percent: number().positive().max(100).optional(),
+	brewhouse_efficiency_percent: number().positive().max(100).optional(),
+	attenuation_percent: number().nonnegative().max(100).optional(),
 	beer_type: _enum([
 		"ale",
 		"lager",
 		"hybrid"
 	]).optional(),
 	cells_per_ml_p_required: number().min(.1).max(5).optional(),
+	pitching_rate_million_ml_p: number().positive().max(5).optional(),
+	yeast_form: _enum([
+		"dry",
+		"liquid",
+		"slurry"
+	]).optional(),
+	yeast_cell_count_billions_per_unit: number().positive().optional(),
+	yeast_units_available: number().positive().optional(),
+	yeast_concentration_billions_per_ml: number().positive().optional(),
+	slurry_volume_ml: number().positive().optional(),
 	yeast_viability_percent: number().gt(0).max(100).optional(),
 	volume_liters: number().optional(),
 	current_gravity: number().optional(),
-	target_gravity: number().optional()
+	target_gravity: number().optional(),
+	fermentable_type: _enum([
+		"sucrose",
+		"dextrose",
+		"dme",
+		"lme",
+		"custom"
+	]).optional(),
+	fermentable_potential_pt_l_per_kg: number().positive().optional(),
+	process_stage: _enum([
+		"pre_boil",
+		"post_boil",
+		"fermenter",
+		"packaging"
+	]).optional(),
+	initial_volume_l: number().positive().optional(),
+	initial_gravity: number().min(.99).max(1.3).optional(),
+	final_volume_l: number().positive().optional(),
+	final_gravity: number().min(.99).max(1.3).optional(),
+	extract_added_pt_l: number().nonnegative().optional(),
+	extract_removed_pt_l: number().nonnegative().optional(),
+	measured_pre_boil_l: number().positive().optional(),
+	measured_pre_boil_gravity: number().min(.99).max(1.3).optional(),
+	target_og: number().min(.99).max(1.3).optional(),
+	target_post_boil_l: number().positive().optional(),
+	boil_off_l_per_hour: number().positive().optional(),
+	max_boil_duration_h: number().positive().optional(),
+	correction_fermentable_type: _enum([
+		"sucrose",
+		"dextrose",
+		"dme",
+		"lme",
+		"custom"
+	]).optional(),
+	correction_fermentable_potential_pt_l_per_kg: number().positive().optional(),
+	sample_temperature_c: number().min(-20).max(120).optional(),
+	hydrometer_calibration_temperature_c: number().min(-20).max(120).optional(),
+	gravity_temperature_method: _enum(["none", "manual"]).optional(),
+	manual_gravity_correction_sg: number().optional()
 });
 var BrewingCalculatorTool = class {
 	name = "brewing_calculator";
-	description = "Calculate brewing parameters: ABV, attenuation, efficiency, strike water, mash/sparge/total water, pre/post-boil volumes, pitching rates, gravity corrections, dilution, and boil-off. For total_water_volume you can optionally pass sparge_water_volume (in liters) to override the calculated sparge volume.";
+	description = "Calculate brewing parameters from resolved process volumes: ABV, attenuation, mash and brewhouse efficiency, estimated gravities, strike temperature, pitching rates, gravity corrections, dilution, gravity balance, and boil corrections. Water volumes must be supplied through water_volumes from water_profile_calculator; this tool does not calculate or rebalance them.";
 	parameters = toInputJsonSchema(BrewingCalculatorInputSchema);
 	resolveExecution(args) {
 		return {
@@ -4241,256 +4323,538 @@ var BrewingCalculatorTool = class {
 	}
 	execute(args) {
 		try {
+			let result;
 			switch (args.calculation) {
-				case "abv": return Promise.resolve(this.calcAbv(args));
-				case "attenuation": return Promise.resolve(this.calcAttenuation(args));
-				case "efficiency": return Promise.resolve(this.calcEfficiency(args));
-				case "strike_water": return Promise.resolve(this.calcStrikeWater(args));
-				case "mash_water_volume": return Promise.resolve(this.calcMashWaterVolume(args));
-				case "sparge_water_volume": return Promise.resolve(this.calcSpargeWaterVolume(args));
-				case "total_water_volume": return Promise.resolve(this.calcTotalWaterVolume(args));
-				case "pre_boil_volume": return Promise.resolve(this.calcPreBoilVolume(args));
-				case "post_boil_volume": return Promise.resolve(this.calcPostBoilVolume(args));
-				case "pitching_rate": return Promise.resolve(this.calcPitchingRate(args));
-				case "gravity_correction": return Promise.resolve(this.calcGravityCorrection(args));
-				case "dilution": return Promise.resolve(this.calcDilution(args));
-				case "boil_off": return Promise.resolve(this.calcBoilOff(args));
+				case "abv":
+					result = this.calcAbv(args);
+					break;
+				case "attenuation":
+					result = this.calcAttenuation(args);
+					break;
+				case "efficiency":
+					result = this.calcEfficiency(args);
+					break;
+				case "mash_efficiency":
+					result = this.calcMashEfficiency(args);
+					break;
+				case "brewhouse_efficiency":
+					result = this.calcBrewhouseEfficiency(args);
+					break;
+				case "estimated_og":
+					result = this.calcEstimatedOg(args);
+					break;
+				case "estimated_pre_boil_gravity":
+					result = this.calcEstimatedPreBoilGravity(args);
+					break;
+				case "estimated_fg":
+					result = this.calcEstimatedFg(args);
+					break;
+				case "strike_water":
+					result = this.calcStrikeWater(args);
+					break;
+				case "pitching_rate":
+					result = this.calcPitchingRate(args);
+					break;
+				case "gravity_correction":
+					result = this.calcGravityCorrection(args);
+					break;
+				case "dilution":
+					result = this.calcDilution(args);
+					break;
+				case "gravity_balance":
+					result = this.calcGravityBalance(args);
+					break;
+				case "boil_correction":
+					result = this.calcBoilCorrection(args);
+					break;
+				case "gravity_temperature_correction": result = this.calcGravityTemperatureCorrection(args);
 			}
+			return Promise.resolve(this.asStructuredResult(args.calculation, result));
 		} catch (error) {
-			return Promise.resolve({
-				isError: true,
-				output: error instanceof Error ? error.message : String(error)
-			});
+			return Promise.resolve(this.structuredError(args.calculation, error instanceof Error ? error.message : String(error)));
 		}
 	}
-	waterParameters(args) {
+	asStructuredResult(calculation, result) {
+		let parsed;
+		try {
+			parsed = JSON.parse(result.output);
+		} catch {
+			parsed = void 0;
+		}
+		if (parsed !== void 0 && typeof parsed === "object" && parsed !== null) return result;
+		const payload = {
+			tool: "brewing_calculator",
+			calculation,
+			ok: result.isError !== true,
+			result: result.isError === true ? null : { message: result.output },
+			summary: result.output,
+			errors: result.isError === true ? [result.output] : []
+		};
 		return {
-			packagedLiters: args.batch_size_liters ?? 0,
-			grainKg: this.sumKg(args.grain_bill_kg ?? args.grain_bill),
-			mashThickness: args.mash_thickness_l_per_kg ?? 3,
-			mashDeadspace: args.mash_deadspace_liters ?? 0,
-			mashLoss: args.mash_loss_liters ?? 0,
-			grainAbsorption: args.grain_absorption_l_per_kg ?? .8,
-			boilMinutes: args.boil_duration_minutes ?? 60,
-			boilOffRate: args.boil_off_rate_l_per_h ?? 3,
-			trubLoss: args.trub_loss_liters ?? 1.5,
-			fermenterLoss: args.fermenter_loss_liters ?? .5,
-			shrinkageFraction: (args.wort_shrinkage_percent ?? 4) / 100
+			isError: result.isError === true ? true : void 0,
+			output: JSON.stringify(payload)
 		};
 	}
-	boilOffL(args) {
-		const p = this.waterParameters(args);
-		return p.boilOffRate * p.boilMinutes / 60;
+	structuredError(calculation, message) {
+		return {
+			isError: true,
+			output: JSON.stringify({
+				tool: "brewing_calculator",
+				calculation,
+				ok: false,
+				result: null,
+				summary: message,
+				errors: [message]
+			})
+		};
 	}
-	fermenterTargetL(args) {
-		const p = this.waterParameters(args);
-		return p.packagedLiters + p.fermenterLoss;
-	}
-	coldPostBoilL(args) {
-		const p = this.waterParameters(args);
-		return this.fermenterTargetL(args) + p.trubLoss;
-	}
-	hotPostBoilL(args) {
-		const p = this.waterParameters(args);
-		return this.coldPostBoilL(args) / (1 - p.shrinkageFraction);
-	}
-	preBoilL(args) {
-		return this.hotPostBoilL(args) + this.boilOffL(args);
-	}
-	mashWaterL(args) {
-		const p = this.waterParameters(args);
-		if (p.grainKg <= 0) return 0;
-		return p.grainKg * p.mashThickness + p.mashDeadspace;
-	}
-	firstRunningsL(args) {
-		const p = this.waterParameters(args);
-		const mw = this.mashWaterL(args);
-		return Math.max(0, mw - p.grainKg * p.grainAbsorption - p.mashLoss);
-	}
-	spargeWaterL(args) {
-		if (args.sparge_water_volume !== void 0) return args.sparge_water_volume;
-		return Math.max(0, this.preBoilL(args) - this.firstRunningsL(args));
-	}
-	totalWaterL(args) {
-		return this.mashWaterL(args) + this.spargeWaterL(args);
+	structuredSuccess(calculation, result, summary, warnings = []) {
+		return { output: JSON.stringify({
+			tool: "brewing_calculator",
+			calculation,
+			ok: true,
+			result,
+			summary,
+			warnings,
+			errors: []
+		}) };
 	}
 	calcAbv(args) {
 		const og = this.req(args.og, "og");
 		const fg = this.req(args.fg, "fg");
-		if (og <= fg) return {
+		if (!Number.isFinite(og) || !Number.isFinite(fg) || og <= 1 || fg < .99 || og <= fg) return {
 			isError: true,
-			output: "OG must be greater than FG."
+			output: "Valori non fisici: per una birra fermentata servono OG > FG, OG > 1.000 e densità finite."
 		};
-		return { output: `ABV = (OG ${og.toFixed(3)} − FG ${fg.toFixed(3)}) × 131.25 = **${((og - fg) * 131.25).toFixed(2)}% vol**` };
+		const abv = (og - fg) * 131.25;
+		const summary = `ABV (formula semplificata) = (OG ${og.toFixed(3)} − FG ${fg.toFixed(3)}) × 131.25 = **${abv.toFixed(3)}% vol**`;
+		return this.structuredSuccess("abv", {
+			og,
+			fg,
+			abv_percent: abv,
+			formula: "abv = (og - fg) × 131.25"
+		}, summary);
 	}
 	calcAttenuation(args) {
 		const og = this.req(args.og, "og");
 		const fg = this.req(args.fg, "fg");
-		if (og <= fg) return {
+		if (!Number.isFinite(og) || !Number.isFinite(fg) || og <= fg || og <= 1 || fg < .99) return {
 			isError: true,
-			output: "OG must be greater than FG."
+			output: "Valori non fisici: servono OG > FG e OG > 1.000."
 		};
-		return { output: `Attenuazione apparente = **${((og - fg) / (og - 1) * 100).toFixed(1)}%**` };
+		const attenuation = (og - fg) / (og - 1) * 100;
+		const summary = `Attenuazione apparente (formula semplificata) = [(${og.toFixed(3)} − ${fg.toFixed(3)}) / (${og.toFixed(3)} − 1.000)] × 100 = **${attenuation.toFixed(1)}%**`;
+		return this.structuredSuccess("attenuation", {
+			og,
+			fg,
+			attenuation_percent: attenuation,
+			formula: "attenuation = (og - fg) / (og - 1) × 100"
+		}, summary);
 	}
 	calcEfficiency(args) {
-		const batchLiters = this.req(args.batch_size_liters, "batch_size_liters");
-		const measuredGrav = this.req(args.measured_gravity, "measured_gravity");
+		const efficiencyType = this.req(args.efficiency_type, "efficiency_type");
+		const measuredGravity = this.req(args.measured_gravity, "measured_gravity");
+		const volumeField = efficiencyType === "mash" ? "pre_boil_l" : "fermenter_l";
+		const volume = this.requireWaterVolume(args, volumeField);
 		const grainBill = this.req(args.grain_bill_kg ?? args.grain_bill, "grain_bill");
-		let theoreticalPtL = 0;
-		for (const { malt, kg } of grainBill) {
-			const key = malt.toLowerCase();
-			const pot = MALT_POTENTIAL[key] ?? MALT_POTENTIAL[key + " malt"] ?? this.lookupPotential(key);
-			if (pot === void 0) return {
+		let theoreticalGrainPtL = 0;
+		for (const ingredient of grainBill) {
+			const key = ingredient.malt.toLowerCase().trim();
+			const potential = ingredient.potential_pt_l_per_kg ?? MALT_POTENTIAL[key] ?? MALT_POTENTIAL[key + " malt"];
+			if (potential === void 0) return {
 				isError: true,
-				output: `Potenziale sconosciuto per "${malt}".`
+				output: `Potenziale mancante per "${ingredient.malt}". Specificare potential_pt_l_per_kg; non è possibile classificare automaticamente miscele commerciali o malti non riconosciuti.`
 			};
-			theoreticalPtL += kg * pot;
+			theoreticalGrainPtL += ingredient.kg * potential;
 		}
-		const measuredPtL = (measuredGrav - 1) * 1e3 * batchLiters;
-		return { output: [
-			`Efficienza = **${(measuredPtL / theoreticalPtL * 100).toFixed(1)}%**`,
+		const measuredPtL = (measuredGravity - 1) * 1e3 * volume;
+		const additionalPtL = efficiencyType === "brewhouse" ? (args.additional_fermentables ?? []).reduce((total, fermentable) => total + fermentable.kg * fermentable.potential_pt_l_per_kg, 0) : 0;
+		const gristMeasuredPtL = measuredPtL - additionalPtL;
+		const efficiency = gristMeasuredPtL / theoreticalGrainPtL * 100;
+		const summary = [
+			`Tipo di efficienza: **${efficiencyType}**`,
+			`Volume utilizzato: **${volume.toFixed(1)} L** (${volumeField})`,
+			`Densità utilizzata: **${measuredGravity.toFixed(3)}**`,
+			`Potenziale teorico del grist: **${theoreticalGrainPtL.toFixed(0)} punti·L**`,
+			`Punti·litro effettivamente ottenuti: **${measuredPtL.toFixed(0)} punti·L**`,
+			efficiencyType === "brewhouse" ? `  Estratto da aggiunte post-mash: ${additionalPtL.toFixed(0)} punti·L; estratto attribuito al grist: ${gristMeasuredPtL.toFixed(0)} punti·L` : "  Aggiunte fermentabili successive al mash escluse dal calcolo mash.",
+			`Efficienza calcolata: **${efficiency.toFixed(2)}%**`
+		].join("\n");
+		return this.structuredSuccess("efficiency", {
+			efficiency_type: efficiencyType,
+			volume_l: volume,
+			measured_gravity: measuredGravity,
+			theoretical_grist_pt_l: theoreticalGrainPtL,
+			measured_pt_l: measuredPtL,
+			additional_fermentables_pt_l: additionalPtL,
+			grist_measured_pt_l: gristMeasuredPtL,
+			efficiency_percent: efficiency
+		}, summary);
+	}
+	calcMashEfficiency(args) {
+		const preBoilGravity = this.req(args.pre_boil_gravity ?? args.measured_gravity, "pre_boil_gravity");
+		const preBoilVolume = this.requireWaterVolume(args, "pre_boil_l");
+		return this.efficiencyResult("Efficienza mash", preBoilGravity, preBoilVolume, args);
+	}
+	calcBrewhouseEfficiency(args) {
+		const og = this.req(args.og, "og");
+		const fermenterVolume = this.requireWaterVolume(args, "fermenter_l");
+		return this.efficiencyResult("Efficienza brewhouse", og, fermenterVolume, args);
+	}
+	efficiencyResult(label, gravity, volume, args) {
+		const theoreticalPtL = this.theoreticalPoints(args);
+		const measuredPtL = (gravity - 1) * 1e3 * volume;
+		const efficiency = measuredPtL / theoreticalPtL * 100;
+		const summary = [
+			`${label} = **${efficiency.toFixed(1)}%**`,
+			`  Densità: ${gravity.toFixed(3)}; volume: ${volume.toFixed(1)} L`,
 			`  Punti teorici: ${theoreticalPtL.toFixed(0)} punti·L`,
 			`  Punti misurati: ${measuredPtL.toFixed(0)} punti·L`
-		].join("\n") };
+		].join("\n");
+		const calculation = label === "Efficienza mash" ? "mash_efficiency" : "brewhouse_efficiency";
+		return this.structuredSuccess(calculation, {
+			efficiency_percent: efficiency,
+			measured_gravity: gravity,
+			volume_l: volume,
+			theoretical_pt_l: theoreticalPtL,
+			measured_pt_l: measuredPtL
+		}, summary);
+	}
+	calcEstimatedOg(args) {
+		const postBoilVolume = this.requireWaterVolume(args, "post_boil_l");
+		const preBoilGravity = args.pre_boil_gravity ?? args.measured_pre_boil_gravity;
+		if (preBoilGravity !== void 0) {
+			const preBoilVolume = this.requireWaterVolume(args, "pre_boil_l");
+			const preBoilExtract = calculateExtractPoints(preBoilGravity, preBoilVolume);
+			const added = (args.additional_fermentables ?? []).reduce((total, fermentable) => total + fermentable.kg * fermentable.potential_pt_l_per_kg, 0);
+			const gravity = calculateGravityFromExtract(preBoilExtract + added, postBoilVolume);
+			const summary = [
+				`OG prevista da densità pre-boil (non misurazione reale): **${gravity.toFixed(3)}**`,
+				`  Volume utilizzato: ${postBoilVolume.toFixed(2)} L post-boil; pre-boil ${preBoilVolume.toFixed(2)} L a ${preBoilGravity.toFixed(3)}`,
+				`  Punti·litro pre-boil: ${preBoilExtract.toFixed(2)}; aggiunte successive: ${added.toFixed(2)} punti·L`
+			].join("\n");
+			return this.structuredSuccess("estimated_og", {
+				estimated_og: gravity,
+				pre_boil_gravity: preBoilGravity,
+				pre_boil_volume_l: preBoilVolume,
+				post_boil_volume_l: postBoilVolume,
+				pre_boil_extract_pt_l: preBoilExtract,
+				additional_fermentables_pt_l: added,
+				model: "points_litre"
+			}, summary);
+		}
+		const volumeMode = args.brewhouse_efficiency_percent !== void 0 ? "brewhouse" : "mash";
+		const efficiency = volumeMode === "brewhouse" ? this.req(args.brewhouse_efficiency_percent, "brewhouse_efficiency_percent") : this.req(args.mash_efficiency_percent, "mash_efficiency_percent");
+		const volume = volumeMode === "brewhouse" ? this.requireWaterVolume(args, "fermenter_l") : this.requireWaterVolume(args, "post_boil_l");
+		const theoretical = this.theoreticalPoints(args);
+		const added = (args.additional_fermentables ?? []).reduce((total, fermentable) => total + fermentable.kg * fermentable.potential_pt_l_per_kg, 0);
+		const gravity = calculateGravityFromExtract(theoretical * efficiency / 100 + added, volume);
+		const summary = [
+			`OG prevista da grist ed efficienza (non misurazione reale): **${gravity.toFixed(3)}**`,
+			`  Metodo: ${volumeMode}; efficienza utilizzata: ${efficiency.toFixed(2)}%`,
+			`  Volume utilizzato: ${volume.toFixed(2)} L; potenziale teorico grist: ${theoretical.toFixed(2)} punti·L`,
+			`  Aggiunte fermentabili: ${added.toFixed(2)} punti·L`
+		].join("\n");
+		return this.structuredSuccess("estimated_og", {
+			estimated_og: gravity,
+			volume_l: volume,
+			efficiency_type: volumeMode,
+			efficiency_percent: efficiency,
+			theoretical_grist_pt_l: theoretical,
+			additional_fermentables_pt_l: added,
+			model: "points_litre"
+		}, summary);
+	}
+	calcEstimatedPreBoilGravity(args) {
+		const efficiency = this.req(args.mash_efficiency_percent, "mash_efficiency_percent");
+		const volume = this.requireWaterVolume(args, "pre_boil_l");
+		const theoretical = this.theoreticalPoints(args);
+		const added = (args.additional_fermentables ?? []).reduce((total, fermentable) => total + fermentable.kg * fermentable.potential_pt_l_per_kg, 0);
+		const extract = theoretical * efficiency / 100 + added;
+		const gravity = calculateGravityFromExtract(extract, volume);
+		const summary = [
+			`Densità pre-boil stimata (modello punti·litro) = **${gravity.toFixed(3)}**`,
+			`  Potenziale teorico grist: ${theoretical.toFixed(2)} punti·L`,
+			`  Efficienza mash utilizzata: ${efficiency.toFixed(2)}%`,
+			`  Punti·litro previsti: ${extract.toFixed(2)}; volume pre-boil: ${volume.toFixed(2)} L`
+		].join("\n");
+		return this.structuredSuccess("estimated_pre_boil_gravity", {
+			estimated_pre_boil_gravity: gravity,
+			volume_l: volume,
+			mash_efficiency_percent: efficiency,
+			theoretical_grist_pt_l: theoretical,
+			predicted_extract_pt_l: extract,
+			model: "points_litre"
+		}, summary);
+	}
+	calcEstimatedFg(args) {
+		const og = this.req(args.og, "og");
+		const attenuation = this.req(args.attenuation_percent, "attenuation_percent");
+		if (og <= 1 || attenuation < 0 || attenuation > 100) return {
+			isError: true,
+			output: "OG o attenuazione non fisica."
+		};
+		const fg = 1 + (og - 1) * (1 - attenuation / 100);
+		const abv = (og - fg) * 131.25;
+		const summary = `FG stimata = **${fg.toFixed(3)}** (OG ${og.toFixed(3)}, attenuazione prevista ${attenuation.toFixed(1)}%; ABV teorico ${abv.toFixed(2)}%)`;
+		return this.structuredSuccess("estimated_fg", {
+			og,
+			attenuation_percent: attenuation,
+			fg,
+			abv_percent: abv
+		}, summary);
 	}
 	calcStrikeWater(args) {
 		const mashTemp = this.req(args.mash_temp_c, "mash_temp_c");
 		const grainTemp = this.req(args.grain_temp_c, "grain_temp_c");
-		const thickness = args.mash_thickness_l_per_kg ?? 3;
-		return { output: `Temperatura strike water = **${(mashTemp + .41 / thickness * (mashTemp - grainTemp)).toFixed(1)}°C** (${thickness} L/kg, mash target ${mashTemp}°C, grani ${grainTemp}°C)` };
-	}
-	calcMashWaterVolume(args) {
-		const p = this.waterParameters(args);
-		if (p.grainKg <= 0) return {
+		const mashVolume = this.requireWaterVolume(args, "mash_l");
+		const grainKg = this.sumKg(this.req(args.grain_bill_kg ?? args.grain_bill, "grain_bill"));
+		if (grainKg <= 0) return {
 			isError: true,
 			output: "grain_bill required."
 		};
-		const grainWater = p.grainKg * p.mashThickness;
-		const totalMash = grainWater + p.mashDeadspace;
-		return { output: [
-			`Acqua nel letto di trebbie: **${grainWater.toFixed(1)} L** (${p.mashThickness} L/kg × ${p.grainKg.toFixed(2)} kg)`,
-			p.mashDeadspace > 0 ? `Spazio sotto cestello: +${p.mashDeadspace.toFixed(1)} L` : "",
-			`Acqua totale da caricare per il mash: **${totalMash.toFixed(1)} L**`
-		].filter(Boolean).join("\n") };
-	}
-	calcSpargeWaterVolume(args) {
-		const p = this.waterParameters(args);
-		if (p.grainKg <= 0) return {
-			isError: true,
-			output: "grain_bill required."
-		};
-		const mw = this.mashWaterL(args);
-		const fr = this.firstRunningsL(args);
-		const sparge = this.spargeWaterL(args);
-		const preBoil = this.preBoilL(args);
-		if (args.sparge_water_volume !== void 0) return { output: [
-			`Acqua di sparge = **${sparge.toFixed(1)} L** (fornita dall'utente)`,
-			`  Acqua di mash: ${mw.toFixed(1)} L`,
-			`  Primi mosti: ${fr.toFixed(1)} L`,
-			`  Pre-boil risultante: ${(mw + sparge - p.grainKg * p.grainAbsorption - p.mashLoss).toFixed(1)} L`
-		].join("\n") };
-		return { output: [
-			`Acqua di sparge = **${sparge.toFixed(1)} L**`,
-			`  Acqua di mash: ${mw.toFixed(1)} L`,
-			`  Assorbimento grani: ${(p.grainKg * p.grainAbsorption).toFixed(1)} L (${p.grainAbsorption} L/kg)`,
-			`  Primi mosti: ${fr.toFixed(1)} L`,
-			`  Pre-boil richiesto: ${preBoil.toFixed(1)} L`
-		].join("\n") };
-	}
-	calcTotalWaterVolume(args) {
-		const p = this.waterParameters(args);
-		const mash = this.mashWaterL(args);
-		const sparge = this.spargeWaterL(args);
-		const preBoil = this.preBoilL(args);
-		const absorbed = p.grainKg * p.grainAbsorption;
-		if (args.sparge_water_volume !== void 0) return { output: [
-			`Acqua di mash: ${mash.toFixed(1)} L`,
-			`Acqua di sparge: ${sparge.toFixed(1)} L (fornita dall'utente)`,
-			`Acqua totale di processo: **${(mash + sparge).toFixed(1)} L**`,
-			`  (Pre-boil calcolato: ${preBoil.toFixed(1)} L + assorbimento: ${absorbed.toFixed(1)} L)`
-		].join("\n") };
-		return { output: [
-			`Acqua di mash: ${mash.toFixed(1)} L`,
-			`Acqua di sparge: ${sparge.toFixed(1)} L`,
-			`Acqua totale di processo: **${(mash + sparge).toFixed(1)} L**`,
-			`  (Pre-boil: ${preBoil.toFixed(1)} L + assorbimento: ${absorbed.toFixed(1)} L)`
-		].join("\n") };
-	}
-	calcPreBoilVolume(args) {
-		const p = this.waterParameters(args);
-		const hot = this.hotPostBoilL(args);
-		const boilOff = this.boilOffL(args);
-		const preBoil = this.preBoilL(args);
-		return { output: [
-			`Post-boil caldo: ${hot.toFixed(1)} L`,
-			`Evaporazione: ${boilOff.toFixed(1)} L (${p.boilOffRate} L/h × ${p.boilMinutes} min)`,
-			`Volume pre-boil: **${preBoil.toFixed(1)} L**`
-		].join("\n") };
-	}
-	calcPostBoilVolume(args) {
-		const p = this.waterParameters(args);
-		const ferm = this.fermenterTargetL(args);
-		const cold = this.coldPostBoilL(args);
-		const hot = this.hotPostBoilL(args);
-		return { output: [
-			`Volume confezionato target: ${p.packagedLiters.toFixed(1)} L`,
-			`Richiesto nel fermentatore: ${ferm.toFixed(1)} L (+${p.fermenterLoss} L)`,
-			`Post-boil freddo nel kettle: ${cold.toFixed(1)} L (+${p.trubLoss} L)`,
-			`Post-boil caldo: **${hot.toFixed(1)} L** (contrazione ${(p.shrinkageFraction * 100).toFixed(1)}%)`
-		].join("\n") };
+		const correction = args.strike_mode === "calibrated" ? this.req(args.strike_temperature_correction_c, "strike_temperature_correction_c") : args.strike_temperature_correction_c ?? 0;
+		const strikeTemp = mashTemp + .41 * grainKg / mashVolume * (mashTemp - grainTemp) + correction;
+		const summary = `Temperatura strike water = **${strikeTemp.toFixed(1)}°C** (modello ${args.strike_mode ?? "theoretical"}, ${mashVolume.toFixed(2)} L mash, ${grainKg.toFixed(2)} kg grani, correzione ${correction >= 0 ? "+" : ""}${correction.toFixed(1)}°C)`;
+		return this.structuredSuccess("strike_water", {
+			strike_temperature_c: strikeTemp,
+			mash_temperature_c: mashTemp,
+			grain_temperature_c: grainTemp,
+			mash_volume_l: mashVolume,
+			grain_kg: grainKg,
+			correction_c: correction,
+			model: args.strike_mode ?? "theoretical"
+		}, summary);
 	}
 	calcPitchingRate(args) {
-		const batchLiters = this.req(args.batch_size_liters, "batch_size_liters");
+		const batchLiters = this.requireWaterVolume(args, "fermenter_l");
 		const og = this.req(args.og, "og");
+		if (og <= 1 || !Number.isFinite(og)) return {
+			isError: true,
+			output: "OG non fisica per il pitching rate."
+		};
 		const beerType = args.beer_type ?? "ale";
-		const cells = args.cells_per_ml_p_required ?? DEFAULT_RATES[beerType] ?? .75;
-		const plato = this.toPlato(og);
-		const viability = args.yeast_viability_percent ?? 95;
+		const cells = args.pitching_rate_million_ml_p ?? args.cells_per_ml_p_required ?? DEFAULT_RATES[beerType] ?? .75;
+		const plato = sgToPlato(og);
+		const viability = args.yeast_viability_percent;
 		const requiredBillions = batchLiters * plato * cells;
-		const pitchBillions = requiredBillions / (viability / 100);
-		return { output: [
+		const yeastForm = args.yeast_form;
+		const details = [];
+		if (yeastForm === "slurry") {
+			if (args.yeast_concentration_billions_per_ml == null || viability == null) details.push("Quantità di slurry non verificata: servono concentrazione cellulare e vitalità.");
+			else {
+				const requiredMl = requiredBillions / (args.yeast_concentration_billions_per_ml * viability / 100);
+				details.push(`Slurry necessario: **${requiredMl.toFixed(1)} ml** (${args.yeast_concentration_billions_per_ml} miliardi/ml, vitalità ${viability}%)`);
+				if (args.slurry_volume_ml != null) details.push(`Slurry disponibile: ${args.slurry_volume_ml.toFixed(1)} ml`);
+			}
+		} else if ((yeastForm === "dry" || yeastForm === "liquid") && args.yeast_cell_count_billions_per_unit != null && args.yeast_units_available != null && viability != null) {
+			const available = args.yeast_cell_count_billions_per_unit * args.yeast_units_available * viability / 100;
+			details.push(`Cellule vitali disponibili dichiarate: **${available.toFixed(0)} miliardi**`);
+			details.push(available >= requiredBillions ? "Quantità dichiarata sufficiente." : "Quantità dichiarata insufficiente.");
+		} else details.push("Quantità di lievito disponibile non verificata: servono forma, contenuto cellulare, unità e vitalità.");
+		const summary = [
 			`Pitching rate: ${cells.toFixed(2)} M cellule/mL/°P (${beerType})`,
 			`Mosto: ${batchLiters.toFixed(1)} L a ${plato.toFixed(1)}°P`,
-			`Cellule vitali: **${requiredBillions.toFixed(0)} miliardi**`,
-			`Cella nominali viabilità ${viability}%: **${pitchBillions.toFixed(0)} miliardi**`
-		].join("\n") };
+			`Fabbisogno di cellule vitali: **${requiredBillions.toFixed(0)} miliardi**`,
+			yeastForm ? `Forma lievito: ${yeastForm}` : "Forma lievito: non specificata",
+			...details
+		].join("\n");
+		return this.structuredSuccess("pitching_rate", {
+			volume_l: batchLiters,
+			og,
+			plato,
+			pitching_rate_million_ml_p: cells,
+			required_cells_billions: requiredBillions,
+			yeast_form: yeastForm ?? null,
+			details
+		}, summary);
 	}
 	calcGravityCorrection(args) {
 		const current = this.req(args.current_gravity, "current_gravity");
 		const target = this.req(args.target_gravity, "target_gravity");
 		const volume = this.req(args.volume_liters, "volume_liters");
-		if (target <= current) return {
+		if (volume <= 0 || current <= 0 || target <= 0 || target <= current) return {
 			isError: true,
-			output: "Target gravity must be > current gravity."
+			output: "Servono volume positivo e densità target maggiore della densità corrente."
 		};
-		const missingPtL = (target - current) * 1e3 * volume;
-		return { output: [
-			`Correzione OG: aggiungi **${(missingPtL / SUCROSE_YIELD * 1e3).toFixed(0)} g** di saccarosio`,
+		const type = args.fermentable_type ?? "sucrose";
+		const potential = args.fermentable_potential_pt_l_per_kg ?? (type === "custom" ? void 0 : FERMENTABLE_POTENTIALS[type]);
+		if (potential == null) return {
+			isError: true,
+			output: "Specificare fermentable_potential_pt_l_per_kg per un fermentabile custom."
+		};
+		const missingPtL = calculateExtractPoints(target, volume) - calculateExtractPoints(current, volume);
+		const ingredientKg = missingPtL / potential;
+		const summary = [
+			`Correzione densità teorica approssimata: aggiungi **${ingredientKg.toFixed(3)} kg** di ${type}`,
 			`  Da ${current.toFixed(3)} a ${target.toFixed(3)} — ${volume.toFixed(1)} L`,
-			`  Punti mancanti: ${missingPtL.toFixed(0)} punti·L`
-		].join("\n") };
+			`  Punti·litro mancanti: ${missingPtL.toFixed(2)}; potenziale utilizzato: ${potential.toFixed(2)} punti·L/kg`,
+			args.process_stage === "pre_boil" ? "  Nota: densità pre-boil; verificare la concentrazione prevista alla fine della bollitura." : "  Nota: quantità teorica; valutare impatto su corpo e fermentabilità."
+		].join("\n");
+		return this.structuredSuccess("gravity_correction", {
+			current_gravity: current,
+			target_gravity: target,
+			volume_l: volume,
+			fermentable_type: type,
+			potential_pt_l_per_kg: potential,
+			missing_extract_pt_l: missingPtL,
+			fermentable_kg: ingredientKg,
+			approximate: true,
+			process_stage: args.process_stage ?? null
+		}, summary);
 	}
 	calcDilution(args) {
 		const volume = this.req(args.volume_liters, "volume_liters");
 		const curr = this.req(args.current_gravity, "current_gravity");
 		const target = this.req(args.target_gravity, "target_gravity");
-		if (curr <= target) return {
+		if (volume <= 0 || curr <= 1 || target <= 1 || curr <= target) return {
 			isError: true,
-			output: "Current gravity must be > target."
+			output: "Servono volume positivo, densità sopra 1.000 e densità corrente maggiore del target."
 		};
 		const dilution = volume * ((curr - 1) / (target - 1) - 1);
-		return { output: `Aggiungi **${dilution.toFixed(1)} L** di acqua per diluire da ${curr.toFixed(3)} a ${target.toFixed(3)} (volume finale: ${(volume + dilution).toFixed(1)} L)` };
+		if (!Number.isFinite(dilution) || dilution < 0) return {
+			isError: true,
+			output: "Diluizione indeterminata per i valori forniti."
+		};
+		const finalVolume = volume + dilution;
+		const summary = `Diluizione (${args.process_stage ?? "fase non specificata"}): aggiungi **${dilution.toFixed(2)} L** di acqua idonea per diluire da ${curr.toFixed(3)} a ${target.toFixed(3)} (volume finale: ${finalVolume.toFixed(2)} L)`;
+		return this.structuredSuccess("dilution", {
+			current_gravity: curr,
+			target_gravity: target,
+			volume_l: volume,
+			water_to_add_l: dilution,
+			final_volume_l: finalVolume,
+			process_stage: args.process_stage ?? null
+		}, summary);
 	}
-	calcBoilOff(args) {
-		const p = this.waterParameters(args);
-		const evaporated = this.boilOffL(args);
-		const preBoil = this.preBoilL(args);
-		const percent = preBoil > 0 ? evaporated / preBoil * 100 : 0;
-		return { output: [
-			`Evaporazione: **${evaporated.toFixed(1)} L** (${percent.toFixed(1)}%)`,
-			`  Tasso: ${p.boilOffRate} L/h, durata: ${p.boilMinutes} min`,
-			`  Pre-boil: ${preBoil.toFixed(1)} L → post-boil caldo: ${(preBoil - evaporated).toFixed(1)} L`
-		].join("\n") };
+	calcGravityBalance(args) {
+		const initialVolume = this.req(args.initial_volume_l, "initial_volume_l");
+		const initialGravity = this.req(args.initial_gravity, "initial_gravity");
+		const finalVolume = this.req(args.final_volume_l, "final_volume_l");
+		const finalGravity = this.req(args.final_gravity, "final_gravity");
+		const initialPoints = calculateExtractPoints(initialGravity, initialVolume);
+		const finalPoints = calculateExtractPoints(finalGravity, finalVolume);
+		const added = args.extract_added_pt_l ?? 0;
+		const removed = args.extract_removed_pt_l ?? 0;
+		const difference = finalPoints - initialPoints - added + removed;
+		const percent = initialPoints !== 0 ? difference / initialPoints * 100 : 0;
+		const summary = [
+			"Bilancio punti·litro (approssimazione pratica, non bilancio di massa):",
+			`  Iniziale: ${initialPoints.toFixed(2)} punti·L (${initialGravity.toFixed(3)} × ${initialVolume.toFixed(2)} L)`,
+			`  Finale: ${finalPoints.toFixed(2)} punti·L (${finalGravity.toFixed(3)} × ${finalVolume.toFixed(2)} L)`,
+			`  Aggiunti: ${added.toFixed(2)}; rimossi: ${removed.toFixed(2)} punti·L`,
+			`  Differenza non spiegata: ${difference.toFixed(2)} punti·L (${percent.toFixed(2)}%)`,
+			Math.abs(percent) > 5 ? "  ⚠ Verificare temperatura, omogeneità e precisione delle misurazioni." : "  Scostamento entro la soglia pratica del 5%."
+		].join("\n");
+		return this.structuredSuccess("gravity_balance", {
+			initial_volume_l: initialVolume,
+			initial_gravity: initialGravity,
+			initial_extract_pt_l: initialPoints,
+			final_volume_l: finalVolume,
+			final_gravity: finalGravity,
+			final_extract_pt_l: finalPoints,
+			extract_added_pt_l: added,
+			extract_removed_pt_l: removed,
+			unexplained_difference_pt_l: difference,
+			unexplained_difference_percent: percent,
+			approximation: "points_litre"
+		}, summary, Math.abs(percent) > 5 ? ["Verificare temperatura, omogeneità e precisione delle misurazioni."] : []);
+	}
+	calcBoilCorrection(args) {
+		const preVolume = this.req(args.measured_pre_boil_l, "measured_pre_boil_l");
+		const preGravity = this.req(args.measured_pre_boil_gravity, "measured_pre_boil_gravity");
+		const targetOg = this.req(args.target_og, "target_og");
+		const targetVolume = this.req(args.target_post_boil_l, "target_post_boil_l");
+		if (preGravity <= 1 || targetOg <= 1) return {
+			isError: true,
+			output: "Le densità pre-boil e target devono essere maggiori di 1.000."
+		};
+		if (targetVolume > preVolume) return {
+			isError: true,
+			output: "Il volume post-boil target non può essere maggiore del volume pre-boil misurato."
+		};
+		const availableExtract = calculateExtractPoints(preGravity, preVolume);
+		const projectedGravity = calculateGravityFromExtract(availableExtract, targetVolume);
+		const targetExtract = calculateExtractPoints(targetOg, targetVolume);
+		const volumeForTarget = targetExtract > 0 ? availableExtract / sgToPoints(targetOg) : 0;
+		const rate = args.boil_off_l_per_hour;
+		const boilHours = rate == null || volumeForTarget >= preVolume ? void 0 : (preVolume - volumeForTarget) / rate;
+		const fermentableType = args.correction_fermentable_type ?? "sucrose";
+		const potential = args.correction_fermentable_potential_pt_l_per_kg ?? (fermentableType === "custom" ? void 0 : FERMENTABLE_POTENTIALS[fermentableType]);
+		const neededKg = targetExtract > availableExtract && potential != null ? (targetExtract - availableExtract) / potential : 0;
+		const correctionLine = targetExtract > availableExtract ? potential == null ? `Fermentabile necessario: specificare il potenziale di ${fermentableType}.` : `Fermentabile necessario per mantenere volume e OG: **${neededKg.toFixed(3)} kg** di ${fermentableType}` : "Nessuna correzione degli estratti necessaria.";
+		const durationWarning = boilHours != null && args.max_boil_duration_h != null && boilHours > args.max_boil_duration_h ? " ⚠ Il tempo supera il limite massimo dichiarato." : "";
+		const summary = [
+			`Estratto disponibile: ${availableExtract.toFixed(2)} punti·L`,
+			`SG prevista a ${targetVolume.toFixed(2)} L senza aggiunte: **${projectedGravity.toFixed(3)}**`,
+			`Volume necessario per OG ${targetOg.toFixed(3)} senza aggiunte: **${volumeForTarget.toFixed(2)} L**`,
+			boilHours == null ? "Tempo di bollitura aggiuntivo: non determinabile senza evaporazione oraria o il target richiede diluizione." : `Tempo teorico per concentrare: **${(boilHours * 60).toFixed(0)} minuti (${boilHours.toFixed(2)} h)**${durationWarning}`,
+			correctionLine,
+			"Alternative: proseguire la bollitura, diluire o aggiungere fermentabili; non sono equivalenti per corpo, colore, luppolatura ed esposizione termica."
+		].join("\n");
+		return this.structuredSuccess("boil_correction", {
+			measured_pre_boil_l: preVolume,
+			measured_pre_boil_gravity: preGravity,
+			available_extract_pt_l: availableExtract,
+			target_post_boil_l: targetVolume,
+			projected_gravity: projectedGravity,
+			target_og: targetOg,
+			target_volume_for_og_l: volumeForTarget,
+			boil_duration_h: boilHours ?? null,
+			boil_duration_minutes: boilHours == null ? null : boilHours * 60,
+			fermentable_type: fermentableType,
+			fermentable_kg: neededKg,
+			extract_correction_needed: targetExtract > availableExtract
+		}, summary, durationWarning ? [durationWarning.trim()] : []);
+	}
+	calcGravityTemperatureCorrection(args) {
+		const sg = this.req(args.measured_gravity, "measured_gravity");
+		const sampleTemperature = this.req(args.sample_temperature_c, "sample_temperature_c");
+		const calibrationTemperature = this.req(args.hydrometer_calibration_temperature_c, "hydrometer_calibration_temperature_c");
+		const method = this.req(args.gravity_temperature_method, "gravity_temperature_method");
+		if (method === "none") {
+			const summary = `SG rilevata: **${sg.toFixed(3)}**; nessuna correzione applicata. Raffreddare il campione prima della misura per ridurre l'incertezza.`;
+			return this.structuredSuccess("gravity_temperature_correction", {
+				measured_gravity: sg,
+				sample_temperature_c: sampleTemperature,
+				calibration_temperature_c: calibrationTemperature,
+				method,
+				corrected_gravity: sg,
+				correction_sg: 0
+			}, summary, ["Raffreddare il campione prima della misura."]);
+		}
+		const correction = this.req(args.manual_gravity_correction_sg, "manual_gravity_correction_sg");
+		const corrected = sg + correction;
+		const summary = `SG corretta con offset manuale: **${corrected.toFixed(3)}** (lettura ${sg.toFixed(3)}, campione ${sampleTemperature.toFixed(1)}°C, calibrazione ${calibrationTemperature.toFixed(1)}°C). Non è una conversione SG/°Plato; usare un modello verificato o raffreddare il campione.`;
+		return this.structuredSuccess("gravity_temperature_correction", {
+			measured_gravity: sg,
+			sample_temperature_c: sampleTemperature,
+			calibration_temperature_c: calibrationTemperature,
+			method,
+			correction_sg: correction,
+			corrected_gravity: corrected
+		}, summary, ["Offset manuale: non è una conversione automatica SG/°Plato."]);
+	}
+	requireWaterVolumes(args) {
+		if (args.water_volumes == null) throw new Error(MISSING_WATER_VOLUMES);
+		return args.water_volumes;
+	}
+	requireWaterVolume(args, field) {
+		const value = this.requireWaterVolumes(args)[field];
+		if (typeof value !== "number" || value <= 0) throw new Error(`Il volume water_volumes.${field} deve essere maggiore di zero per questo calcolo.`);
+		return value;
+	}
+	theoreticalPoints(args) {
+		const grainBill = this.req(args.grain_bill_kg ?? args.grain_bill, "grain_bill");
+		let theoreticalPtL = 0;
+		for (const { malt, kg } of grainBill) {
+			const key = malt.toLowerCase();
+			const potential = MALT_POTENTIAL[key] ?? MALT_POTENTIAL[key + " malt"] ?? this.lookupPotential(key);
+			if (potential === void 0) throw new Error(`Potenziale sconosciuto per "${malt}".`);
+			theoreticalPtL += kg * potential;
+		}
+		if (theoreticalPtL <= 0) throw new Error("grain_bill required.");
+		return theoreticalPtL;
 	}
 	sumKg(bill) {
 		if (!bill) return 0;

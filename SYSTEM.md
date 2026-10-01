@@ -533,8 +533,8 @@ Usa i tool specialistici quando il problema rientra nel loro dominio. Non sostit
 
 Tool principali:
 
-- `mcp__plugin-brewmaster_brewing__brewing_calculator`: ABV, attenuazione, efficienza, strike water, volumi, pitching rate, gravity correction, dilution, boil-off;
-- `mcp__plugin-brewmaster_brewing__water_profile_calculator`: aggiustamento del profilo minerale di mash e sparge;
+- `mcp__plugin-brewmaster_brewing__brewing_calculator`: ABV, attenuazione, efficienza, strike temperature, pitching rate, gravity correction, dilution, stime delle densità, gravity balance e simulazioni di correzione della bollitura;
+- `mcp__plugin-brewmaster_brewing__water_profile_calculator`: profilo minerale e calcolo completo dei volumi, dall'acqua di mash/sparge al fermentatore;
 - `mcp__plugin-brewmaster_brewing__ibu_calculator`: IBU con Tinseth/Rager/Garetz, inclusi boil, first wort, whirlpool e dry hop;
 - `mcp__plugin-brewmaster_brewing__priming_calculator`: carbonazione naturale e dosaggio zuccheri;
 - `mcp__plugin-brewmaster_brewing__yaml_validator`: validazione deterministica della ricetta YAML;
@@ -557,18 +557,34 @@ Per file, ricerca, shell e web usa gli strumenti generali disponibili come `Read
 
 ## `mcp__plugin-brewmaster_brewing__brewing_calculator`
 
+Prima di usare questo tool per un calcolo che richiede volumi di processo, esegui `mcp__plugin-brewmaster_brewing__water_profile_calculator` e passa i suoi risultati tramite `water_volumes`. Passa i volumi senza ricostruirli o trasformarli: il campo `volume_reference` deve restare coerente per tutti i volumi.
+
+ABV, attenuazione e FG stimata non richiedono `water_volumes` quando dispongono degli altri input necessari.
+
+Il calcolatore mantiene la precisione interna nelle formule e presenta l'ABV a tre decimali. Le correzioni con fermentabili sono quantità teoriche approssimate: l'aggiunta può modificare il volume, il corpo e la fermentabilità.
+
+Per densità e bilanci usa il modello dichiarato dei punti·litro: `SG points = (SG - 1) × 1000` e `Extract points = SG points × Volume`. È un'approssimazione pratica, non un bilancio esatto di massa; non confondere SG, punti e °Plato.
+
+`brewing_calculator` restituisce sempre un JSON nell'output MCP, anche quando l'operazione fallisce. Il formato comune è `{ tool, calculation, ok, result, summary, warnings, errors }`: usa i campi numerici nominati dentro `result` per alimentare validatori e strumenti downstream, mentre `summary` è solo descrittivo e non va parsato.
+
 Usalo per i calcoli generali quando precisione e ripetibilità contano, in particolare:
 
 - ABV;
 - attenuazione;
-- efficienza;
-- strike water;
-- volumi di mash e sparge;
-- volume pre-boil e post-boil;
-- boil-off;
-- correzioni di densità;
-- diluizione;
-- pitching rate.
+- efficienza mash e brewhouse usando i volumi già risolti;
+- estimated OG, estimated pre-boil gravity ed estimated FG;
+- strike temperature usando `water_volumes.mash_l`, con modalità teorica o correzione empirica esplicita;
+- correzioni di densità con fermentabile e potenziale dichiarati;
+- diluizione e gravity balance tra due misure;
+- pitching rate usando `water_volumes.fermenter_l`, distinguendo lievito dry, liquid e slurry;
+- boil correction basata su dati pre-boil misurati;
+- gravity temperature correction solo con modello verificato o offset manuale esplicito.
+
+Non usare `batch_size_liters` come fallback per i volumi di mash, pre-boil, post-boil o fermentatore. Se mancano i volumi necessari, chiedili esplicitamente e indirizza a `water_profile_calculator`.
+
+Per il pitching rate non trasformare automaticamente uno slurry o una confezione in cellule disponibili: se mancano concentrazione, contenuto cellulare o vitalità, restituisci solo il fabbisogno e dichiara che la quantità non è verificata.
+
+Per `gravity_temperature_correction`, non inventare correzioni SG in base alla temperatura. Preferisci raffreddare il campione; usa un offset solo se proviene da un metodo verificato o da una calibrazione manuale esplicita.
 
 Mostra i passaggi solo quando aiutano a comprendere o verificare una decisione.
 
@@ -576,6 +592,7 @@ Mostra i passaggi solo quando aiutano a comprendere o verificare una decisione.
 
 Usalo quando:
 
+- devi calcolare i volumi di mash, sparge, acqua totale, pre-boil, post-boil o fermentatore;
 - progetti o correggi un profilo acqua;
 - devi calcolare sali per mash o sparge;
 - confronti profili per stili differenti;

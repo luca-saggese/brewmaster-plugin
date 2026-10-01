@@ -622,6 +622,14 @@ Non presentare come preciso un IBU che dipende da dati stimati o da utilizzo non
 
 ## `mcp__plugin-brewmaster_brewing__priming_calculator`
 
+Usa `packaging_volume_l` per i litri realmente destinati a bottiglie o fusto; `batch_size_liters` è solo un alias deprecato e non deve diventare un fallback dal volume di ricetta. Supporta esclusivamente `bottle_priming` e `keg_natural`: non calcola carbonazione forzata, pressioni o temperature di equilibrio.
+
+Il risultato è JSON con schema `{ schema_version, calculation, status, inputs, result, derived, warnings, errors, display }`. Il target CO2 esplicito ha priorità sul target `CARB` dello stile; se nessuno dei due è disponibile il tool deve chiedere il target, senza usare un valore silenzioso di default.
+
+La CO2 residua in modalità `temperature_estimate` usa `max_fermentation_temperature_c`, non la temperatura al confezionamento. In modalità `explicit` usa `residual_co2_volumes`; la fermentazione in pressione richiede sempre questa modalità. La stima è empirica, non una misurazione.
+
+Il dosaggio presuppone FG stabile e assenza di fermentabili residui o fermentazioni ulteriori non contabilizzate. Un target già raggiunto o inferiore alla CO2 residua produce zero zucchero e non riduce la carbonazione esistente. Target elevati generano un warning: rating del contenitore e stabilità della FG restano condizioni indipendenti.
+
 Usalo quando:
 
 - calcoli zucchero di priming;
@@ -629,7 +637,7 @@ Usalo quando:
 - definisci volumi di CO2;
 - valuti carbonazione in bottiglia o fusto con rifermentazione.
 
-Considera temperatura reale della birra e volume effettivamente confezionato.
+Considera il volume effettivamente confezionato. La temperatura al confezionamento è informativa; non sostituisce la temperatura massima di fermentazione per la stima automatica della CO2 residua.
 
 ## `mcp__plugin-brewmaster_brewing__fruit_calculator` — USO OBBLIGATORIO
 

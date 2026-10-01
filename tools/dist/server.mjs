@@ -14076,7 +14076,7 @@ function checkpointRows(section) {
 		""
 	]);
 }
-function actionRows(section) {
+function actionRows$1(section) {
 	return section.actions.map((action) => [
 		"☐",
 		action.moment,
@@ -14100,7 +14100,7 @@ function renderSection(section) {
 			"QUANTITÀ",
 			"PARAMETRI",
 			"NOTE"
-		], actionRows(section), [
+		], actionRows$1(section), [
 			600,
 			1350,
 			2200,
@@ -14636,11 +14636,23 @@ const USABLE_W = 511;
 const PRIMARY = "#8e2f23";
 const TEXT = "#1a1a1a";
 const MUTED = "#68615d";
+function pdfText(value) {
+	return value.replace(/[—–−]/g, "-").replace(/·/g, "*").replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (character) => String("⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(character))).replace(/[₀₁₂₃₄₅₆₇₈₉]/g, (character) => String("₀₁₂₃₄₅₆₇₈₉".indexOf(character))).replace(/⁻/g, "-").replace(/[“”]/g, "\"").replace(/[‘’]/g, "'");
+}
 function wrapCount(value, width) {
-	return Math.max(1, Math.ceil(value.length / Math.max(1, Math.floor(width / 5.2))));
+	const charactersPerLine = Math.max(1, Math.floor(width / 5.2));
+	return String(value).split(/\r?\n/).reduce((total, line) => total + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0);
 }
 function targetRows(values) {
 	return values.map((item) => [item.label, item.value]);
+}
+function actionRows(section) {
+	return section.actions.map((action) => [[action.moment, action.action].filter(Boolean).join("\n"), [
+		action.ingredient,
+		action.quantity,
+		[action.temperature, action.duration].filter(Boolean).join(" / "),
+		action.note
+	].filter(Boolean).join("\n")]);
 }
 var BrewdayPdfRenderer = class {
 	doc = new PDFLite({
@@ -14657,14 +14669,16 @@ var BrewdayPdfRenderer = class {
 		if (this.doc.y + height > 800) this.doc.addPage();
 	}
 	title(text) {
+		const safeText = pdfText(text);
 		this.ensure(35);
-		this.doc.font("Helvetica-Bold").fontSize(14).fillColor(PRIMARY).text(text, MARGIN, this.doc.y + 6, { width: USABLE_W });
+		this.doc.font("Helvetica-Bold").fontSize(14).fillColor(PRIMARY).text(safeText, MARGIN, this.doc.y + 6, { width: USABLE_W });
 		this.doc.moveTo(MARGIN, this.doc.y + 2).lineTo(553, this.doc.y + 2).strokeColor(PRIMARY).lineWidth(1).stroke();
 		this.doc.y += 8;
 	}
 	paragraph(text, bold = false) {
+		const safeText = pdfText(text);
 		this.ensure(24);
-		this.doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(9.5).fillColor(TEXT).text(text, MARGIN, this.doc.y + 2, {
+		this.doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(9.5).fillColor(TEXT).text(safeText, MARGIN, this.doc.y + 2, {
 			width: USABLE_W,
 			lineGap: 2
 		});
@@ -14675,65 +14689,56 @@ var BrewdayPdfRenderer = class {
 		let headerPending = true;
 		const drawHeader = () => {
 			this.ensure(24);
+			const headerY = this.doc.y;
 			let x = MARGIN;
 			headers.forEach((header, index) => {
 				const width = widths[index];
-				this.doc.rect(x, this.doc.y, width, 22).fill(PRIMARY);
-				this.doc.font("Helvetica-Bold").fontSize(8).fillColor("#ffffff").text(header, x + 3, this.doc.y + 5, { width: width - 6 });
+				this.doc.rect(x, headerY, width, 22).fill(PRIMARY);
+				this.doc.font("Helvetica-Bold").fontSize(8).fillColor("#ffffff").text(pdfText(header), x + 3, headerY + 5, { width: width - 6 });
 				x += width;
 			});
-			this.doc.y += 22;
+			this.doc.y = headerY + 22;
 			headerPending = false;
 		};
 		drawHeader();
 		for (const row of rows) {
-			const lines = row.map((value, index) => wrapCount(value, widths[index] - 8));
+			const safeRow = row.map((value) => pdfText(value));
+			const lines = safeRow.map((value, index) => wrapCount(value, widths[index] - 8));
 			const height = Math.max(20, Math.max(...lines) * 11 + 8);
 			if (this.doc.y + height > 800) {
 				this.doc.addPage();
 				headerPending = true;
 			}
 			if (headerPending) drawHeader();
+			const rowY = this.doc.y;
 			let x = MARGIN;
-			row.forEach((value, index) => {
+			safeRow.forEach((value, index) => {
 				const width = widths[index];
-				this.doc.rect(x, this.doc.y, width, height).fill("#f5f1ed");
-				this.doc.font("Helvetica").fontSize(8.5).fillColor(TEXT).text(value, x + 3, this.doc.y + 5, {
+				this.doc.rect(x, rowY, width, height).fill("#f5f1ed");
+				this.doc.font("Helvetica").fontSize(8.5).fillColor(TEXT).text(value, x + 3, rowY + 5, {
 					width: width - 6,
 					lineGap: 1
 				});
 				x += width;
 			});
-			this.doc.y += height;
+			this.doc.y = rowY + height;
 		}
 		this.doc.y += 7;
 	}
 	section(section) {
 		this.title(section.title);
 		if (section.targets.length) this.table(["TARGET", "Valore"], targetRows(section.targets));
-		if (section.actions.length) this.table([
-			"Momento",
-			"Azione / ingrediente",
-			"Quantità",
-			"Temp. / durata",
-			"Nota"
-		], section.actions.map((action) => [
-			action.moment,
-			[action.action, action.ingredient].filter(Boolean).join(": "),
-			action.quantity ?? "",
-			[action.temperature, action.duration].filter(Boolean).join(" / "),
-			action.note ?? ""
-		]));
+		if (section.actions.length) this.table(["MOMENTO / OPERAZIONE", "INGREDIENTE / PARAMETRI / NOTE"], actionRows(section));
 		if (section.measurements.length) this.table(["MISURATO", "Valore reale"], section.measurements.map((item) => [`${item.label}${item.unit ? ` (${item.unit})` : ""}`, "____________________________"]));
 		for (const warning of section.warnings) this.paragraph(`ATTENZIONE: ${warning}`);
 		for (const note of section.notes) this.paragraph(`NOTA: ${note}`);
 	}
 	render(model, outputPath) {
-		this.doc.font("Helvetica-Bold").fontSize(22).fillColor(PRIMARY).text(model.metadata.name, MARGIN, this.doc.y, {
+		this.doc.font("Helvetica-Bold").fontSize(22).fillColor(PRIMARY).text(pdfText(model.metadata.name), MARGIN, this.doc.y, {
 			width: USABLE_W,
 			align: "center"
 		});
-		this.doc.font("Helvetica-Oblique").fontSize(11).fillColor(MUTED).text(model.metadata.style, MARGIN, this.doc.y + 4, {
+		this.doc.font("Helvetica-Oblique").fontSize(11).fillColor(MUTED).text(pdfText(model.metadata.style), MARGIN, this.doc.y + 4, {
 			width: USABLE_W,
 			align: "center"
 		});

@@ -22,40 +22,64 @@ const PRIMARY = '#8e2f23';
 const TEXT = '#1a1a1a';
 const MUTED = '#68615d';
 
-function wrapCount(value: string, width: number): number { return Math.max(1, Math.ceil(value.length / Math.max(1, Math.floor(width / 5.2)))); }
+function pdfText(value: string): string {
+  return value
+    .replace(/[—–−]/g, '-')
+    .replace(/·/g, '*')
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, character => String('⁰¹²³⁴⁵⁶⁷⁸⁹'.indexOf(character)))
+    .replace(/[₀₁₂₃₄₅₆₇₈₉]/g, character => String('₀₁₂₃₄₅₆₇₈₉'.indexOf(character)))
+    .replace(/⁻/g, '-')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'");
+}
+
+function wrapCount(value: string, width: number): number {
+  const charactersPerLine = Math.max(1, Math.floor(width / 5.2));
+  return String(value).split(/\r?\n/).reduce((total, line) => total + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0);
+}
 function targetRows(values: TargetValue[]): string[][] { return values.map(item => [item.label, item.value]); }
+function actionRows(section: OperationalSection): string[][] {
+  return section.actions.map(action => [
+    [action.moment, action.action].filter(Boolean).join('\n'),
+    [action.ingredient, action.quantity, [action.temperature, action.duration].filter(Boolean).join(' / '), action.note]
+      .filter(Boolean)
+      .join('\n'),
+  ]);
+}
 
 class BrewdayPdfRenderer {
   private readonly doc = new PDFLite({ size: 'A4', margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } });
   private readonly widths = [115, USABLE_W - 115];
   private ensure(height: number): void { if (this.doc.y + height > PAGE_H - MARGIN) this.doc.addPage(); }
-  private title(text: string): void { this.ensure(35); this.doc.font('Helvetica-Bold').fontSize(14).fillColor(PRIMARY).text(text, MARGIN, this.doc.y + 6, { width: USABLE_W }); this.doc.moveTo(MARGIN, this.doc.y + 2).lineTo(PAGE_W - MARGIN, this.doc.y + 2).strokeColor(PRIMARY).lineWidth(1).stroke(); this.doc.y += 8; }
-  private paragraph(text: string, bold = false): void { this.ensure(24); this.doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9.5).fillColor(TEXT).text(text, MARGIN, this.doc.y + 2, { width: USABLE_W, lineGap: 2 }); this.doc.y += 3; }
+  private title(text: string): void { const safeText = pdfText(text); this.ensure(35); this.doc.font('Helvetica-Bold').fontSize(14).fillColor(PRIMARY).text(safeText, MARGIN, this.doc.y + 6, { width: USABLE_W }); this.doc.moveTo(MARGIN, this.doc.y + 2).lineTo(PAGE_W - MARGIN, this.doc.y + 2).strokeColor(PRIMARY).lineWidth(1).stroke(); this.doc.y += 8; }
+  private paragraph(text: string, bold = false): void { const safeText = pdfText(text); this.ensure(24); this.doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9.5).fillColor(TEXT).text(safeText, MARGIN, this.doc.y + 2, { width: USABLE_W, lineGap: 2 }); this.doc.y += 3; }
   private table(headers: string[], rows: string[][]): void {
     const widths = headers.length === 2 ? this.widths : headers.map(() => USABLE_W / headers.length);
     let headerPending = true;
-    const drawHeader = (): void => { this.ensure(24); let x = MARGIN; headers.forEach((header, index) => { const width = widths[index]!; this.doc.rect(x, this.doc.y, width, 22).fill(PRIMARY); this.doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff').text(header, x + 3, this.doc.y + 5, { width: width - 6 }); x += width; }); this.doc.y += 22; headerPending = false; };
+    const drawHeader = (): void => { this.ensure(24); const headerY = this.doc.y; let x = MARGIN; headers.forEach((header, index) => { const width = widths[index]!; this.doc.rect(x, headerY, width, 22).fill(PRIMARY); this.doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff').text(pdfText(header), x + 3, headerY + 5, { width: width - 6 }); x += width; }); this.doc.y = headerY + 22; headerPending = false; };
     drawHeader();
     for (const row of rows) {
-      const lines = row.map((value, index) => wrapCount(value, widths[index]! - 8));
+      const safeRow = row.map(value => pdfText(value));
+      const lines = safeRow.map((value, index) => wrapCount(value, widths[index]! - 8));
       const height = Math.max(20, Math.max(...lines) * 11 + 8);
       if (this.doc.y + height > PAGE_H - MARGIN) { this.doc.addPage(); headerPending = true; }
       if (headerPending) drawHeader();
-      let x = MARGIN; row.forEach((value, index) => { const width = widths[index]!; this.doc.rect(x, this.doc.y, width, height).fill('#f5f1ed'); this.doc.font('Helvetica').fontSize(8.5).fillColor(TEXT).text(value, x + 3, this.doc.y + 5, { width: width - 6, lineGap: 1 }); x += width; }); this.doc.y += height;
+      const rowY = this.doc.y;
+      let x = MARGIN; safeRow.forEach((value, index) => { const width = widths[index]!; this.doc.rect(x, rowY, width, height).fill('#f5f1ed'); this.doc.font('Helvetica').fontSize(8.5).fillColor(TEXT).text(value, x + 3, rowY + 5, { width: width - 6, lineGap: 1 }); x += width; }); this.doc.y = rowY + height;
     }
     this.doc.y += 7;
   }
   section(section: OperationalSection): void {
     this.title(section.title);
     if (section.targets.length) this.table(['TARGET', 'Valore'], targetRows(section.targets));
-    if (section.actions.length) this.table(['Momento', 'Azione / ingrediente', 'Quantità', 'Temp. / durata', 'Nota'], section.actions.map(action => [action.moment, [action.action, action.ingredient].filter(Boolean).join(': '), action.quantity ?? '', [action.temperature, action.duration].filter(Boolean).join(' / '), action.note ?? '']));
+    if (section.actions.length) this.table(['MOMENTO / OPERAZIONE', 'INGREDIENTE / PARAMETRI / NOTE'], actionRows(section));
     if (section.measurements.length) this.table(['MISURATO', 'Valore reale'], section.measurements.map(item => [`${item.label}${item.unit ? ` (${item.unit})` : ''}`, '____________________________']));
     for (const warning of section.warnings) this.paragraph(`ATTENZIONE: ${warning}`);
     for (const note of section.notes) this.paragraph(`NOTA: ${note}`);
   }
   render(model: RecipeDocumentModel, outputPath: string): void {
-    this.doc.font('Helvetica-Bold').fontSize(22).fillColor(PRIMARY).text(model.metadata.name, MARGIN, this.doc.y, { width: USABLE_W, align: 'center' });
-    this.doc.font('Helvetica-Oblique').fontSize(11).fillColor(MUTED).text(model.metadata.style, MARGIN, this.doc.y + 4, { width: USABLE_W, align: 'center' });
+    this.doc.font('Helvetica-Bold').fontSize(22).fillColor(PRIMARY).text(pdfText(model.metadata.name), MARGIN, this.doc.y, { width: USABLE_W, align: 'center' });
+    this.doc.font('Helvetica-Oblique').fontSize(11).fillColor(MUTED).text(pdfText(model.metadata.style), MARGIN, this.doc.y + 4, { width: USABLE_W, align: 'center' });
     if (model.metadata.description) this.paragraph(model.metadata.description);
     this.title('A. Scheda iniziale');
     this.table(['Campo', 'TARGET / dato'], [['Data della cotta', '____________________________'], ['Impianto', model.metadata.equipment ?? ''], ...targetRows(model.summaryTargets), ...targetRows(model.objectives)]);

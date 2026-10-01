@@ -21414,237 +21414,83 @@ const SpiceCalculatorInputSchema = object({
 		message: "In bollitura il tempo di contatto è limitato dalla durata della bollitura (tipicamente ≤2 ore)."
 	});
 });
-const SPICE_CALCULATOR_PARAMETERS = {
-	type: "object",
-	properties: {
-		ingredient_name: {
-			type: "string",
-			description: "Nome dell'ingrediente botanico in italiano. Es: \"Pepe nero\", \"Coriandolo\", \"Cacao in granella\", \"Cold brew coffee\"."
+function buildSpiceOutput(input) {
+	const calculationInput = {
+		spice_name: input.ingredient_name ?? input.spice_name ?? "",
+		batch_liters: input.batch_liters,
+		intensity: input.intensity ?? "medium",
+		form: input.form ?? "cracked",
+		stage: input.stage ?? "conditioning",
+		contact_time_hours: input.contact_time_hours ?? 72,
+		temperature_celsius: input.temperature_celsius ?? 20,
+		freshness: input.freshness ?? "recent",
+		capsaicinoids_mg_per_g: input.capsaicinoids_mg_per_g,
+		shu: input.shu,
+		roast_level: input.roast_level,
+		wood_toast_level: input.wood_toast_level,
+		liquid_strength_relative: input.liquid_strength_relative,
+		coffee_grams_per_liter: input.coffee_grams_per_liter,
+		prepared_hours_ago: input.prepared_hours_ago,
+		beer_matrix: {
+			abv: input.abv ?? 5,
+			finalGravity: input.final_gravity,
+			ibu: input.ibu,
+			roastIntensity: input.roast_intensity ?? 0,
+			hopAromaIntensity: input.hop_aroma_intensity ?? 0,
+			acidity: input.acidity ?? 0
 		},
-		spice_name: {
-			type: "string",
-			description: "Alias legacy di ingredient_name (deprecato)."
-		},
-		batch_liters: {
-			type: "number",
-			exclusiveMinimum: 0,
-			description: "Volume della birra a cui aggiungere la spezia (L)."
-		},
-		intensity: {
-			type: "string",
-			enum: [
-				"low",
-				"medium",
-				"high"
-			],
-			default: "medium",
-			description: "Intensità desiderata: low (bassa), medium (media), high (alta)."
-		},
-		form: {
-			type: "string",
-			enum: [
-				"whole",
-				"cracked",
-				"ground",
-				"fresh",
-				"dried"
-			],
-			default: "cracked",
-			description: "Forma fisica: whole (intero), cracked (spezzato), ground (macinato), fresh (fresco), dried (essiccato)."
-		},
-		stage: {
-			type: "string",
-			enum: [
-				"mash",
-				"boil",
-				"whirlpool",
-				"fermentation",
-				"conditioning",
-				"keg",
-				"tincture"
-			],
-			default: "conditioning",
-			description: "Stadio di aggiunta: mash, boil (bollitura), whirlpool, fermentation, conditioning (maturazione/dry-spice), keg (fusto), tincture (tintura separata)."
-		},
-		contact_time_hours: {
-			type: "number",
-			exclusiveMinimum: 0,
-			default: 72,
-			description: "Tempo di contatto previsto in ore (es. 72 per 3 giorni)."
-		},
-		temperature_celsius: {
-			type: "number",
-			minimum: 0,
-			maximum: 100,
-			default: 20,
-			description: "Temperatura durante il contatto (°C)."
-		},
-		freshness: {
-			type: "string",
-			enum: [
-				"freshly_cracked",
-				"recent",
-				"older",
-				"unknown"
-			],
-			default: "recent",
-			description: "Freschezza: freshly_cracked (appena spezzata), recent (recente), older (non freschissima), unknown (sconosciuta)."
-		},
-		capsaicinoids_mg_per_g: {
-			type: "number",
-			exclusiveMinimum: 0,
-			description: "Solo per peperoncino: contenuto di capsaicinoidi in mg/g."
-		},
-		shu: {
-			type: "number",
-			exclusiveMinimum: 0,
-			description: "Solo per peperoncino: gradi Scoville (SHU). Es: cayenna ~40000, habanero ~200000."
-		},
-		roast_level: {
-			type: "string",
-			enum: [
-				"light",
-				"medium",
-				"dark"
-			],
-			description: "Livello di tostatura per caffè/cacao: light (chiaro), medium (medio), dark (scuro)."
-		},
-		wood_toast_level: {
-			type: "string",
-			enum: [
-				"untoasted",
-				"light",
-				"medium",
-				"heavy"
-			],
-			description: "Livello di tostatura per legni (rovere): untoasted, light, medium, heavy."
-		},
-		liquid_strength_relative: {
-			type: "number",
-			exclusiveMinimum: 0,
-			description: "Per dosi liquide: concentrazione relativa vs riferimento (1.0 = cold brew 1:5)."
-		},
-		coffee_grams_per_liter: {
-			type: "number",
-			exclusiveMinimum: 0,
-			description: "Per cold brew: grammi di caffè per litro d'acqua usati nella preparazione."
-		},
-		prepared_hours_ago: {
-			type: "number",
-			minimum: 0,
-			description: "Per dosi liquide: ore trascorse dalla preparazione del concentrato."
-		},
-		abv: {
-			type: "number",
-			minimum: 0,
-			maximum: 20,
-			default: 5,
-			description: "ABV della birra (%)."
-		},
-		final_gravity: {
-			type: "number",
-			minimum: 1,
-			maximum: 1.2,
-			description: "Gravità finale (es. 1.012). Opzionale."
-		},
-		ibu: {
-			type: "number",
-			minimum: 0,
-			maximum: 200,
-			description: "IBU della birra. Opzionale."
-		},
-		roast_intensity: {
-			type: "number",
-			minimum: 0,
-			maximum: 1,
-			default: 0,
-			description: "Intensità dei malti tostati (0 = nessuno, 1 = molto tostato)."
-		},
-		hop_aroma_intensity: {
-			type: "number",
-			minimum: 0,
-			maximum: 1,
-			default: 0,
-			description: "Intensità aromatica del luppolo (0 = nessuna, 1 = molto luppolata)."
-		},
-		acidity: {
-			type: "number",
-			minimum: 0,
-			maximum: 1,
-			default: 0,
-			description: "Acidità percepita (0 = non acida, 1 = molto acida)."
-		},
-		other_spices: {
-			type: "array",
-			items: {
-				type: "string",
-				minLength: 1
+		other_spices: [...new Set([...input.other_spices ?? [], ...input.other_adjuncts ?? []].map((value) => normalizeName(value)))]
+	};
+	try {
+		const result = computeSpiceDose(calculationInput);
+		const warnings = [...result.risks, ...result.confidenceNotes];
+		return {
+			schema_version: "1.0",
+			calculation: "botanical_adjunct_calculator",
+			status: warnings.length > 0 ? "warning" : "ok",
+			inputs: input,
+			result,
+			derived: {
+				dose_per_liter: result.doseRecommended / input.batch_liters,
+				sensory_contributions: result.contributions
 			},
-			default: [],
-			description: "Altri ingredienti botanici già presenti nella ricetta per analisi di compatibilità."
-		},
-		other_adjuncts: {
-			type: "array",
-			items: {
-				type: "string",
-				minLength: 1
+			warnings: [...new Set(warnings)],
+			errors: [],
+			display: formatSpiceResults(calculationInput, input.show_details ?? true)
+		};
+	} catch (error) {
+		return {
+			schema_version: "1.0",
+			calculation: "botanical_adjunct_calculator",
+			status: "error",
+			inputs: input,
+			result: null,
+			derived: {
+				dose_per_liter: null,
+				sensory_contributions: null
 			},
-			description: "Alias di other_spices."
-		},
-		show_details: {
-			type: "boolean",
-			default: true,
-			description: "Mostra dettagli completi (contributi sensoriali, profilo chimico, rischi)."
-		}
-	},
-	required: ["batch_liters"],
-	additionalProperties: false
-};
+			warnings: [],
+			errors: [error instanceof Error ? error.message : String(error)],
+			display: ""
+		};
+	}
+}
 var BotanicalAdjunctCalculatorTool = class {
 	name = "botanical_adjunct_calculator";
 	description = "Stima il dosaggio di ingredienti botanici per birra: spezie, scorze, cacao, caffè, tè, erbe, legni. Separa dose aromatica (volatili) dalla dose chemestetica (pungenza, calore). Considera forma, stadio, tempo, temperatura, matrice della birra, interazioni e freschezza. Supporta parametri specifici per categoria: SHU per peperoncino, roast_level per caffè/cacao. Restituisce intervallo con confidenza e protocollo di aggiustamento incrementale.";
-	parameters = SPICE_CALCULATOR_PARAMETERS;
+	parameters = toInputJsonSchema(SpiceCalculatorInputSchema);
 	resolveExecution(args) {
 		const resolvedName = args.ingredient_name ?? args.spice_name ?? "";
-		const resolvedOthers = [...new Set([...args.other_spices ?? [], ...args.other_adjuncts ?? []].map((s) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase()))];
+		[...new Set([...args.other_spices ?? [], ...args.other_adjuncts ?? []].map((s) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase()))];
 		return {
 			description: `Botanical calc: ${resolvedName} @ ${args.intensity}`,
 			approvalRule: this.name,
 			execute: () => {
-				try {
-					const input = {
-						spice_name: resolvedName,
-						batch_liters: args.batch_liters,
-						intensity: args.intensity ?? "medium",
-						form: args.form ?? "cracked",
-						stage: args.stage ?? "conditioning",
-						contact_time_hours: args.contact_time_hours ?? 72,
-						temperature_celsius: args.temperature_celsius ?? 20,
-						freshness: args.freshness ?? "recent",
-						capsaicinoids_mg_per_g: args.capsaicinoids_mg_per_g,
-						shu: args.shu,
-						roast_level: args.roast_level,
-						wood_toast_level: args.wood_toast_level,
-						liquid_strength_relative: args.liquid_strength_relative,
-						coffee_grams_per_liter: args.coffee_grams_per_liter,
-						prepared_hours_ago: args.prepared_hours_ago,
-						beer_matrix: {
-							abv: args.abv ?? 5,
-							finalGravity: args.final_gravity,
-							ibu: args.ibu,
-							roastIntensity: args.roast_intensity ?? 0,
-							hopAromaIntensity: args.hop_aroma_intensity ?? 0,
-							acidity: args.acidity ?? 0
-						},
-						other_spices: resolvedOthers
-					};
-					return Promise.resolve({ output: formatSpiceResults(input, args.show_details) });
-				} catch (e) {
-					return Promise.resolve({
-						isError: true,
-						output: e instanceof Error ? e.message : String(e)
-					});
-				}
+				const output = buildSpiceOutput(args);
+				return Promise.resolve({
+					isError: output.status === "error",
+					output: JSON.stringify(output)
+				});
 			}
 		};
 	}
@@ -22316,6 +22162,7 @@ const DoseInputSchema = object({
 	ingredient: string().trim().min(1).describe("Nome dell'ingrediente."),
 	category: _enum(CATEGORIES).describe("Categoria."),
 	beer_volume_l: number().positive().describe("Volume EFFETTIVO della birra nel fermentatore/keg (L)."),
+	beer_abv_percent: number().min(0).max(20).default(5).describe("ABV effettiva della birra prima dell’aggiunta (%)."),
 	test_sample_ml: number().positive().describe("Volume campione per bench trial (es. 100 mL)."),
 	test_dose_ml: number().positive().describe("Dose scelta nel campione (mL)."),
 	recovered_tincture_volume_ml: number().positive().optional().describe("Volume di tintura realmente recuperato dopo filtrazione (mL)."),
@@ -22538,14 +22385,18 @@ function doseTincture(input) {
 	const batchVolumeMl = input.beer_volume_l * 1e3;
 	const estimatedBatchDoseMl = Math.round(input.test_dose_ml * batchVolumeMl / sampleMl * 100) / 100;
 	const beerMl = input.beer_volume_l * 1e3;
-	const alcoholContributionAbv = Math.round(estimatedBatchDoseMl * (tinctureAbv / 100) / (beerMl + estimatedBatchDoseMl) * 100 * 100) / 100;
+	const finalVolumeMl = beerMl + estimatedBatchDoseMl;
+	const finalAbv = (beerMl * (input.beer_abv_percent / 100) + estimatedBatchDoseMl * (tinctureAbv / 100)) / finalVolumeMl * 100;
+	const alcoholContributionAbv = Math.round((finalAbv - input.beer_abv_percent) * 100) / 100;
 	const recoveryIsMeasured = input.recovered_tincture_volume_ml !== void 0;
 	const recoveredMl = input.recovered_tincture_volume_ml ?? null;
 	const recoveryFraction = null;
 	const warnings = getSafetyWarnings(input.ingredient, input.category);
+	if (input.tincture_abv_percent === void 0) warnings.push("⚠️ ABV tintura non dichiarata: il calcolo assume 50%. Misurare o confermare l’ABV reale prima del dosaggio finale.");
 	if (input.ingredient_sugar_percent && input.ingredient_sugar_percent > 5) warnings.push(`⚠️ ~${input.ingredient_sugar_percent}% zuccheri → possibile rifermentazione.`);
 	if (input.category === "hop") warnings.push("⚠️ Tintura luppolo NON sostituisce dry hopping.");
 	if (alcoholContributionAbv > .5) warnings.push(`⚠️ Contributo alcolico significativo: +${alcoholContributionAbv}% ABV.`);
+	if (recoveredMl !== null && estimatedBatchDoseMl > recoveredMl) warnings.push(`⚠️ Dose batch richiesta (${estimatedBatchDoseMl} mL) superiore al volume recuperato (${recoveredMl} mL).`);
 	const doseMlActual = input.test_dose_ml;
 	const doseMlPer100 = Math.round(input.test_dose_ml * 100 / sampleMl * 1e3) / 1e3;
 	return {
@@ -22589,6 +22440,42 @@ function doseTincture(input) {
 		recoveryIsMeasured,
 		warnings
 	};
+}
+function buildTinctureOutput(input) {
+	try {
+		const result = compute(input);
+		const finalAbv = result.mode === "dose" && result.estimatedBatchDoseMl !== null ? Math.round((input.beer_abv_percent + (result.alcoholContributionAbv ?? 0)) * 100) / 100 : null;
+		const recoveredVolumeSufficient = result.mode === "dose" && result.recoveredMl !== null ? result.estimatedBatchDoseMl <= result.recoveredMl : null;
+		return {
+			schema_version: "1.0",
+			calculation: "tincture_calculator",
+			status: result.warnings.length > 0 ? "warning" : "ok",
+			inputs: input,
+			result,
+			derived: {
+				final_abv_percent: finalAbv,
+				recovered_volume_sufficient: recoveredVolumeSufficient
+			},
+			warnings: result.warnings,
+			errors: [],
+			display: formatResults(input)
+		};
+	} catch (error) {
+		return {
+			schema_version: "1.0",
+			calculation: "tincture_calculator",
+			status: "error",
+			inputs: input,
+			result: null,
+			derived: {
+				final_abv_percent: null,
+				recovered_volume_sufficient: null
+			},
+			warnings: [],
+			errors: [error instanceof Error ? error.message : String(error)],
+			display: ""
+		};
+	}
 }
 function compute(input) {
 	return input.mode === "plan" ? planTincture(input) : doseTincture(input);
@@ -22695,7 +22582,7 @@ function formatResults(input) {
 		lines.push(`| Volume birra (effettivo) | **${doseIn.beer_volume_l} L** |`);
 		lines.push(`| ABV tintura | **${plan.tinctureAbvPercent}%** |`);
 		lines.push(`| Dose batch calcolata | **${plan.estimatedBatchDoseMl} mL** |`);
-		lines.push(`| Dose consigliata (75%) | **${Math.round(plan.estimatedBatchDoseMl * .75 * 100) / 100} mL** |`);
+		lines.push(`| Dose iniziale prudenziale (75%) | **${Math.round(plan.estimatedBatchDoseMl * .75 * 100) / 100} mL** |`);
 		lines.push(`| Contributo ABV | **+${plan.alcoholContributionAbv}%** |`);
 		lines.push("");
 		if (plan.alcoholContributionAbv > .5) lines.push(`> ⚠️ Contributo alcolico significativo (+${plan.alcoholContributionAbv}% ABV).`);
@@ -22744,14 +22631,11 @@ var TinctureCalculatorTool = class {
 			description: `Tintura: ${args.ingredient} (${args.category}) @ ${abvDesc}%`,
 			approvalRule: this.name,
 			execute: () => {
-				try {
-					return Promise.resolve({ output: formatResults(args) });
-				} catch (e) {
-					return Promise.resolve({
-						isError: true,
-						output: e instanceof Error ? e.message : String(e)
-					});
-				}
+				const output = buildTinctureOutput(args);
+				return Promise.resolve({
+					isError: output.status === "error",
+					output: JSON.stringify(output)
+				});
 			}
 		};
 	}

@@ -386,6 +386,7 @@ const DoseInputSchema = z.object({
     ingredient: z.string().trim().min(1).describe('Nome dell\'ingrediente.'),
     category: z.enum(CATEGORIES).describe('Categoria.'),
     beer_volume_l: z.number().positive().describe('Volume EFFETTIVO della birra nel fermentatore/keg (L).'),
+    beer_abv_percent: z.number().min(0).max(20).default(5).describe('ABV effettiva della birra prima dell’aggiunta (%).'),
     test_sample_ml: z.number().positive().describe('Volume campione per bench trial (es. 100 mL).'),
     test_dose_ml: z.number().positive().describe('Dose scelta nel campione (mL).'),
     recovered_tincture_volume_ml: z.number().positive().optional().describe('Volume di tintura realmente recuperato dopo filtrazione (mL).'),
@@ -436,6 +437,21 @@ export interface TincturePlan {
     recoveryFraction: number | null;
     recoveryIsMeasured: boolean;
     warnings: string[];
+}
+
+interface TinctureCalculationOutput {
+    schema_version: '1.0';
+    calculation: 'tincture_calculator';
+    status: 'ok' | 'warning' | 'error';
+    inputs: TinctureCalculatorInput;
+    result: TincturePlan | null;
+    derived: {
+        final_abv_percent: number | null;
+        recovered_volume_sufficient: boolean | null;
+    };
+    warnings: string[];
+    errors: string[];
+    display: string;
 }
 
 // ── Compute ──────────────────────────────────────────────────────────────────
@@ -607,7 +623,9 @@ function doseTincture(input: z.infer<typeof DoseInputSchema>): TincturePlan {
     const batchVolumeMl = input.beer_volume_l * 1000;
     const estimatedBatchDoseMl = Math.round((input.test_dose_ml * batchVolumeMl) / sampleMl * 100) / 100;
     const beerMl = input.beer_volume_l * 1000;
-    const alcoholContributionAbv = Math.round(((estimatedBatchDoseMl * (tinctureAbv / 100)) / (beerMl + estimatedBatchDoseMl)) * 100 * 100) / 100;
+    const finalVolumeMl = beerMl + estimatedBatchDoseMl;
+    const finalAbv = ((beerMl * (input.beer_abv_percent / 100)) + (estimatedBatchDoseMl * (tinctureAbv / 100))) / finalVolumeMl * 100;
+    const alcoholContributionAbv = Math.round((finalAbv - input.beer_abv_percent) * 100) / 100;
 
     const recoveryIsMeasured = input.recovered_tincture_volume_ml !== undefined;
     const recoveredMl = input.recovered_tincture_volume_ml ?? null;
@@ -615,12 +633,18 @@ function doseTincture(input: z.infer<typeof DoseInputSchema>): TincturePlan {
     const recoveryFraction = null;
 
     const warnings = getSafetyWarnings(input.ingredient, input.category);
+    if (input.tincture_abv_percent === undefined) {
+        warnings.push('⚠️ ABV tintura non dichiarata: il calcolo assume 50%. Misurare o confermare l’ABV reale prima del dosaggio finale.');
+    }
     if (input.ingredient_sugar_percent && input.ingredient_sugar_percent > 5) {
         warnings.push(`⚠️ ~${input.ingredient_sugar_percent}% zuccheri → possibile rifermentazione.`);
     }
     if (input.category === 'hop') warnings.push('⚠️ Tintura luppolo NON sostituisce dry hopping.');
     if (alcoholContributionAbv > 0.5) {
         warnings.push(`⚠️ Contributo alcolico significativo: +${alcoholContributionAbv}% ABV.`);
+    }
+    if (recoveredMl !== null && estimatedBatchDoseMl > recoveredMl) {
+        warnings.push(`⚠️ Dose batch richiesta (${estimatedBatchDoseMl} mL) superiore al volume recuperato (${recoveredMl} mL).`);
     }
 
     // doseMlActual = actual dose in the sample, doseMlPer100 = scaled to 100 mL
@@ -651,6 +675,41 @@ function doseTincture(input: z.infer<typeof DoseInputSchema>): TincturePlan {
         recoveredMl, recoveryFraction, recoveryIsMeasured,
         warnings,
     };
+}
+
+function buildTinctureOutput(input: TinctureCalculatorInput): TinctureCalculationOutput {
+    try {
+        const result = compute(input);
+        const finalAbv = result.mode === 'dose' && result.estimatedBatchDoseMl !== null
+            ? Math.round((((input as z.infer<typeof DoseInputSchema>).beer_abv_percent) + (result.alcoholContributionAbv ?? 0)) * 100) / 100
+            : null;
+        const recoveredVolumeSufficient = result.mode === 'dose' && result.recoveredMl !== null
+            ? result.estimatedBatchDoseMl <= result.recoveredMl
+            : null;
+        return {
+            schema_version: '1.0',
+            calculation: 'tincture_calculator',
+            status: result.warnings.length > 0 ? 'warning' : 'ok',
+            inputs: input,
+            result,
+            derived: { final_abv_percent: finalAbv, recovered_volume_sufficient: recoveredVolumeSufficient },
+            warnings: result.warnings,
+            errors: [],
+            display: formatResults(input),
+        };
+    } catch (error) {
+        return {
+            schema_version: '1.0',
+            calculation: 'tincture_calculator',
+            status: 'error',
+            inputs: input,
+            result: null,
+            derived: { final_abv_percent: null, recovered_volume_sufficient: null },
+            warnings: [],
+            errors: [error instanceof Error ? error.message : String(error)],
+            display: '',
+        };
+    }
 }
 
 function compute(input: TinctureCalculatorInput): TincturePlan {
@@ -787,7 +846,7 @@ function formatResults(input: TinctureCalculatorInput): string {
         lines.push(`| Volume birra (effettivo) | **${doseIn.beer_volume_l} L** |`);
         lines.push(`| ABV tintura | **${plan.tinctureAbvPercent}%** |`);
         lines.push(`| Dose batch calcolata | **${plan.estimatedBatchDoseMl} mL** |`);
-        lines.push(`| Dose consigliata (75%) | **${Math.round(plan.estimatedBatchDoseMl * 0.75 * 100) / 100} mL** |`);
+        lines.push(`| Dose iniziale prudenziale (75%) | **${Math.round(plan.estimatedBatchDoseMl * 0.75 * 100) / 100} mL** |`);
         lines.push(`| Contributo ABV | **+${plan.alcoholContributionAbv}%** |`);
         lines.push('');
 
@@ -850,8 +909,8 @@ export class TinctureCalculatorTool implements BuiltinTool<TinctureCalculatorInp
             description: `Tintura: ${args.ingredient} (${args.category}) @ ${abvDesc}%`,
             approvalRule: this.name,
             execute: () => {
-                try { return Promise.resolve({ output: formatResults(args) }); }
-                catch (e) { return Promise.resolve({ isError: true, output: e instanceof Error ? e.message : String(e) }); }
+                const output = buildTinctureOutput(args);
+                return Promise.resolve({ isError: output.status === 'error', output: JSON.stringify(output) });
             },
         };
     }

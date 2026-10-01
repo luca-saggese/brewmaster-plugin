@@ -20,6 +20,7 @@ import { z } from 'zod';
 
 import type { BuiltinTool, ToolExecution } from '../shim/tool-contract';
 import { registerTool } from '../shim/tool-registry';
+import { toInputJsonSchema } from '../shim/input-schema';
 
 type DoseUnit = 'g' | 'ml';
 
@@ -2078,6 +2079,84 @@ export const SpiceCalculatorInputSchema = z.object({
 
 export type SpiceCalculatorInput = z.infer<typeof SpiceCalculatorInputSchema>;
 
+interface SpiceCalculationOutput {
+    schema_version: '1.0';
+    calculation: 'botanical_adjunct_calculator';
+    status: 'ok' | 'warning' | 'error';
+    inputs: SpiceCalculatorInput;
+    result: SpiceDoseOutput | null;
+    derived: {
+        dose_per_liter: number | null;
+        sensory_contributions: SpiceDoseOutput['contributions'] | null;
+    };
+    warnings: string[];
+    errors: string[];
+    display: string;
+}
+
+function buildSpiceOutput(input: SpiceCalculatorInput): SpiceCalculationOutput {
+    const resolvedName = input.ingredient_name ?? input.spice_name ?? '';
+    const calculationInput: SpiceCalcInput = {
+        spice_name: resolvedName,
+        batch_liters: input.batch_liters,
+        intensity: input.intensity ?? 'medium',
+        form: input.form ?? 'cracked',
+        stage: input.stage ?? 'conditioning',
+        contact_time_hours: input.contact_time_hours ?? 72,
+        temperature_celsius: input.temperature_celsius ?? 20,
+        freshness: input.freshness ?? 'recent',
+        capsaicinoids_mg_per_g: input.capsaicinoids_mg_per_g,
+        shu: input.shu,
+        roast_level: input.roast_level,
+        wood_toast_level: input.wood_toast_level,
+        liquid_strength_relative: input.liquid_strength_relative,
+        coffee_grams_per_liter: input.coffee_grams_per_liter,
+        prepared_hours_ago: input.prepared_hours_ago,
+        beer_matrix: {
+            abv: input.abv ?? 5,
+            finalGravity: input.final_gravity,
+            ibu: input.ibu,
+            roastIntensity: input.roast_intensity ?? 0,
+            hopAromaIntensity: input.hop_aroma_intensity ?? 0,
+            acidity: input.acidity ?? 0,
+        },
+        other_spices: [
+            ...new Set([...(input.other_spices ?? []), ...(input.other_adjuncts ?? [])]
+                .map(value => normalizeName(value))),
+        ],
+    };
+    try {
+        const result = computeSpiceDose(calculationInput);
+        const warnings = [...result.risks, ...result.confidenceNotes];
+        return {
+            schema_version: '1.0',
+            calculation: 'botanical_adjunct_calculator',
+            status: warnings.length > 0 ? 'warning' : 'ok',
+            inputs: input,
+            result,
+            derived: {
+                dose_per_liter: result.doseRecommended / input.batch_liters,
+                sensory_contributions: result.contributions,
+            },
+            warnings: [...new Set(warnings)],
+            errors: [],
+            display: formatSpiceResults(calculationInput, input.show_details ?? true),
+        };
+    } catch (error) {
+        return {
+            schema_version: '1.0',
+            calculation: 'botanical_adjunct_calculator',
+            status: 'error',
+            inputs: input,
+            result: null,
+            derived: { dose_per_liter: null, sensory_contributions: null },
+            warnings: [],
+            errors: [error instanceof Error ? error.message : String(error)],
+            display: '',
+        };
+    }
+}
+
 // ── Tool ─────────────────────────────────────────────────────────────────────
 
 const SPICE_CALCULATOR_PARAMETERS: Record<string, unknown> = {
@@ -2125,7 +2204,7 @@ const SPICE_CALCULATOR_PARAMETERS: Record<string, unknown> = {
 export class BotanicalAdjunctCalculatorTool implements BuiltinTool<SpiceCalculatorInput> {
     readonly name = 'botanical_adjunct_calculator' as const;
     readonly description = 'Stima il dosaggio di ingredienti botanici per birra: spezie, scorze, cacao, caffè, tè, erbe, legni. Separa dose aromatica (volatili) dalla dose chemestetica (pungenza, calore). Considera forma, stadio, tempo, temperatura, matrice della birra, interazioni e freschezza. Supporta parametri specifici per categoria: SHU per peperoncino, roast_level per caffè/cacao. Restituisce intervallo con confidenza e protocollo di aggiustamento incrementale.';
-    readonly parameters = SPICE_CALCULATOR_PARAMETERS;
+    readonly parameters = toInputJsonSchema(SpiceCalculatorInputSchema);
 
     resolveExecution(args: SpiceCalculatorInput): ToolExecution {
         const resolvedName = args.ingredient_name ?? args.spice_name ?? '';
@@ -2139,37 +2218,8 @@ export class BotanicalAdjunctCalculatorTool implements BuiltinTool<SpiceCalculat
             description: `Botanical calc: ${resolvedName} @ ${args.intensity}`,
             approvalRule: this.name,
             execute: () => {
-                try {
-                    const input: SpiceCalcInput = {
-                        spice_name: resolvedName,
-                        batch_liters: args.batch_liters,
-                        intensity: args.intensity ?? 'medium',
-                        form: args.form ?? 'cracked',
-                        stage: args.stage ?? 'conditioning',
-                        contact_time_hours: args.contact_time_hours ?? 72,
-                        temperature_celsius: args.temperature_celsius ?? 20,
-                        freshness: args.freshness ?? 'recent',
-                        capsaicinoids_mg_per_g: args.capsaicinoids_mg_per_g,
-                        shu: args.shu,
-                        roast_level: args.roast_level,
-                        wood_toast_level: args.wood_toast_level,
-                        liquid_strength_relative: args.liquid_strength_relative,
-                        coffee_grams_per_liter: args.coffee_grams_per_liter,
-                        prepared_hours_ago: args.prepared_hours_ago,
-                        beer_matrix: {
-                            abv: args.abv ?? 5,
-                            finalGravity: args.final_gravity,
-                            ibu: args.ibu,
-                            roastIntensity: args.roast_intensity ?? 0,
-                            hopAromaIntensity: args.hop_aroma_intensity ?? 0,
-                            acidity: args.acidity ?? 0,
-                        },
-                        other_spices: resolvedOthers,
-                    };
-                    return Promise.resolve({ output: formatSpiceResults(input, args.show_details) });
-                } catch (e) {
-                    return Promise.resolve({ isError: true, output: e instanceof Error ? e.message : String(e) });
-                }
+                const output = buildSpiceOutput(args);
+                return Promise.resolve({ isError: output.status === 'error', output: JSON.stringify(output) });
             },
         };
     }

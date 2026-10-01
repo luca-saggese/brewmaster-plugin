@@ -13,10 +13,13 @@ import { toInputJsonSchema } from '../shim/input-schema';
 export const IbuCalculatorInputSchema = z.object({
   model: z.enum(['tinseth', 'rager']).default('tinseth'),
 
-  batch_size_liters: z
+  ibu_volume_liters: z
     .number()
     .positive()
-    .describe('Final wort or beer volume used for the IBU calculation, in liters.'),
+    .describe('Cold wort volume in the fermenter used as the IBU reference volume, in liters.'),
+
+  volume_reference: z.literal('cold_fermenter').default('cold_fermenter')
+    .describe('The IBU reference volume is explicitly the cold wort volume in the fermenter.'),
 
   boil_gravity: z
     .number()
@@ -37,8 +40,21 @@ export const IbuCalculatorInputSchema = z.object({
     .positive()
     .default(60),
 
+  first_wort_utilization_factor: z
+    .number()
+    .min(0)
+    .max(2)
+    .default(1.10)
+    .describe('Configurable declared convention for First Wort Hopping; no hidden increase is applied.'),
+
+  estimate_whirlpool_ibu: z
+    .boolean()
+    .default(true)
+    .describe('When false, whirlpool additions are reported but their theoretical IBU contribution is zero.'),
+
   hops: z.array(
     z.object({
+      id: z.string().min(1).describe('Stable recipe identifier for this hop addition.'),
       variety: z.string().min(1),
 
       alpha_acids_percent: z
@@ -68,20 +84,24 @@ export const IbuCalculatorInputSchema = z.object({
         .default('pellet'),
 
       use: z
-        .enum(['boil', 'whirlpool', 'dry_hop', 'first_wort', 'mash'])
+        .enum(['boil', 'whirlpool', 'dry_hop', 'first_wort', 'mash', 'flameout', 'post_boil'])
         .default('boil'),
 
       whirlpool_temperature_c: z
         .number()
-        .min(50)
+        .min(60)
         .max(100)
         .optional(),
     })
   ),
 }).superRefine((data, ctx) => {
   data.hops.forEach((hop, index) => {
+    if (hop.use === 'boil' && hop.time_minutes < 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['hops', index, 'time_minutes'], message: 'Boil contact time cannot be negative.' });
+    }
+
     if (
-      hop.use === 'boil' &&
+      (hop.use === 'boil' || hop.use === 'first_wort') &&
       hop.time_minutes > data.boil_duration_minutes
     ) {
       ctx.addIssue({
@@ -93,22 +113,58 @@ export const IbuCalculatorInputSchema = z.object({
     }
 
     if (
-      hop.use === 'whirlpool' &&
+      (hop.use === 'whirlpool' || hop.use === 'flameout') &&
       hop.whirlpool_temperature_c === undefined
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['hops', index, 'whirlpool_temperature_c'],
         message:
-          'Whirlpool temperature is required for whirlpool additions.',
+          'Whirlpool/flameout temperature is required for post-boil additions.',
       });
     }
+
+    if ((hop.use === 'whirlpool' || hop.use === 'flameout' || hop.use === 'post_boil') && hop.time_minutes <= 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['hops', index, 'time_minutes'], message: 'Post-boil contact time must be greater than zero.' });
+    }
   });
+
+  const ids = data.hops.map(hop => hop.id);
+  if (new Set(ids).size !== ids.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['hops'], message: 'Every hop addition id must be unique.' });
+  }
 });
 
 export type IbuCalculatorInput = z.infer<typeof IbuCalculatorInputSchema>;
 
 type HopAddition = IbuCalculatorInput['hops'][number];
+
+interface IbuWarning {
+  code: string;
+  message: string;
+  addition_id?: string;
+}
+
+interface IbuAdditionResult {
+  id: string;
+  variety: string;
+  grams: number;
+  alpha_acids_percent: number;
+  alpha_acids_source: string;
+  form: HopAddition['form'];
+  use: HopAddition['use'];
+  contact_time_minutes: number;
+  temperature_c: number | null;
+  ibu: number;
+  model: string;
+  assumptions: string[];
+}
+
+interface HopCalculation {
+  ibu: number;
+  model: string;
+  assumptions: string[];
+}
 
 const HOP_AA: Record<string, number> = {
   'admiral': 14, 'amarillo': 9, 'apollo': 18.5, 'aramis': 8, 'archer': 5,
@@ -155,8 +211,8 @@ export class IbuCalculatorTool implements BuiltinTool<IbuCalculatorInput> {
   readonly name = 'ibu_calculator' as const;
 
   readonly description =
-    'Calculate IBU using Tinseth or Rager. ' +
-    'Supports boil, first-wort and empirical whirlpool estimates.';
+    'Calculate theoretical bitterness using Tinseth or Rager from an explicit cold-fermenter IBU volume. ' +
+    'Supports boil, first-wort, whirlpool, dry-hop and mash-hop additions without reconstructing process volumes.';
 
   readonly parameters: Record<string, unknown> = toInputJsonSchema(IbuCalculatorInputSchema);
 
@@ -175,9 +231,11 @@ export class IbuCalculatorTool implements BuiltinTool<IbuCalculatorInput> {
     try {
       const model = args.model ?? 'tinseth';
       let totalIbu = 0;
-
-      const lines: string[] = [];
-      const warnings: string[] = [];
+      let boilIbu = 0;
+      let firstWortIbu = 0;
+      let whirlpoolIbu = 0;
+      const warnings: IbuWarning[] = [];
+      const additions: IbuAdditionResult[] = [];
 
       for (const hop of args.hops) {
         const normalizedVariety = hop.variety
@@ -191,13 +249,8 @@ export class IbuCalculatorTool implements BuiltinTool<IbuCalculatorInput> {
           databaseAa;
 
         if (aa === undefined) {
-          return Promise.resolve({
-            isError: true,
-            output:
-              `Unknown hop: "${hop.variety}". ` +
-              'Provide alpha_acids_percent explicitly, or choose from:\n\n' +
-              AVAILABLE_HOP_LIST,
-          });
+          return Promise.resolve(this.errorResult('ibu', 'HOP_AA_UNKNOWN',
+            `Unknown hop: "${hop.variety}". Provide alpha_acids_percent explicitly.`, { addition_id: hop.id }));
         }
 
         const aaSource =
@@ -205,118 +258,116 @@ export class IbuCalculatorTool implements BuiltinTool<IbuCalculatorInput> {
             ? 'database average'
             : 'user supplied';
 
-        const ibu = this.calculateHopIbu(
-          model,
-          hop,
-          aa,
-          args
-        );
+        const calculation = this.calculateHopIbu(model, hop, aa, args);
+        const ibu = calculation.ibu;
 
         totalIbu += ibu;
+        if (hop.use === 'boil') boilIbu += ibu;
+        if (hop.use === 'first_wort') firstWortIbu += ibu;
+        if (hop.use === 'whirlpool' && args.estimate_whirlpool_ibu) whirlpoolIbu += ibu;
 
         if (
           hop.alpha_acids_percent === undefined
         ) {
           warnings.push(
-            `${hop.variety}: AA% taken from the internal database ` +
-            `(${aa.toFixed(1)}%). Use the package value for better accuracy.`
+            { code: 'HOP_AA_ESTIMATED', addition_id: hop.id, message: `${hop.variety}: AA% estimated from the internal database (${aa.toFixed(1)}%). Use the package value for better accuracy.` }
           );
         }
 
         if (hop.use === 'dry_hop') {
           warnings.push(
-            `${hop.variety}: dry hopping is reported as 0 calculated IBU. ` +
-            'It may still affect measured and perceived bitterness.'
+            { code: 'DRY_HOP_NOT_ISOMERIZED', addition_id: hop.id, message: `${hop.variety}: dry hopping contributes 0 theoretical IBU; it may still affect measured and perceived bitterness through other compounds.` }
           );
         }
 
         if (hop.use === 'mash') {
           warnings.push(
-            `${hop.variety}: mash hopping is reported as 0 calculated IBU.`
+            { code: 'MASH_HOP_NOT_ISOMERIZED', addition_id: hop.id, message: `${hop.variety}: mash hopping contributes 0 theoretical IBU in this model.` }
           );
         }
 
-        const detailParts = [
-          `${hop.variety}`,
-          `${hop.form}`,
-          `${hop.use}`,
-          `${hop.grams}g`,
-        ];
-
-        if (hop.use === 'first_wort') {
-          detailParts.push(
-            `${args.boil_duration_minutes} min effective boil`
-          );
-        } else {
-          detailParts.push(
-            `${hop.time_minutes} min`
-          );
-        }
-
-        if (
-          hop.use === 'whirlpool' &&
-          hop.whirlpool_temperature_c !== undefined
-        ) {
-          detailParts.push(
-            `${hop.whirlpool_temperature_c}°C`
-          );
-        }
-
-        detailParts.push(
-          `${aa}% AA`,
-          aaSource
-        );
-
-        lines.push(
-          `  ${detailParts.join(', ')} → ` +
-          `**${ibu.toFixed(1)} IBU**`
-        );
+        additions.push({
+          id: hop.id,
+          variety: hop.variety,
+          grams: hop.grams,
+          alpha_acids_percent: aa,
+          alpha_acids_source: aaSource,
+          form: hop.form,
+          use: hop.use,
+          contact_time_minutes: hop.use === 'first_wort' ? args.boil_duration_minutes : hop.time_minutes,
+          temperature_c: hop.whirlpool_temperature_c ?? null,
+          ibu,
+          model: calculation.model,
+          assumptions: calculation.assumptions,
+        });
       }
 
-      const output: string[] = [
-        `**IBU totale (${model}): ${totalIbu.toFixed(1)}**`,
-        '',
-        ...lines,
-      ];
-
-      if (args.original_gravity !== undefined) {
-        const gravityUnits =
-          (args.original_gravity - 1) * 1000;
-
-        if (gravityUnits > 0) {
-          const buGu = totalIbu / gravityUnits;
-
-          output.push(
-            '',
-            `Rapporto BU:GU: ${buGu.toFixed(2)}`
-          );
-        }
-      }
-
-      const uniqueWarnings = [...new Set(warnings)];
-
-      if (uniqueWarnings.length > 0) {
-        output.push(
-          '',
-          '**Note:**',
-          ...uniqueWarnings.map(
-            warning => `- ${warning}`
-          )
-        );
-      }
-
-      return Promise.resolve({
-        output: output.join('\n'),
-      });
+      const bu = args.original_gravity === undefined ? null : totalIbu / ((args.original_gravity - 1) * 1000);
+      const summary = `IBU totali (${model}): ${totalIbu.toFixed(1)}; boil ${boilIbu.toFixed(1)}, first wort ${firstWortIbu.toFixed(1)}, whirlpool ${whirlpoolIbu.toFixed(1)}${bu === null ? '' : `; BU:GU ${bu.toFixed(2)}`}`;
+      return Promise.resolve(this.successResult(args, {
+        total_ibu: totalIbu,
+        boil_ibu: boilIbu,
+        first_wort_ibu: firstWortIbu,
+        whirlpool_ibu_estimated: whirlpoolIbu,
+        bu: bu === null || !Number.isFinite(bu) ? null : bu,
+        additions,
+        model,
+        assumptions: {
+          volume_reference: 'cold_fermenter',
+          first_wort_factor: args.first_wort_utilization_factor,
+          whirlpool_model: 'empirical_temperature_duration',
+          dry_hop_model: 'zero_isomerized_ibu',
+        },
+      }, warnings, summary));
     } catch (error) {
-      return Promise.resolve({
-        isError: true,
-        output:
-          error instanceof Error
-            ? error.message
-            : String(error),
-      });
+      return Promise.resolve(this.errorResult('ibu', 'IBU_CALCULATION_ERROR', error instanceof Error ? error.message : String(error)));
     }
+  }
+
+  private successResult(
+    args: IbuCalculatorInput,
+    result: Record<string, unknown>,
+    warnings: IbuWarning[],
+    summary: string,
+  ): ExecutableToolResult {
+    return {
+      output: JSON.stringify({
+        schema_version: '1.0',
+        calculation: 'ibu',
+        status: 'ok',
+        inputs: {
+          model: args.model,
+          ibu_volume_liters: args.ibu_volume_liters,
+          volume_reference: args.volume_reference,
+          boil_gravity: args.boil_gravity,
+          original_gravity: args.original_gravity ?? null,
+          boil_duration_minutes: args.boil_duration_minutes,
+          first_wort_utilization_factor: args.first_wort_utilization_factor,
+          estimate_whirlpool_ibu: args.estimate_whirlpool_ibu,
+          hops: args.hops,
+        },
+        result,
+        derived: { total_additions: args.hops.length },
+        warnings,
+        errors: [],
+        display: { summary },
+      }),
+    };
+  }
+
+  private errorResult(
+    calculation: string,
+    code: string,
+    message: string,
+    details: Record<string, unknown> = {},
+  ): ExecutableToolResult {
+    return {
+      isError: true,
+      output: JSON.stringify({
+        schema_version: '1.0', calculation, status: 'error', inputs: {}, result: null,
+        derived: {}, warnings: [], errors: [{ code, message, ...details }], display: { summary: message },
+      }),
+    };
   }
 
   private calculateHopIbu(
@@ -324,25 +375,25 @@ export class IbuCalculatorTool implements BuiltinTool<IbuCalculatorInput> {
     hop: HopAddition,
     aaPercent: number,
     args: IbuCalculatorInput
-  ): number {
+  ): HopCalculation {
     if (
       hop.grams === 0 ||
       aaPercent === 0
     ) {
-      return 0;
+      return { ibu: 0, model, assumptions: ['Zero grams or zero AA% produces zero IBU.'] };
     }
 
     switch (hop.use) {
       case 'boil':
-        return this.calculateBoilIbu(
+        return { ibu: this.calculateBoilIbu(
           model,
           hop.grams,
           aaPercent,
           hop.time_minutes,
           args.boil_gravity,
-          args.batch_size_liters,
+          args.ibu_volume_liters,
           hop.form
-        );
+        ), model, assumptions: ['Boil utilization model.', 'Volume is the explicit cold-fermenter IBU reference volume.'] };
 
       case 'first_wort': {
         const baseIbu = this.calculateBoilIbu(
@@ -351,7 +402,7 @@ export class IbuCalculatorTool implements BuiltinTool<IbuCalculatorInput> {
           aaPercent,
           args.boil_duration_minutes,
           args.boil_gravity,
-          args.batch_size_liters,
+          args.ibu_volume_liters,
           hop.form
         );
 
@@ -359,24 +410,36 @@ export class IbuCalculatorTool implements BuiltinTool<IbuCalculatorInput> {
          * Conventional approximation:
          * FWH is treated as a full-boil addition with a 10% increase.
          */
-        return baseIbu * 1.10;
+        return {
+          ibu: baseIbu * args.first_wort_utilization_factor,
+          model: 'first_wort_convention',
+          assumptions: [`Full-boil ${model} result multiplied by configured factor ${args.first_wort_utilization_factor.toFixed(2)}.`],
+        };
       }
 
-      case 'whirlpool':
-        return this.calculateWhirlpoolIbu(
-          model,
-          hop,
-          aaPercent,
-          args.boil_gravity,
-          args.batch_size_liters
-        );
+      case 'whirlpool': {
+        if (!args.estimate_whirlpool_ibu) {
+          return { ibu: 0, model: 'whirlpool_excluded', assumptions: ['Whirlpool theoretical contribution explicitly disabled by the user.'] };
+        }
+        return {
+          ibu: this.calculateWhirlpoolIbu(hop, aaPercent, args.boil_gravity, args.ibu_volume_liters),
+          model: 'whirlpool_empirical',
+          assumptions: ['Empirical temperature-duration model; not Tinseth at zero minutes and not an analytical measurement.'],
+        };
+      }
 
       case 'dry_hop':
+        return { ibu: 0, model: 'dry_hop_zero_isomerized_ibu', assumptions: ['Classical boil isomerization contribution is zero.'] };
+
       case 'mash':
-        return 0;
+        return { ibu: 0, model: 'mash_hop_zero_ibu', assumptions: ['No validated isomerization model is applied to mash hopping.'] };
+
+      case 'flameout':
+      case 'post_boil':
+        return { ibu: 0, model: 'post_boil_zero_ibu', assumptions: ['Post-boil addition is distinguished from whirlpool and is not assigned theoretical IBU.'] };
 
       default:
-        return 0;
+        return { ibu: 0, model: 'none', assumptions: ['Unsupported addition stage.'] };
     }
   }
 
@@ -426,11 +489,10 @@ export class IbuCalculatorTool implements BuiltinTool<IbuCalculatorInput> {
   }
 
   private calculateWhirlpoolIbu(
-    model: 'tinseth' | 'rager',
     hop: HopAddition,
     aaPercent: number,
     gravity: number,
-    volumeLiters: number
+    volumeLiters: number,
   ): number {
     const temperature =
       hop.whirlpool_temperature_c;
@@ -448,27 +510,14 @@ export class IbuCalculatorTool implements BuiltinTool<IbuCalculatorInput> {
       return 0;
     }
 
-    /*
-     * Empirical whirlpool estimate: compute the theoretical IBU at time=0
-     * (which yields ~5 % utilization under Rager, and 0 % under Tinseth)
-     * and scale it by a temperature-dependent factor.
-     *
-     * This intentionally under-reports Tinseth whirlpool IBU — the model
-     * has no time component at 0 minutes — and is deliberately conservative.
-     * Real whirlpool isomerisation depends on the cooling curve, which no
-     * simple calculator can model accurately.
-     */
-    const baseIbu = this.calculateBoilIbu(
-      model,
-      hop.grams,
-      aaPercent,
-      0,
-      gravity,
-      volumeLiters,
-      hop.form
-    );
-
-    return baseIbu * temperatureFactor;
+    // Empirical estimate: temperature and contact time are explicit inputs.
+    // It is intentionally separate from Tinseth/Rager and is not analytical.
+    const contactFactor = 1 - Math.exp(-hop.time_minutes / 20);
+    const gravityUnits = (gravity - 1) * 1000;
+    const gravityFactor = Math.max(0.50, 1 - Math.max(0, gravityUnits - 50) * 0.0065);
+    const formFactor = this.getHopFormFactor(hop.form);
+    return (hop.grams * aaPercent * 10 / volumeLiters)
+      * 0.25 * temperatureFactor * contactFactor * gravityFactor * formFactor;
   }
 
   private tinsethUtilization(

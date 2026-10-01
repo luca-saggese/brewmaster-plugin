@@ -535,7 +535,7 @@ Tool principali:
 
 - `mcp__plugin-brewmaster_brewing__brewing_calculator`: ABV, attenuazione, efficienza, strike temperature, pitching rate, gravity correction, dilution, stime delle densità, gravity balance e simulazioni di correzione della bollitura;
 - `mcp__plugin-brewmaster_brewing__water_profile_calculator`: profilo minerale e calcolo completo dei volumi, dall'acqua di mash/sparge al fermentatore;
-- `mcp__plugin-brewmaster_brewing__ibu_calculator`: IBU con Tinseth/Rager/Garetz, inclusi boil, first wort, whirlpool e dry hop;
+- `mcp__plugin-brewmaster_brewing__ibu_calculator`: amaro teorico con Tinseth/Rager, incluso boil, first wort, whirlpool, dry hop e mash hop;
 - `mcp__plugin-brewmaster_brewing__priming_calculator`: carbonazione naturale e dosaggio zuccheri;
 - `mcp__plugin-brewmaster_brewing__yaml_validator`: validazione deterministica della ricetta YAML;
 - `mcp__plugin-brewmaster_brewing__recipe_validator`: revisione qualitativa strutturata;
@@ -602,6 +602,14 @@ Non limitarti al rapporto SO4:Cl: considera anche concentrazioni assolute e pH t
 
 ## `mcp__plugin-brewmaster_brewing__ibu_calculator`
 
+Passa sempre `ibu_volume_liters` come volume positivo del mosto freddo nel fermentatore e `boil_gravity` come densità rappresentativa della bollitura. Il tool non calcola volumi di processo, evaporazione, efficienza o OG dal grist.
+
+Ogni gittata deve avere un `id` stabile per il collegamento alla ricetta YAML. Il risultato è JSON con schema `{ schema_version, calculation, status, inputs, result, derived, warnings, errors, display }`; usa i campi numerici in `result`, non il testo di `display.summary`.
+
+Tinseth e Rager sono applicati alle aggiunte in bollitura. First Wort usa solo il fattore configurato `first_wort_utilization_factor`, dichiarato come convenzione e senza maggiorazioni nascoste. Il whirlpool usa un modello empirico separato basato su temperatura, durata, quantità, AA%, forma, volume e densità: non è Tinseth a tempo zero e non equivale a una misurazione analitica. Può essere escluso con `estimate_whirlpool_ibu: false`; il tempo di whirlpool non viene trattato come tempo di bollitura.
+
+Il dry hop e il mash hop restituiscono zero IBU teoriche da isomerizzazione, ma il dry hop genera un warning perché può modificare amaro misurato e percepito tramite altri composti. Quando l'AA% non è fornita viene usata la media interna e restituito il warning strutturato `HOP_AA_ESTIMATED`; il valore utente ha sempre priorità.
+
 Usalo quando:
 
 - progetti una luppolatura;
@@ -610,7 +618,7 @@ Usalo quando:
 - devi stimare il contributo di whirlpool o first wort;
 - la coerenza IBU/OG è rilevante.
 
-Non presentare come preciso un IBU che dipende da dati stimati o da utilizzo non perfettamente modellabile.
+Non presentare come preciso un IBU che dipende da dati stimati o da utilizzo non perfettamente modellabile. `BU` usa esclusivamente `original_gravity`, quando fornita, e non `boil_gravity`.
 
 ## `mcp__plugin-brewmaster_brewing__priming_calculator`
 

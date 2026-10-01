@@ -112,7 +112,7 @@ async function main(): Promise<void> {
   const pdf = `${outputBase}.pdf`;
   try {
     const validation = validateYamlFile(validFixture);
-    assert(validation.validation_status === 'valid', 'complete fixture should pass blocking validation');
+    assert(validation.validation_status === 'incomplete', 'fixture without calculator results should be incomplete, not valid');
     const validModel = buildRecipeDocumentModel(validFixture).model;
     const packaging = validModel.sections.find(section => section.phase === 'packaging');
     assert(packaging?.actions.some(action => action.quantity === '52.50 g'), 'priming total should use the declared total quantity');
@@ -128,7 +128,7 @@ async function main(): Promise<void> {
     const pdfPayload = JSON.parse(pdfResult.output) as { status: string; document_type: string; path: string; errors: string[]; validation_status: string };
     assert(docxPayload.document_type === 'docx' && docxPayload.status !== 'error', 'DOCX result should be structured and successful');
     assert(pdfPayload.document_type === 'pdf' && pdfPayload.status !== 'error', 'PDF result should be structured and successful');
-    assert(docxPayload.validation_status === 'valid' && pdfPayload.validation_status === 'valid', 'DOCX and PDF should use the same current validation report');
+    assert(docxPayload.validation_status === 'incomplete' && pdfPayload.validation_status === 'incomplete', 'DOCX and PDF should use the same current validation report');
     assert(existsSync(docx) && readFileSync(docx).subarray(0, 2).toString('hex') === '504b', 'DOCX should be a ZIP package');
     const documentXml = execFileSync('unzip', ['-p', docx, 'word/document.xml']).toString();
     assert(documentXml.includes('Operational Test Ale') && documentXml.includes('52.50 g') && documentXml.includes('80 °C'), 'DOCX XML should contain rendered operational content');
@@ -137,6 +137,14 @@ async function main(): Promise<void> {
     assert(existsSync(pdf) && readFileSync(pdf).subarray(0, 5).toString() === '%PDF-', 'PDF should have a valid header');
     const pdfText = execFileSync('strings', [pdf]).toString();
     assert(pdfText.includes('Operational Test Ale'), 'PDF should contain the recipe title');
+    const pdfInfo = execFileSync('pdfinfo', [pdf]).toString();
+    assert(Number(pdfInfo.match(/^Pages:\s+(\d+)/m)?.[1] ?? 0) > 1, 'PDF should be genuinely multipage');
+
+    const missingPrimingVolume = join(workDir, 'missing-priming-volume.yaml');
+    writeFileSync(missingPrimingVolume, VALID_RECIPE.replace('confezionamento_litri: 17.5\n  priming_totale_g: 52.5', 'priming_gl: 3'), 'utf-8');
+    let primingError = '';
+    try { buildRecipeDocumentModel(missingPrimingVolume); } catch (error) { primingError = error instanceof Error ? error.message : String(error); }
+    assert(primingError.toLowerCase().includes('volume confezionamento'), 'priming without packaging volume should fail explicitly');
 
     const invalidFixture = join(workDir, 'invalid.yaml');
     writeFileSync(invalidFixture, VALID_RECIPE.replace('og: 1.060', 'og: not-a-number'), 'utf-8');

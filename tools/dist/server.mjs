@@ -9333,13 +9333,14 @@ const CalculatorReferenceSchema = object({
 	result: record$1(string(), unknown()).nullable().optional(),
 	errors: array(unknown()).optional()
 }).passthrough();
+const CalculatorReferencesSchema = union([CalculatorReferenceSchema, array(CalculatorReferenceSchema)]);
 const YamlValidatorInputSchema = object({
 	input_file: string().describe("Percorso del file YAML della ricetta."),
 	calculator_results: object({
-		water: CalculatorReferenceSchema.optional(),
-		brewing: CalculatorReferenceSchema.optional(),
-		ibu: CalculatorReferenceSchema.optional(),
-		priming: CalculatorReferenceSchema.optional()
+		water: CalculatorReferencesSchema.optional(),
+		brewing: CalculatorReferencesSchema.optional(),
+		ibu: CalculatorReferencesSchema.optional(),
+		priming: CalculatorReferencesSchema.optional()
 	}).optional().describe("Risultati JSON dei calculator già eseguiti.")
 });
 const BJCP = {
@@ -11588,7 +11589,20 @@ function issueFromMessage(code, path, message, source = "yaml_validator") {
 		source
 	};
 }
+function referenceList(reference) {
+	return reference === void 0 ? [] : Array.isArray(reference) ? reference : [reference];
+}
+function referenceForCalculation(reference, calculation) {
+	return referenceList(reference).find((item) => item.calculation === calculation);
+}
 function referenceStatus(reference) {
+	const references = referenceList(reference);
+	if (references.length === 0) return "not_verified";
+	if (references.some((item) => item.ok === false || item.status?.toLowerCase() === "error")) return "failed";
+	if (references.some((item) => item.ok === true || item.status?.toLowerCase() === "ok" || item.status?.toLowerCase() === "warning")) return "passed";
+	return "not_verified";
+}
+function calculationStatus(reference) {
 	if (!reference) return "not_verified";
 	const status = reference.status?.toLowerCase();
 	if (reference.ok === false || status === "error") return "failed";
@@ -11603,6 +11617,7 @@ function compareCalculatorValues(errors, checks, recipe, references) {
 	const comparisons = [
 		{
 			calculator: "brewing",
+			calculation: "estimated_og",
 			key: "estimated_og",
 			path: "parametri.og",
 			declared: recipe.og,
@@ -11611,7 +11626,8 @@ function compareCalculatorValues(errors, checks, recipe, references) {
 		},
 		{
 			calculator: "brewing",
-			key: "estimated_fg",
+			calculation: "estimated_fg",
+			key: "fg",
 			path: "parametri.fg",
 			declared: recipe.fg,
 			code: "BREWING_FG_MISMATCH",
@@ -11619,6 +11635,7 @@ function compareCalculatorValues(errors, checks, recipe, references) {
 		},
 		{
 			calculator: "brewing",
+			calculation: "abv",
 			key: "abv_percent",
 			path: "parametri.abv_percent",
 			declared: recipe.abv_percent,
@@ -11627,6 +11644,7 @@ function compareCalculatorValues(errors, checks, recipe, references) {
 		},
 		{
 			calculator: "ibu",
+			calculation: "ibu",
 			key: "total_ibu",
 			path: "parametri.ibu",
 			declared: recipe.ibu,
@@ -11635,6 +11653,7 @@ function compareCalculatorValues(errors, checks, recipe, references) {
 		},
 		{
 			calculator: "priming",
+			calculation: "priming",
 			key: "packaging_volume_l",
 			path: "parametri.confezionamento_litri",
 			declared: recipe.packaging_volume_liters,
@@ -11643,6 +11662,7 @@ function compareCalculatorValues(errors, checks, recipe, references) {
 		},
 		{
 			calculator: "priming",
+			calculation: "priming",
 			key: "dosage_g_per_l",
 			path: "carbonazione.priming_gl",
 			declared: recipe.priming_sugar_gl,
@@ -11651,6 +11671,16 @@ function compareCalculatorValues(errors, checks, recipe, references) {
 		},
 		{
 			calculator: "priming",
+			calculation: "priming",
+			key: "total_fermentable_g",
+			path: "parametri.priming_totale_g",
+			declared: recipe.priming_total_grams,
+			code: "PRIMING_TOTAL_MISMATCH",
+			tolerance: .1
+		},
+		{
+			calculator: "priming",
+			calculation: "priming",
 			key: "target_co2_volumes",
 			path: "carbonazione.co2_volumi",
 			declared: recipe.carbonation_volumes,
@@ -11659,10 +11689,37 @@ function compareCalculatorValues(errors, checks, recipe, references) {
 		}
 	];
 	for (const comparison of comparisons) {
-		const reference = references?.[comparison.calculator];
-		if (!reference || referenceStatus(reference) !== "passed" || comparison.declared === void 0) continue;
+		if (comparison.declared === void 0) continue;
+		const reference = referenceForCalculation(references?.[comparison.calculator], comparison.calculation);
+		const status = calculationStatus(reference);
+		if (status === "not_verified") {
+			checks.push({
+				id: comparison.code,
+				status,
+				message: `Risultato ${comparison.calculation} non fornito dal calculator.`,
+				source: `${comparison.calculator}_calculator`
+			});
+			continue;
+		}
+		if (status === "failed") {
+			checks.push({
+				id: comparison.code,
+				status,
+				message: `Il calculator ${comparison.calculation} ha restituito un errore.`,
+				source: `${comparison.calculator}_calculator`
+			});
+			continue;
+		}
 		const expected = calculatorValue(reference, comparison.key);
-		if (typeof expected !== "number") continue;
+		if (typeof expected !== "number") {
+			checks.push({
+				id: comparison.code,
+				status: "not_verified",
+				message: `Il risultato ${comparison.calculation} non contiene ${comparison.key}.`,
+				source: `${comparison.calculator}_calculator`
+			});
+			continue;
+		}
 		const passed = Math.abs(comparison.declared - expected) <= comparison.tolerance;
 		checks.push({
 			id: comparison.code,
@@ -11679,6 +11736,27 @@ function compareCalculatorValues(errors, checks, recipe, references) {
 			message: "Il valore dichiarato non coincide con il risultato strutturato del calculator.",
 			source: `${comparison.calculator}_calculator`
 		});
+	}
+	const estimatedFg = referenceForCalculation(references?.brewing, "estimated_fg");
+	if (recipe.abv_percent !== void 0 && calculationStatus(estimatedFg) === "passed" && calculatorValue(estimatedFg, "abv_percent") !== void 0) {
+		const abvComparison = comparisons.find((comparison) => comparison.code === "BREWING_ABV_MISMATCH");
+		if (abvComparison && !referenceForCalculation(references?.brewing, "abv")) {
+			const expected = calculatorValue(estimatedFg, "abv_percent");
+			if (typeof expected === "number") {
+				const passed = Math.abs(recipe.abv_percent - expected) <= abvComparison.tolerance;
+				const existing = checks.find((check) => check.id === abvComparison.code);
+				if (existing) existing.status = passed ? "passed" : "failed";
+				if (!passed) errors.push({
+					code: abvComparison.code,
+					severity: "error",
+					path: abvComparison.path,
+					declared: recipe.abv_percent,
+					expected,
+					message: "Il valore dichiarato non coincide con il risultato strutturato del calculator.",
+					source: "brewing_calculator"
+				});
+			}
+		}
 	}
 }
 function buildValidationReport(recipe, validation, calculatorResults) {
@@ -11732,7 +11810,7 @@ function buildValidationReport(recipe, validation, calculatorResults) {
 	];
 	for (const [name, reference] of Object.entries(calculatorResults ?? {})) if (reference && referenceStatus(reference) === "failed") errors.push(issueFromMessage("CALCULATOR_ERROR", `calculator_references.${name}`, `Il calculator ${name} ha restituito un errore; i controlli dipendenti non sono verificati.`, name));
 	compareCalculatorValues(errors, checks, recipe, calculatorResults);
-	const validationStatus = errors.length > 0 ? "invalid" : "valid";
+	const validationStatus = errors.length > 0 ? "invalid" : checks.some((check) => check.status === "not_verified") ? "incomplete" : "valid";
 	return {
 		schema_version: recipe.schema_version ?? "1.0",
 		recipe_id: recipe.recipe_name,
@@ -11743,7 +11821,7 @@ function buildValidationReport(recipe, validation, calculatorResults) {
 		checks,
 		normalized_recipe: recipe,
 		calculator_references: calculatorResults ?? null,
-		summary: validationStatus === "valid" ? "Ricetta strutturalmente valida; la conformità BJCP resta una valutazione separata." : `Ricetta non valida: ${errors.length} errore/i deterministico/i.`
+		summary: validationStatus === "valid" ? "Ricetta strutturalmente valida; la conformità BJCP resta una valutazione separata." : validationStatus === "incomplete" ? "Ricetta strutturalmente valida ma con controlli calculator non verificati." : `Ricetta non valida: ${errors.length} errore/i deterministico/i.`
 	};
 }
 function validateYamlFile(inputPath, calculatorResults) {
@@ -13608,7 +13686,7 @@ function buildModel(recipe, raw) {
 			duration: quantity(step.duration_days, "giorni"),
 			note: step.note
 		}));
-		if (recipe.primary_days !== void 0) fermentation.actions.push({
+		if (recipe.primary_days !== void 0 && recipe.fermentation_steps?.length === 0) fermentation.actions.push({
 			phase: "fermentation",
 			order: 10,
 			moment: `Giorni 0–${recipe.primary_days}`,
@@ -13778,6 +13856,7 @@ function buildRecipeDocumentModel(inputPath) {
 		if (recipe.mash_steps === void 0 && firstNumber(mash, ["durata_min"]) === void 0) errors.push("mash.durata_min");
 	}
 	if (recipe.boil_time_minutes !== void 0 && recipe.pre_boil_volume_liters === void 0) errors.push("parametri.pre_boil_litri o bollitura.volume_pre_boil_litri");
+	if (recipe.priming_sugar_gl !== void 0 && recipe.priming_total_grams === void 0 && recipe.packaging_volume_liters === void 0) errors.push("Volume confezionamento (parametri.confezionamento_litri) necessario per calcolare il totale del priming");
 	if (errors.length > 0) throw new Error(`Esportazione incompleta: dati indispensabili mancanti: ${errors.join(", ")}`);
 	return {
 		recipe,

@@ -111,6 +111,7 @@ sales:
 carbonazione:
   co2_volumi: 2.5
   tipo_botella: "long neck"
+  priming_totale_g: 47.5
 `;
 
 // Out-of-style: OG too high for 18B (max 1.060), IBU too low (min 30), ABV too high (max 6.2)
@@ -181,16 +182,50 @@ async function main(): Promise<void> {
       signal: new AbortController().signal,
     });
     assert(!validRes.isError, `Valid recipe should not error, got: ${validRes.output}`);
-    const validReport = JSON.parse(validRes.output) as { validation_status: string; normalized_recipe: { recipe_name: string }; checks: Array<{ status: string }> };
-    assert(validReport.validation_status === 'valid', 'valid recipe should be marked valid');
+    const validReport = JSON.parse(validRes.output) as { validation_status: string; normalized_recipe: { recipe_name: string }; checks: Array<{ id: string; status: string }> };
+    assert(validReport.validation_status === 'incomplete', 'recipe without calculator results should be marked incomplete');
     assert(validReport.normalized_recipe.recipe_name === 'Test Pale Ale', 'normalized recipe should be returned');
     assert(validReport.checks.every(check => check.status === 'passed' || check.status === 'not_verified'), 'checks should expose structured statuses');
+    assert(validReport.checks.some(check => check.id === 'BREWING_FG_MISMATCH' && check.status === 'not_verified'), 'missing brewing result should leave FG not verified');
 
-    // 2. Out-of-style recipe → critical issues reported
+    // 2. Distinct Brewing Calculator payloads are matched by calculation.
+    const calculatorResults = {
+      water: { calculation: 'water_profile', ok: true, status: 'ok', result: {} },
+      brewing: [
+        { calculation: 'estimated_og', ok: true, status: 'ok', result: { estimated_og: 1.052 } },
+        { calculation: 'estimated_fg', ok: true, status: 'ok', result: { fg: 1.012, abv_percent: 5.25 } },
+        { calculation: 'abv', ok: true, status: 'ok', result: { abv_percent: 5.25 } },
+      ],
+      ibu: { calculation: 'ibu', ok: true, status: 'ok', result: { total_ibu: 40 } },
+      priming: { calculation: 'priming', ok: true, status: 'ok', result: { packaging_volume_l: 19, total_fermentable_g: 47.5, target_co2_volumes: 2.5 } },
+    };
+    const calculatedRes = await tool.resolveExecution({ input_file: validPath, calculator_results: calculatorResults }).execute({
+      turnId: 5,
+      toolCallId: 'test-calculators',
+      signal: new AbortController().signal,
+    });
+    const calculatedReport = JSON.parse(calculatedRes.output) as { validation_status: string; errors: Array<{ code: string }>; checks: Array<{ id: string; status: string }> };
+    assert(calculatedReport.validation_status === 'valid', 'complete calculator results should produce valid status');
+    assert(calculatedReport.errors.length === 0, 'matching calculator results should not create errors');
+    assert(calculatedReport.checks.find(check => check.id === 'BREWING_FG_MISMATCH')?.status === 'passed', 'FG should compare against result.fg from estimated_fg');
+    assert(calculatedReport.checks.find(check => check.id === 'BREWING_ABV_MISMATCH')?.status === 'passed', 'ABV should compare against abv calculator payload');
+
+    // 3. A mismatching estimated FG is reported against the declared FG.
+    const wrongFgResults = { ...calculatorResults, brewing: [...calculatorResults.brewing.slice(0, 1), { calculation: 'estimated_fg', ok: true, status: 'ok', result: { fg: 1.020, abv_percent: 4.2 } }, calculatorResults.brewing[2]] };
+    const wrongFgRes = await tool.resolveExecution({ input_file: validPath, calculator_results: wrongFgResults }).execute({
+      turnId: 6,
+      toolCallId: 'test-wrong-fg',
+      signal: new AbortController().signal,
+    });
+    const wrongFgReport = JSON.parse(wrongFgRes.output) as { validation_status: string; errors: Array<{ code: string; expected?: number }> };
+    assert(wrongFgReport.validation_status === 'invalid', 'mismatching estimated FG should invalidate the report');
+    assert(wrongFgReport.errors.some(error => error.code === 'BREWING_FG_MISMATCH' && error.expected === 1.02), 'FG mismatch should expose calculator result.fg');
+
+    // 4. Out-of-style recipe → critical issues reported
     const oosPath = join(dir, 'out-of-style.yaml');
     writeFileSync(oosPath, OUT_OF_STYLE_RECIPE, 'utf-8');
     const oosRes = await tool.resolveExecution({ input_file: oosPath }).execute({
-      turnId: 2,
+      turnId: 7,
       toolCallId: 'test-2',
       signal: new AbortController().signal,
     });
@@ -203,7 +238,7 @@ async function main(): Promise<void> {
 
     // 3. Missing file → error result
     const missingRes = await tool.resolveExecution({ input_file: join(dir, 'nope.yaml') }).execute({
-      turnId: 3,
+      turnId: 8,
       toolCallId: 'test-3',
       signal: new AbortController().signal,
     });
@@ -214,7 +249,7 @@ async function main(): Promise<void> {
     const badPath = join(dir, 'invalid.yaml');
     writeFileSync(badPath, INVALID_YAML, 'utf-8');
     const badRes = await tool.resolveExecution({ input_file: badPath }).execute({
-      turnId: 4,
+      turnId: 9,
       toolCallId: 'test-4',
       signal: new AbortController().signal,
     });

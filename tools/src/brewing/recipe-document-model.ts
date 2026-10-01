@@ -275,7 +275,7 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
       target('Temperatura fermentazione', recipe.fermentation_temp_c, ' °C'), target('Fermentazione primaria', recipe.primary_days, ' giorni'), target('Maturazione', recipe.conditioning_days, ' giorni'),
     ].filter((item): item is TargetValue => item !== undefined));
     recipe.fermentation_steps?.forEach((step, index) => fermentation.actions.push({ phase: 'fermentation', order: 10 + index, moment: `Step ${index + 1}`, action: 'Mantenere la fermentazione', temperature: quantity(step.temperature_c, '°C'), duration: quantity(step.duration_days, 'giorni'), note: step.note }));
-    if (recipe.primary_days !== undefined) fermentation.actions.push({ phase: 'fermentation', order: 10, moment: `Giorni 0–${recipe.primary_days}`, action: 'Fermentazione primaria', temperature: quantity(recipe.fermentation_temp_c, '°C'), duration: `${recipe.primary_days} giorni`, note: text(fermentationRaw['note']) });
+    if (recipe.primary_days !== undefined && recipe.fermentation_steps?.length === 0) fermentation.actions.push({ phase: 'fermentation', order: 10, moment: `Giorni 0–${recipe.primary_days}`, action: 'Fermentazione primaria', temperature: quantity(recipe.fermentation_temp_c, '°C'), duration: `${recipe.primary_days} giorni`, note: text(fermentationRaw['note']) });
     if (Boolean(fermentationRaw['cold_crash'])) fermentation.actions.push({ phase: 'fermentation', order: 30, moment: 'Cold crash', action: 'Raffreddare per il cold crash', temperature: quantity(firstNumber(fermentationRaw, ['cold_crash_temp_c']), '°C'), duration: quantity(firstNumber(fermentationRaw, ['cold_crash_giorni']), 'giorni') });
     recipe.hop_schedule.filter(hop => hop.use === 'dry_hop').forEach(hop => fermentation.actions.push({ phase: 'fermentation', order: 20, moment: text(fermentationRaw['dry_hop_giorno']) ? `Giorno ${String(fermentationRaw['dry_hop_giorno'])}` : 'Dry hop', action: 'Aggiungere dry hop', ingredient: hop.variety, quantity: quantity(hop.grams, 'g'), note: hop.note }));
     recipe.spezie?.filter(spice => ['secondary', 'fermentation', 'conditioning', 'tincture', 'post_fermentation'].includes(spice.uso)).forEach(spice => {
@@ -344,6 +344,9 @@ export function buildRecipeDocumentModel(inputPath: string): RecipeDocumentResul
     if (recipe.mash_steps === undefined && firstNumber(mash, ['durata_min']) === undefined) errors.push('mash.durata_min');
   }
   if (recipe.boil_time_minutes !== undefined && recipe.pre_boil_volume_liters === undefined) errors.push('parametri.pre_boil_litri o bollitura.volume_pre_boil_litri');
+  if (recipe.priming_sugar_gl !== undefined && recipe.priming_total_grams === undefined && recipe.packaging_volume_liters === undefined) {
+    errors.push('Volume confezionamento (parametri.confezionamento_litri) necessario per calcolare il totale del priming');
+  }
   if (errors.length > 0) throw new Error(`Esportazione incompleta: dati indispensabili mancanti: ${errors.join(', ')}`);
   return { recipe, model: buildModel(recipe, raw) };
 }

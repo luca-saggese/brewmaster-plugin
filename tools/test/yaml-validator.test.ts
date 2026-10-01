@@ -181,9 +181,10 @@ async function main(): Promise<void> {
       signal: new AbortController().signal,
     });
     assert(!validRes.isError, `Valid recipe should not error, got: ${validRes.output}`);
-    assertIncludes(validRes.output, 'Validazione ricetta', 'valid recipe report header');
-    assertIncludes(validRes.output, '18B', 'valid recipe style code');
-    assertIncludes(validRes.output, '✅ Valida', 'valid recipe should be marked valid');
+    const validReport = JSON.parse(validRes.output) as { validation_status: string; normalized_recipe: { recipe_name: string }; checks: Array<{ status: string }> };
+    assert(validReport.validation_status === 'valid', 'valid recipe should be marked valid');
+    assert(validReport.normalized_recipe.recipe_name === 'Test Pale Ale', 'normalized recipe should be returned');
+    assert(validReport.checks.every(check => check.status === 'passed' || check.status === 'not_verified'), 'checks should expose structured statuses');
 
     // 2. Out-of-style recipe → critical issues reported
     const oosPath = join(dir, 'out-of-style.yaml');
@@ -194,9 +195,11 @@ async function main(): Promise<void> {
       signal: new AbortController().signal,
     });
     assert(!oosRes.isError, `out-of-style recipe should not error, got: ${oosRes.output}`);
-    assertIncludes(oosRes.output, '❌ Errori critici', 'out-of-style should list critical errors');
-    assertIncludes(oosRes.output, 'OG 1.070', 'out-of-style should flag high OG');
-    assertIncludes(oosRes.output, 'IBU 15', 'out-of-style should flag low IBU');
+    const oosReport = JSON.parse(oosRes.output) as { validation_status: string; errors: unknown[]; warnings: Array<{ code: string; message: string }> };
+    assert(oosReport.validation_status === 'invalid', 'incomplete recipe should remain invalid');
+    assert(!oosReport.errors.some(error => JSON.stringify(error).includes('OG 1.070')), 'style deviation should not be classified as a deterministic error');
+    assert(oosReport.warnings.some(w => w.code === 'BJCP_DEVIATION' && w.message.includes('OG 1.070')), 'out-of-style OG should be a BJCP warning');
+    assert(oosReport.warnings.some(w => w.code === 'BJCP_DEVIATION' && w.message.includes('IBU 15')), 'out-of-style IBU should be a BJCP warning');
 
     // 3. Missing file → error result
     const missingRes = await tool.resolveExecution({ input_file: join(dir, 'nope.yaml') }).execute({

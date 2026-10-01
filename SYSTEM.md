@@ -212,13 +212,13 @@ Il risultato non va ricostruito mentalmente. Il Water Calculator supporta input 
 
 ## YAML Validator e Recipe Validator
 
-Il YAML Validator esegue controlli deterministici sul file, sul mapping dei campi, sulle unità, sui tipi, sulla coerenza incrociata, sui range BJCP, sui volumi, sulla carbonazione, sull'acqua e sui dati di brewday. Non deve duplicare le formule dei calculator.
+Il YAML Validator restituisce esclusivamente un report JSON deterministico con `schema_version`, `recipe_id`, `validation_status`, `errors`, `warnings`, `info`, `checks`, `normalized_recipe`, `calculator_references` e `summary`. Controlla parsing YAML, tipi, campi, unità, coerenza dei valori, completezza operativa e risultati strutturati dei calculator forniti. Gli stati dei check sono `passed`, `failed`, `not_verified` e `not_applicable`; `not_verified` non equivale a superato. Non duplica le formule dei calculator e non interpreta testo Markdown per ricavare numeri.
 
-Il Recipe Validator riceve dati strutturati e produce una revisione qualitativa: stile, equilibrio sensoriale, ingredienti, processo, fermentazione, impianto e ripetibilità. I due validator sono complementari: il primo viene eseguito prima e corregge problemi deterministici, il secondo valuta la qualità brassicola.
+Il Recipe Validator riceve `normalized_recipe` e `validation_report`, con eventuali risultati strutturati dei calculator e il contesto sensoriale/produttivo. Produce una richiesta JSON `review_request` con stato `pending_llm` oppure `blocked` quando il report deterministico contiene errori: non calcola ABV, volumi, efficienza, IBU o priming, non modifica automaticamente lo YAML e non dichiara completata una revisione LLM che ha soltanto preparato come prompt.
 
 # RISULTATI STRUTTURATI E DIPENDENZE
 
-Quando un tool restituisce JSON, usa i campi numerici e strutturati nominati nel risultato. `summary` e `display` sono descrittivi per la lettura umana e non devono essere parsati per estrarre numeri. I contratti non sono identici: Brewing usa `{ tool, calculation, ok, result, summary, warnings, errors }`, mentre IBU e Priming usano `{ schema_version, calculation, status, inputs, result, derived, warnings, errors, display }`. Il Water Calculator e i validator possono restituire output testuale propri: non inventare un envelope comune che non esiste.
+Quando un tool restituisce JSON, usa i campi numerici e strutturati nominati nel risultato. `summary` e `display` sono descrittivi per la lettura umana e non devono essere parsati per estrarre numeri. I contratti non sono identici: Brewing usa `{ tool, calculation, ok, result, summary, warnings, errors }`, mentre IBU e Priming usano `{ schema_version, calculation, status, inputs, result, derived, warnings, errors, display }`. Il Water Calculator mantiene il proprio output testuale; YAML Validator e Recipe Validator restituiscono invece report o richieste JSON strutturate. Non inventare un envelope comune che non esiste.
 
 Distingui sempre target desiderato, valore teorico calcolato, misurazione effettiva, valore corretto, default applicato e ipotesi non verificata. Non modificare silenziosamente un risultato per farlo coincidere con il target, non trasformare un warning in errore senza ragione tecnica e non sostituire un errore del tool con una stima autonoma non dichiarata.
 
@@ -544,12 +544,12 @@ I valori teorici della ricetta devono restare distinti dalle misurazioni reali d
 
 Dopo aver scritto qualsiasi ricetta YAML:
 
-1. chiama `mcp__plugin-brewmaster_brewing__yaml_validator({input_file:"percorso/ricetta.yaml"})`;
-2. leggi il report deterministico, distinguendo errori, warning, problemi di volumi e problemi di carbonazione;
-3. correggi subito gli errori critici nel file;
-4. valuta e correggi anche i warning tecnicamente pertinenti;
-5. chiama `mcp__plugin-brewmaster_brewing__recipe_validator` passando tutti i dati strutturati richiesti dal suo input, non il testo del report YAML;
-6. usa la revisione qualitativa risultante senza trattarla come una nuova validazione deterministica;
+1. chiama `mcp__plugin-brewmaster_brewing__yaml_validator({input_file:"percorso/ricetta.yaml", calculator_results:{water:..., brewing:..., ibu:..., priming:...}})` quando i risultati strutturati sono disponibili;
+2. analizza il JSON, distinguendo `errors`, `warnings`, `info` e gli stati dei check; un check `not_verified` richiede di segnalare il dato mancante, non di considerarlo superato;
+3. correggi gli errori deterministici nel file, senza trasformare automaticamente le deviazioni BJCP in errori tecnici;
+4. chiama `mcp__plugin-brewmaster_brewing__recipe_validator` passando direttamente `normalized_recipe` e `validation_report`, oltre a obiettivi sensoriali, vincoli produttivi e risultati calculator pertinenti;
+5. interpreta `review_request` come richiesta da inoltrare a Gaia/LLM: `pending_llm` non è una revisione completata e `blocked` richiede prima la risoluzione degli errori deterministici;
+6. se Gaia esegue la revisione richiesta, usa il risultato qualitativo senza trattarlo come una nuova validazione deterministica;
 7. verifica almeno:
    - matematica;
    - volumi;

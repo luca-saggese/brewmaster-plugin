@@ -1842,6 +1842,97 @@ function handleIntersectionResults(result, left, right) {
 	result.value = merged.data;
 	return result;
 }
+const $ZodRecord = /*@__PURE__*/ $constructor("$ZodRecord", (inst, def) => {
+	$ZodType.init(inst, def);
+	inst._zod.parse = (payload, ctx) => {
+		const input = payload.value;
+		if (!isPlainObject(input)) {
+			payload.issues.push({
+				expected: "record",
+				code: "invalid_type",
+				input,
+				inst
+			});
+			return payload;
+		}
+		const proms = [];
+		const values = def.keyType._zod.values;
+		if (values) {
+			payload.value = {};
+			const recordKeys = /* @__PURE__ */ new Set();
+			for (const key of values) if (typeof key === "string" || typeof key === "number" || typeof key === "symbol") {
+				recordKeys.add(typeof key === "number" ? key.toString() : key);
+				const result = def.valueType._zod.run({
+					value: input[key],
+					issues: []
+				}, ctx);
+				if (result instanceof Promise) proms.push(result.then((result) => {
+					if (result.issues.length) payload.issues.push(...prefixIssues(key, result.issues));
+					payload.value[key] = result.value;
+				}));
+				else {
+					if (result.issues.length) payload.issues.push(...prefixIssues(key, result.issues));
+					payload.value[key] = result.value;
+				}
+			}
+			let unrecognized;
+			for (const key in input) if (!recordKeys.has(key)) {
+				unrecognized = unrecognized ?? [];
+				unrecognized.push(key);
+			}
+			if (unrecognized && unrecognized.length > 0) payload.issues.push({
+				code: "unrecognized_keys",
+				input,
+				inst,
+				keys: unrecognized
+			});
+		} else {
+			payload.value = {};
+			for (const key of Reflect.ownKeys(input)) {
+				if (key === "__proto__") continue;
+				let keyResult = def.keyType._zod.run({
+					value: key,
+					issues: []
+				}, ctx);
+				if (keyResult instanceof Promise) throw new Error("Async schemas not supported in object keys currently");
+				if (typeof key === "string" && number$1.test(key) && keyResult.issues.length) {
+					const retryResult = def.keyType._zod.run({
+						value: Number(key),
+						issues: []
+					}, ctx);
+					if (retryResult instanceof Promise) throw new Error("Async schemas not supported in object keys currently");
+					if (retryResult.issues.length === 0) keyResult = retryResult;
+				}
+				if (keyResult.issues.length) {
+					if (def.mode === "loose") payload.value[key] = input[key];
+					else payload.issues.push({
+						code: "invalid_key",
+						origin: "record",
+						issues: keyResult.issues.map((iss) => finalizeIssue(iss, ctx, config())),
+						input: key,
+						path: [key],
+						inst
+					});
+					continue;
+				}
+				const result = def.valueType._zod.run({
+					value: input[key],
+					issues: []
+				}, ctx);
+				if (result instanceof Promise) proms.push(result.then((result) => {
+					if (result.issues.length) payload.issues.push(...prefixIssues(key, result.issues));
+					payload.value[keyResult.value] = result.value;
+				}));
+				else {
+					if (result.issues.length) payload.issues.push(...prefixIssues(key, result.issues));
+					payload.value[keyResult.value] = result.value;
+				}
+			}
+		}
+		if (proms.length) return Promise.all(proms).then(() => payload);
+		return payload;
+	};
+});
 const $ZodEnum = /*@__PURE__*/ $constructor("$ZodEnum", (inst, def) => {
 	$ZodType.init(inst, def);
 	const values = getEnumValues(def.entries);
@@ -3848,6 +3939,21 @@ function intersection(left, right) {
 		type: "intersection",
 		left,
 		right
+	});
+}
+const ZodRecord = /*@__PURE__*/ $constructor("ZodRecord", (inst, def) => {
+	$ZodRecord.init(inst, def);
+	ZodType.init(inst, def);
+	inst._zod.processJSONSchema = (ctx, json, params) => recordProcessor(inst, ctx, json, params);
+	inst.keyType = def.keyType;
+	inst.valueType = def.valueType;
+});
+function record(keyType, valueType, params) {
+	return new ZodRecord({
+		type: "record",
+		keyType,
+		valueType,
+		...normalizeParams(params)
 	});
 }
 const ZodEnum = /*@__PURE__*/ $constructor("ZodEnum", (inst, def) => {
@@ -6766,3181 +6872,6 @@ function normalizePackaging(packaging) {
 registerTool(PrimingCalculatorTool);
 
 //#endregion
-//#region src/brewing/recipe-validator.ts
-/**
-* Recipe validator — produces a complete LLM review prompt for a beer recipe
-* against BJCP style guidelines.
-*
-* Use this tool AFTER running yaml_validator on the YAML file. The yaml_validator
-* covers all deterministic checks; recipe_validator takes the structured recipe
-* data (passed directly as JSON) and builds a comprehensive LLM review prompt
-* with BJCP data, recipe summary, and the expected output JSON schema.
-*/
-const RecipeValidatorInputSchema = object({
-	recipe_name: string(),
-	beer_style: string().describe("BJCP style code or name."),
-	batch_size_liters: number(),
-	og: number(),
-	fg: number(),
-	ibu: number(),
-	ebc: number().optional(),
-	abv_percent: number().optional(),
-	efficiency_percent: number().optional(),
-	grain_bill: array(object({
-		malt: string(),
-		kg: number(),
-		percent: number().optional(),
-		ebc: number().optional(),
-		note: string().optional()
-	})),
-	hop_schedule: array(object({
-		variety: string(),
-		grams: number(),
-		time_minutes: number(),
-		use: _enum([
-			"boil",
-			"whirlpool",
-			"dry_hop",
-			"first_wort",
-			"mash",
-			"hopback",
-			"dip_hop",
-			"hop_stand"
-		]),
-		aa_percent: number().optional(),
-		ibu_contrib: number().optional(),
-		note: string().optional()
-	})),
-	yeast: object({
-		strain: string(),
-		attenuation_percent: number().optional(),
-		lab: string().optional()
-	}),
-	mash_temp_c: number().optional(),
-	mash_steps: array(object({
-		temperature_c: number(),
-		time_minutes: number(),
-		note: string().optional()
-	})).optional(),
-	fermentation_temp_c: number().optional(),
-	water_profile: object({
-		ca: number(),
-		mg: number(),
-		na: number(),
-		cl: number(),
-		so4: number(),
-		hco3: number()
-	}).optional(),
-	boil_time_minutes: number().optional(),
-	pre_boil_volume_liters: number().optional(),
-	post_boil_volume_liters: number().optional(),
-	fermentation_volume_liters: number().optional(),
-	packaging_volume_liters: number().optional(),
-	carbonation_volumes: number().optional(),
-	carbonation_method: string().optional(),
-	priming_sugar_gl: number().optional(),
-	impianto: string().optional(),
-	descrizione: string().optional(),
-	note: string().optional(),
-	mash_water_liters: number().optional().describe("Agua de ammostamento (mash) en litros."),
-	sparge_water_liters: number().optional().describe("Agua de lavado (sparge) en litros."),
-	total_water_liters: number().optional().describe("Agua total de la cotización en litros."),
-	mash_salts: object({
-		gypsum_g: number().optional().describe("Gesso (CaSO₄) en gramos."),
-		cacl2_g: number().optional().describe("Cloruro de calcio (CaCl₂) en gramos."),
-		epsom_g: number().optional().describe("Sal de Epsom (MgSO₄) en gramos."),
-		nahco3_g: number().optional().describe("Bicarbonato de sodio (NaHCO₃) en gramos."),
-		lactic_acid_ml: number().optional().describe("Ácido láctico (88%) en ml.")
-	}).optional(),
-	mash_in_temp_c: number().optional().describe("Temperatura de mash-in (empaste) en °C."),
-	pre_boil_og: number().optional().describe("Gravedad pre-boil (SG)."),
-	post_boil_og: number().optional().describe("Gravedad post-boil (SG)."),
-	primary_days: number().optional().describe("Días de fermentación primaria."),
-	conditioning_days: number().optional().describe("Días de maduración/condicionamiento."),
-	serving_temp_c: number().optional().describe("Temperatura de servicio en °C."),
-	bottle_type: string().optional().describe("Tipo de botella (es. 500ml, 330ml, swing-top).")
-});
-const BJCP$1 = {
-	"1A": {
-		code: "1A",
-		category: "1",
-		name: "American Light Lager",
-		og_min: 1.028,
-		og_max: 1.04,
-		fg_min: .998,
-		fg_max: 1.008,
-		abv_min: 2.8,
-		abv_max: 4.2,
-		ibu_min: 8,
-		ibu_max: 12,
-		ebc_min: 4,
-		ebc_max: 6
-	},
-	"1B": {
-		code: "1B",
-		category: "1",
-		name: "American Lager",
-		og_min: 1.04,
-		og_max: 1.05,
-		fg_min: 1.004,
-		fg_max: 1.01,
-		abv_min: 4.2,
-		abv_max: 5.3,
-		ibu_min: 8,
-		ibu_max: 18,
-		ebc_min: 4,
-		ebc_max: 8
-	},
-	"1C": {
-		code: "1C",
-		category: "1",
-		name: "Cream Ale",
-		og_min: 1.042,
-		og_max: 1.055,
-		fg_min: 1.006,
-		fg_max: 1.012,
-		abv_min: 4.2,
-		abv_max: 5.6,
-		ibu_min: 8,
-		ibu_max: 20,
-		ebc_min: 4,
-		ebc_max: 10
-	},
-	"1D": {
-		code: "1D",
-		category: "1",
-		name: "American Wheat Beer",
-		og_min: 1.04,
-		og_max: 1.055,
-		fg_min: 1.008,
-		fg_max: 1.013,
-		abv_min: 4,
-		abv_max: 5.5,
-		ibu_min: 15,
-		ibu_max: 30,
-		ebc_min: 6,
-		ebc_max: 12
-	},
-	"2A": {
-		code: "2A",
-		category: "2",
-		name: "International Pale Lager",
-		og_min: 1.042,
-		og_max: 1.05,
-		fg_min: 1.008,
-		fg_max: 1.012,
-		abv_min: 4.6,
-		abv_max: 6,
-		ibu_min: 18,
-		ibu_max: 25,
-		ebc_min: 4,
-		ebc_max: 10
-	},
-	"2B": {
-		code: "2B",
-		category: "2",
-		name: "International Amber Lager",
-		og_min: 1.042,
-		og_max: 1.055,
-		fg_min: 1.008,
-		fg_max: 1.014,
-		abv_min: 4.6,
-		abv_max: 6,
-		ibu_min: 8,
-		ibu_max: 25,
-		ebc_min: 14,
-		ebc_max: 34
-	},
-	"2C": {
-		code: "2C",
-		category: "2",
-		name: "International Dark Lager",
-		og_min: 1.044,
-		og_max: 1.056,
-		fg_min: 1.008,
-		fg_max: 1.012,
-		abv_min: 4.5,
-		abv_max: 6,
-		ibu_min: 8,
-		ibu_max: 20,
-		ebc_min: 28,
-		ebc_max: 50
-	},
-	"3A": {
-		code: "3A",
-		category: "3",
-		name: "Czech Pale Lager",
-		og_min: 1.028,
-		og_max: 1.044,
-		fg_min: 1.008,
-		fg_max: 1.014,
-		abv_min: 3,
-		abv_max: 4,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 6,
-		ebc_max: 14
-	},
-	"3B": {
-		code: "3B",
-		category: "3",
-		name: "Czech Premium Pale Lager",
-		og_min: 1.044,
-		og_max: 1.06,
-		fg_min: 1.013,
-		fg_max: 1.017,
-		abv_min: 4.2,
-		abv_max: 5.8,
-		ibu_min: 30,
-		ibu_max: 45,
-		ebc_min: 6,
-		ebc_max: 14
-	},
-	"3C": {
-		code: "3C",
-		category: "3",
-		name: "Czech Amber Lager",
-		og_min: 1.044,
-		og_max: 1.06,
-		fg_min: 1.013,
-		fg_max: 1.017,
-		abv_min: 4.4,
-		abv_max: 5.8,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 20,
-		ebc_max: 40
-	},
-	"3D": {
-		code: "3D",
-		category: "3",
-		name: "Czech Dark Lager",
-		og_min: 1.044,
-		og_max: 1.056,
-		fg_min: 1.013,
-		fg_max: 1.017,
-		abv_min: 4.4,
-		abv_max: 5.8,
-		ibu_min: 18,
-		ibu_max: 34,
-		ebc_min: 34,
-		ebc_max: 70
-	},
-	"4A": {
-		code: "4A",
-		category: "4",
-		name: "Munich Helles",
-		og_min: 1.044,
-		og_max: 1.048,
-		fg_min: 1.006,
-		fg_max: 1.012,
-		abv_min: 4.7,
-		abv_max: 5.4,
-		ibu_min: 16,
-		ibu_max: 22,
-		ebc_min: 6,
-		ebc_max: 10
-	},
-	"4B": {
-		code: "4B",
-		category: "4",
-		name: "Festbier",
-		og_min: 1.054,
-		og_max: 1.058,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 5.8,
-		abv_max: 6.3,
-		ibu_min: 18,
-		ibu_max: 25,
-		ebc_min: 8,
-		ebc_max: 14
-	},
-	"4C": {
-		code: "4C",
-		category: "4",
-		name: "Helles Bock",
-		og_min: 1.064,
-		og_max: 1.072,
-		fg_min: 1.011,
-		fg_max: 1.018,
-		abv_min: 6.3,
-		abv_max: 7.4,
-		ibu_min: 23,
-		ibu_max: 35,
-		ebc_min: 12,
-		ebc_max: 20
-	},
-	"5A": {
-		code: "5A",
-		category: "5",
-		name: "German Leichtbier",
-		og_min: 1.026,
-		og_max: 1.034,
-		fg_min: 1.006,
-		fg_max: 1.01,
-		abv_min: 2.4,
-		abv_max: 3.6,
-		ibu_min: 15,
-		ibu_max: 28,
-		ebc_min: 4,
-		ebc_max: 8
-	},
-	"5B": {
-		code: "5B",
-		category: "5",
-		name: "Kölsch",
-		og_min: 1.044,
-		og_max: 1.05,
-		fg_min: 1.007,
-		fg_max: 1.011,
-		abv_min: 4.4,
-		abv_max: 5.2,
-		ibu_min: 18,
-		ibu_max: 30,
-		ebc_min: 7,
-		ebc_max: 10
-	},
-	"5C": {
-		code: "5C",
-		category: "5",
-		name: "German Helles Exportbier",
-		og_min: 1.048,
-		og_max: 1.056,
-		fg_min: 1.01,
-		fg_max: 1.015,
-		abv_min: 4.8,
-		abv_max: 6,
-		ibu_min: 20,
-		ibu_max: 30,
-		ebc_min: 8,
-		ebc_max: 12
-	},
-	"5D": {
-		code: "5D",
-		category: "5",
-		name: "German Pils",
-		og_min: 1.044,
-		og_max: 1.05,
-		fg_min: 1.008,
-		fg_max: 1.013,
-		abv_min: 4.4,
-		abv_max: 5.2,
-		ibu_min: 22,
-		ibu_max: 40,
-		ebc_min: 4,
-		ebc_max: 8
-	},
-	"6A": {
-		code: "6A",
-		category: "6",
-		name: "Märzen",
-		og_min: 1.054,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 5.8,
-		abv_max: 6.3,
-		ibu_min: 18,
-		ibu_max: 24,
-		ebc_min: 16,
-		ebc_max: 30
-	},
-	"6B": {
-		code: "6B",
-		category: "6",
-		name: "Rauchbier",
-		og_min: 1.05,
-		og_max: 1.057,
-		fg_min: 1.012,
-		fg_max: 1.016,
-		abv_min: 4.8,
-		abv_max: 6,
-		ibu_min: 20,
-		ibu_max: 30,
-		ebc_min: 24,
-		ebc_max: 44
-	},
-	"6C": {
-		code: "6C",
-		category: "6",
-		name: "Dunkels Bock",
-		og_min: 1.064,
-		og_max: 1.072,
-		fg_min: 1.013,
-		fg_max: 1.019,
-		abv_min: 6.3,
-		abv_max: 7.2,
-		ibu_min: 20,
-		ibu_max: 27,
-		ebc_min: 28,
-		ebc_max: 44
-	},
-	"7A": {
-		code: "7A",
-		category: "7",
-		name: "Vienna Lager",
-		og_min: 1.048,
-		og_max: 1.055,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 4.7,
-		abv_max: 5.5,
-		ibu_min: 18,
-		ibu_max: 30,
-		ebc_min: 18,
-		ebc_max: 30
-	},
-	"7B": {
-		code: "7B",
-		category: "7",
-		name: "Altbier",
-		og_min: 1.044,
-		og_max: 1.052,
-		fg_min: 1.008,
-		fg_max: 1.014,
-		abv_min: 4.3,
-		abv_max: 5.5,
-		ibu_min: 25,
-		ibu_max: 50,
-		ebc_min: 22,
-		ebc_max: 34
-	},
-	"7C": {
-		code: "7C",
-		category: "7",
-		name: "Kellerbier",
-		og_min: 1.045,
-		og_max: 1.051,
-		fg_min: 1.008,
-		fg_max: 1.013,
-		abv_min: 4.7,
-		abv_max: 5.4,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 6,
-		ebc_max: 20
-	},
-	"8A": {
-		code: "8A",
-		category: "8",
-		name: "Munich Dunkel",
-		og_min: 1.048,
-		og_max: 1.056,
-		fg_min: 1.01,
-		fg_max: 1.016,
-		abv_min: 4.5,
-		abv_max: 5.6,
-		ibu_min: 18,
-		ibu_max: 28,
-		ebc_min: 28,
-		ebc_max: 46
-	},
-	"8B": {
-		code: "8B",
-		category: "8",
-		name: "Schwarzbier",
-		og_min: 1.046,
-		og_max: 1.052,
-		fg_min: 1.01,
-		fg_max: 1.016,
-		abv_min: 4.4,
-		abv_max: 5.4,
-		ibu_min: 22,
-		ibu_max: 30,
-		ebc_min: 34,
-		ebc_max: 62
-	},
-	"9A": {
-		code: "9A",
-		category: "9",
-		name: "Doppelbock",
-		og_min: 1.072,
-		og_max: 1.112,
-		fg_min: 1.016,
-		fg_max: 1.024,
-		abv_min: 7,
-		abv_max: 10,
-		ibu_min: 16,
-		ibu_max: 26,
-		ebc_min: 24,
-		ebc_max: 45
-	},
-	"9B": {
-		code: "9B",
-		category: "9",
-		name: "Eisbock",
-		og_min: 1.078,
-		og_max: 1.12,
-		fg_min: 1.02,
-		fg_max: 1.035,
-		abv_min: 9,
-		abv_max: 14,
-		ibu_min: 25,
-		ibu_max: 35,
-		ebc_min: 36,
-		ebc_max: 68
-	},
-	"9C": {
-		code: "9C",
-		category: "9",
-		name: "Baltic Porter",
-		og_min: 1.06,
-		og_max: 1.09,
-		fg_min: 1.016,
-		fg_max: 1.024,
-		abv_min: 6.5,
-		abv_max: 9.5,
-		ibu_min: 20,
-		ibu_max: 40,
-		ebc_min: 34,
-		ebc_max: 60
-	},
-	"10A": {
-		code: "10A",
-		category: "10",
-		name: "Weissbier",
-		og_min: 1.044,
-		og_max: 1.052,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 4.3,
-		abv_max: 5.6,
-		ibu_min: 8,
-		ibu_max: 15,
-		ebc_min: 4,
-		ebc_max: 14
-	},
-	"10B": {
-		code: "10B",
-		category: "10",
-		name: "Dunkles Weissbier",
-		og_min: 1.044,
-		og_max: 1.056,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 4.3,
-		abv_max: 5.6,
-		ibu_min: 10,
-		ibu_max: 18,
-		ebc_min: 28,
-		ebc_max: 46
-	},
-	"10C": {
-		code: "10C",
-		category: "10",
-		name: "Weizenbock",
-		og_min: 1.064,
-		og_max: 1.09,
-		fg_min: 1.015,
-		fg_max: 1.022,
-		abv_min: 6.5,
-		abv_max: 9,
-		ibu_min: 15,
-		ibu_max: 30,
-		ebc_min: 12,
-		ebc_max: 44
-	},
-	"11A": {
-		code: "11A",
-		category: "11",
-		name: "Ordinary Bitter",
-		og_min: 1.03,
-		og_max: 1.039,
-		fg_min: 1.007,
-		fg_max: 1.011,
-		abv_min: 3.2,
-		abv_max: 3.8,
-		ibu_min: 25,
-		ibu_max: 35,
-		ebc_min: 16,
-		ebc_max: 28
-	},
-	"11B": {
-		code: "11B",
-		category: "11",
-		name: "Best Bitter",
-		og_min: 1.04,
-		og_max: 1.048,
-		fg_min: 1.008,
-		fg_max: 1.012,
-		abv_min: 3.8,
-		abv_max: 4.6,
-		ibu_min: 25,
-		ibu_max: 40,
-		ebc_min: 16,
-		ebc_max: 28
-	},
-	"11C": {
-		code: "11C",
-		category: "11",
-		name: "Strong Bitter",
-		og_min: 1.048,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.016,
-		abv_min: 4.6,
-		abv_max: 6.2,
-		ibu_min: 30,
-		ibu_max: 50,
-		ebc_min: 18,
-		ebc_max: 40
-	},
-	"12A": {
-		code: "12A",
-		category: "12",
-		name: "British Golden Ale",
-		og_min: 1.038,
-		og_max: 1.053,
-		fg_min: 1.006,
-		fg_max: 1.012,
-		abv_min: 3.8,
-		abv_max: 5,
-		ibu_min: 20,
-		ibu_max: 45,
-		ebc_min: 4,
-		ebc_max: 12
-	},
-	"12B": {
-		code: "12B",
-		category: "12",
-		name: "Australian Sparkling Ale",
-		og_min: 1.038,
-		og_max: 1.05,
-		fg_min: 1.004,
-		fg_max: 1.006,
-		abv_min: 4.5,
-		abv_max: 6,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 4,
-		ebc_max: 14
-	},
-	"12C": {
-		code: "12C",
-		category: "12",
-		name: "English IPA",
-		og_min: 1.05,
-		og_max: 1.075,
-		fg_min: 1.01,
-		fg_max: 1.018,
-		abv_min: 5,
-		abv_max: 7.5,
-		ibu_min: 40,
-		ibu_max: 60,
-		ebc_min: 12,
-		ebc_max: 30
-	},
-	"13A": {
-		code: "13A",
-		category: "13",
-		name: "Dark Mild",
-		og_min: 1.03,
-		og_max: 1.038,
-		fg_min: 1.008,
-		fg_max: 1.013,
-		abv_min: 3,
-		abv_max: 3.8,
-		ibu_min: 10,
-		ibu_max: 25,
-		ebc_min: 24,
-		ebc_max: 44
-	},
-	"13B": {
-		code: "13B",
-		category: "13",
-		name: "British Brown Ale",
-		og_min: 1.04,
-		og_max: 1.052,
-		fg_min: 1.008,
-		fg_max: 1.013,
-		abv_min: 4.2,
-		abv_max: 5.9,
-		ibu_min: 20,
-		ibu_max: 30,
-		ebc_min: 24,
-		ebc_max: 44
-	},
-	"13C": {
-		code: "13C",
-		category: "13",
-		name: "English Porter",
-		og_min: 1.04,
-		og_max: 1.052,
-		fg_min: 1.008,
-		fg_max: 1.014,
-		abv_min: 4,
-		abv_max: 5.4,
-		ibu_min: 18,
-		ibu_max: 35,
-		ebc_min: 40,
-		ebc_max: 60
-	},
-	"14A": {
-		code: "14A",
-		category: "14",
-		name: "Scottish Light",
-		og_min: 1.03,
-		og_max: 1.035,
-		fg_min: 1.01,
-		fg_max: 1.013,
-		abv_min: 2.5,
-		abv_max: 3.2,
-		ibu_min: 10,
-		ibu_max: 20,
-		ebc_min: 30,
-		ebc_max: 50
-	},
-	"14B": {
-		code: "14B",
-		category: "14",
-		name: "Scottish Heavy",
-		og_min: 1.035,
-		og_max: 1.04,
-		fg_min: 1.01,
-		fg_max: 1.015,
-		abv_min: 3.2,
-		abv_max: 3.9,
-		ibu_min: 10,
-		ibu_max: 20,
-		ebc_min: 24,
-		ebc_max: 40
-	},
-	"14C": {
-		code: "14C",
-		category: "14",
-		name: "Scottish Export",
-		og_min: 1.04,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.016,
-		abv_min: 3.9,
-		abv_max: 6,
-		ibu_min: 15,
-		ibu_max: 30,
-		ebc_min: 24,
-		ebc_max: 40
-	},
-	"15A": {
-		code: "15A",
-		category: "15",
-		name: "Irish Red Ale",
-		og_min: 1.036,
-		og_max: 1.046,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 3.8,
-		abv_max: 5,
-		ibu_min: 18,
-		ibu_max: 28,
-		ebc_min: 18,
-		ebc_max: 36
-	},
-	"15B": {
-		code: "15B",
-		category: "15",
-		name: "Irish Stout",
-		og_min: 1.036,
-		og_max: 1.044,
-		fg_min: 1.007,
-		fg_max: 1.011,
-		abv_min: 4,
-		abv_max: 4.5,
-		ibu_min: 25,
-		ibu_max: 45,
-		ebc_min: 50,
-		ebc_max: 80
-	},
-	"15C": {
-		code: "15C",
-		category: "15",
-		name: "Irish Extra Stout",
-		og_min: 1.052,
-		og_max: 1.062,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 5.5,
-		abv_max: 6.5,
-		ibu_min: 35,
-		ibu_max: 50,
-		ebc_min: 60,
-		ebc_max: 80
-	},
-	"16A": {
-		code: "16A",
-		category: "16",
-		name: "Sweet Stout",
-		og_min: 1.044,
-		og_max: 1.06,
-		fg_min: 1.012,
-		fg_max: 1.024,
-		abv_min: 4,
-		abv_max: 6,
-		ibu_min: 20,
-		ibu_max: 40,
-		ebc_min: 60,
-		ebc_max: 100
-	},
-	"16B": {
-		code: "16B",
-		category: "16",
-		name: "Oatmeal Stout",
-		og_min: 1.045,
-		og_max: 1.065,
-		fg_min: 1.01,
-		fg_max: 1.018,
-		abv_min: 4.2,
-		abv_max: 5.9,
-		ibu_min: 25,
-		ibu_max: 40,
-		ebc_min: 40,
-		ebc_max: 80
-	},
-	"16C": {
-		code: "16C",
-		category: "16",
-		name: "Tropical Stout",
-		og_min: 1.056,
-		og_max: 1.075,
-		fg_min: 1.01,
-		fg_max: 1.018,
-		abv_min: 5.5,
-		abv_max: 8,
-		ibu_min: 30,
-		ibu_max: 50,
-		ebc_min: 60,
-		ebc_max: 100
-	},
-	"16D": {
-		code: "16D",
-		category: "16",
-		name: "Foreign Extra Stout",
-		og_min: 1.056,
-		og_max: 1.075,
-		fg_min: 1.01,
-		fg_max: 1.018,
-		abv_min: 6.3,
-		abv_max: 8,
-		ibu_min: 50,
-		ibu_max: 70,
-		ebc_min: 60,
-		ebc_max: 100
-	},
-	"17A": {
-		code: "17A",
-		category: "17",
-		name: "British Strong Ale",
-		og_min: 1.055,
-		og_max: 1.08,
-		fg_min: 1.015,
-		fg_max: 1.022,
-		abv_min: 5.5,
-		abv_max: 8,
-		ibu_min: 30,
-		ibu_max: 60,
-		ebc_min: 16,
-		ebc_max: 44
-	},
-	"17B": {
-		code: "17B",
-		category: "17",
-		name: "Old Ale",
-		og_min: 1.055,
-		og_max: 1.088,
-		fg_min: 1.015,
-		fg_max: 1.022,
-		abv_min: 5.5,
-		abv_max: 9,
-		ibu_min: 30,
-		ibu_max: 60,
-		ebc_min: 24,
-		ebc_max: 44
-	},
-	"17C": {
-		code: "17C",
-		category: "17",
-		name: "Wee Heavy",
-		og_min: 1.07,
-		og_max: 1.13,
-		fg_min: 1.018,
-		fg_max: 1.04,
-		abv_min: 6.5,
-		abv_max: 10,
-		ibu_min: 17,
-		ibu_max: 35,
-		ebc_min: 28,
-		ebc_max: 60
-	},
-	"17D": {
-		code: "17D",
-		category: "17",
-		name: "English Barley Wine",
-		og_min: 1.08,
-		og_max: 1.12,
-		fg_min: 1.018,
-		fg_max: 1.03,
-		abv_min: 8,
-		abv_max: 12,
-		ibu_min: 35,
-		ibu_max: 70,
-		ebc_min: 20,
-		ebc_max: 44
-	},
-	"18A": {
-		code: "18A",
-		category: "18",
-		name: "Blonde Ale",
-		og_min: 1.038,
-		og_max: 1.054,
-		fg_min: 1.008,
-		fg_max: 1.013,
-		abv_min: 3.8,
-		abv_max: 5.5,
-		ibu_min: 15,
-		ibu_max: 28,
-		ebc_min: 6,
-		ebc_max: 14
-	},
-	"18B": {
-		code: "18B",
-		category: "18",
-		name: "American Pale Ale",
-		og_min: 1.045,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.015,
-		abv_min: 4.5,
-		abv_max: 6.2,
-		ibu_min: 30,
-		ibu_max: 50,
-		ebc_min: 10,
-		ebc_max: 20
-	},
-	"19A": {
-		code: "19A",
-		category: "19",
-		name: "American Amber Ale",
-		og_min: 1.045,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.015,
-		abv_min: 4.5,
-		abv_max: 6.2,
-		ibu_min: 25,
-		ibu_max: 40,
-		ebc_min: 20,
-		ebc_max: 34
-	},
-	"19B": {
-		code: "19B",
-		category: "19",
-		name: "California Common",
-		og_min: 1.048,
-		og_max: 1.054,
-		fg_min: 1.011,
-		fg_max: 1.014,
-		abv_min: 4.5,
-		abv_max: 5.5,
-		ibu_min: 30,
-		ibu_max: 45,
-		ebc_min: 20,
-		ebc_max: 28
-	},
-	"19C": {
-		code: "19C",
-		category: "19",
-		name: "American Brown Ale",
-		og_min: 1.045,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.016,
-		abv_min: 4.3,
-		abv_max: 6.2,
-		ibu_min: 20,
-		ibu_max: 30,
-		ebc_min: 36,
-		ebc_max: 60
-	},
-	"20A": {
-		code: "20A",
-		category: "20",
-		name: "American Porter",
-		og_min: 1.05,
-		og_max: 1.07,
-		fg_min: 1.012,
-		fg_max: 1.018,
-		abv_min: 4.8,
-		abv_max: 6.5,
-		ibu_min: 25,
-		ibu_max: 50,
-		ebc_min: 40,
-		ebc_max: 80
-	},
-	"20B": {
-		code: "20B",
-		category: "20",
-		name: "American Stout",
-		og_min: 1.05,
-		og_max: 1.075,
-		fg_min: 1.01,
-		fg_max: 1.022,
-		abv_min: 5,
-		abv_max: 7,
-		ibu_min: 35,
-		ibu_max: 75,
-		ebc_min: 60,
-		ebc_max: 100
-	},
-	"20C": {
-		code: "20C",
-		category: "20",
-		name: "Imperial Stout",
-		og_min: 1.075,
-		og_max: 1.115,
-		fg_min: 1.018,
-		fg_max: 1.03,
-		abv_min: 8,
-		abv_max: 12,
-		ibu_min: 50,
-		ibu_max: 90,
-		ebc_min: 60,
-		ebc_max: 100
-	},
-	"21A": {
-		code: "21A",
-		category: "21",
-		name: "American IPA",
-		og_min: 1.056,
-		og_max: 1.07,
-		fg_min: 1.008,
-		fg_max: 1.014,
-		abv_min: 5.5,
-		abv_max: 7.5,
-		ibu_min: 40,
-		ibu_max: 70,
-		ebc_min: 12,
-		ebc_max: 28
-	},
-	"21B": {
-		code: "21B",
-		category: "21",
-		name: "Specialty IPA",
-		og_min: 1.05,
-		og_max: 1.085,
-		fg_min: 1.008,
-		fg_max: 1.02,
-		abv_min: 5,
-		abv_max: 9,
-		ibu_min: 25,
-		ibu_max: 100,
-		ebc_min: 6,
-		ebc_max: 80
-	},
-	"21B1": {
-		code: "21B1",
-		category: "21",
-		name: "New England IPA",
-		og_min: 1.06,
-		og_max: 1.085,
-		fg_min: 1.01,
-		fg_max: 1.02,
-		abv_min: 6,
-		abv_max: 9,
-		ibu_min: 25,
-		ibu_max: 60,
-		ebc_min: 6,
-		ebc_max: 16
-	},
-	"21C": {
-		code: "21C",
-		category: "21",
-		name: "Hazy IPA",
-		og_min: 1.06,
-		og_max: 1.085,
-		fg_min: 1.01,
-		fg_max: 1.02,
-		abv_min: 6,
-		abv_max: 9,
-		ibu_min: 25,
-		ibu_max: 60,
-		ebc_min: 6,
-		ebc_max: 16
-	},
-	"22A": {
-		code: "22A",
-		category: "22",
-		name: "Double IPA",
-		og_min: 1.065,
-		og_max: 1.085,
-		fg_min: 1.01,
-		fg_max: 1.02,
-		abv_min: 7.5,
-		abv_max: 10,
-		ibu_min: 60,
-		ibu_max: 120,
-		ebc_min: 12,
-		ebc_max: 30
-	},
-	"22B": {
-		code: "22B",
-		category: "22",
-		name: "American Strong Ale",
-		og_min: 1.062,
-		og_max: 1.09,
-		fg_min: 1.014,
-		fg_max: 1.024,
-		abv_min: 6.3,
-		abv_max: 10,
-		ibu_min: 50,
-		ibu_max: 100,
-		ebc_min: 14,
-		ebc_max: 44
-	},
-	"22C": {
-		code: "22C",
-		category: "22",
-		name: "American Barleywine",
-		og_min: 1.08,
-		og_max: 1.12,
-		fg_min: 1.016,
-		fg_max: 1.03,
-		abv_min: 8,
-		abv_max: 12,
-		ibu_min: 50,
-		ibu_max: 100,
-		ebc_min: 20,
-		ebc_max: 40
-	},
-	"22D": {
-		code: "22D",
-		category: "22",
-		name: "Wheatwine",
-		og_min: 1.08,
-		og_max: 1.12,
-		fg_min: 1.016,
-		fg_max: 1.03,
-		abv_min: 8,
-		abv_max: 12,
-		ibu_min: 30,
-		ibu_max: 60,
-		ebc_min: 16,
-		ebc_max: 30
-	},
-	"23A": {
-		code: "23A",
-		category: "23",
-		name: "Berliner Weisse",
-		og_min: 1.028,
-		og_max: 1.032,
-		fg_min: 1.003,
-		fg_max: 1.006,
-		abv_min: 2.8,
-		abv_max: 3.8,
-		ibu_min: 3,
-		ibu_max: 8,
-		ebc_min: 4,
-		ebc_max: 6
-	},
-	"23B": {
-		code: "23B",
-		category: "23",
-		name: "Flanders Red Ale",
-		og_min: 1.048,
-		og_max: 1.057,
-		fg_min: 1.002,
-		fg_max: 1.012,
-		abv_min: 4.6,
-		abv_max: 6.5,
-		ibu_min: 10,
-		ibu_max: 25,
-		ebc_min: 20,
-		ebc_max: 34
-	},
-	"23C": {
-		code: "23C",
-		category: "23",
-		name: "Oud Bruin",
-		og_min: 1.04,
-		og_max: 1.074,
-		fg_min: 1.008,
-		fg_max: 1.012,
-		abv_min: 4,
-		abv_max: 8,
-		ibu_min: 20,
-		ibu_max: 25,
-		ebc_min: 30,
-		ebc_max: 44
-	},
-	"23D": {
-		code: "23D",
-		category: "23",
-		name: "Lambic",
-		og_min: 1.04,
-		og_max: 1.054,
-		fg_min: 1.001,
-		fg_max: 1.01,
-		abv_min: 5,
-		abv_max: 6.5,
-		ibu_min: 0,
-		ibu_max: 10,
-		ebc_min: 6,
-		ebc_max: 26
-	},
-	"23E": {
-		code: "23E",
-		category: "23",
-		name: "Gueuze",
-		og_min: 1.04,
-		og_max: 1.06,
-		fg_min: 1,
-		fg_max: 1.006,
-		abv_min: 5,
-		abv_max: 8,
-		ibu_min: 0,
-		ibu_max: 10,
-		ebc_min: 6,
-		ebc_max: 26
-	},
-	"23F": {
-		code: "23F",
-		category: "23",
-		name: "Fruit Lambic",
-		og_min: 1.04,
-		og_max: 1.06,
-		fg_min: 1,
-		fg_max: 1.01,
-		abv_min: 5,
-		abv_max: 7,
-		ibu_min: 0,
-		ibu_max: 10,
-		ebc_min: 6,
-		ebc_max: 26
-	},
-	"23G": {
-		code: "23G",
-		category: "23",
-		name: "Gose",
-		og_min: 1.036,
-		og_max: 1.056,
-		fg_min: 1.006,
-		fg_max: 1.01,
-		abv_min: 4.2,
-		abv_max: 4.8,
-		ibu_min: 5,
-		ibu_max: 12,
-		ebc_min: 6,
-		ebc_max: 12
-	},
-	"24A": {
-		code: "24A",
-		category: "24",
-		name: "Witbier",
-		og_min: 1.044,
-		og_max: 1.052,
-		fg_min: 1.008,
-		fg_max: 1.012,
-		abv_min: 4.5,
-		abv_max: 5.5,
-		ibu_min: 10,
-		ibu_max: 20,
-		ebc_min: 4,
-		ebc_max: 8
-	},
-	"24B": {
-		code: "24B",
-		category: "24",
-		name: "Belgian Pale Ale",
-		og_min: 1.048,
-		og_max: 1.054,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 4.8,
-		abv_max: 5.5,
-		ibu_min: 20,
-		ibu_max: 30,
-		ebc_min: 16,
-		ebc_max: 28
-	},
-	"24C": {
-		code: "24C",
-		category: "24",
-		name: "Bière de Garde",
-		og_min: 1.06,
-		og_max: 1.08,
-		fg_min: 1.008,
-		fg_max: 1.016,
-		abv_min: 6,
-		abv_max: 8.5,
-		ibu_min: 18,
-		ibu_max: 28,
-		ebc_min: 12,
-		ebc_max: 38
-	},
-	"25A": {
-		code: "25A",
-		category: "25",
-		name: "Belgian Blond Ale",
-		og_min: 1.062,
-		og_max: 1.075,
-		fg_min: 1.008,
-		fg_max: 1.018,
-		abv_min: 6,
-		abv_max: 7.5,
-		ibu_min: 15,
-		ibu_max: 30,
-		ebc_min: 8,
-		ebc_max: 14
-	},
-	"25B": {
-		code: "25B",
-		category: "25",
-		name: "Saison",
-		og_min: 1.048,
-		og_max: 1.065,
-		fg_min: 1.002,
-		fg_max: 1.008,
-		abv_min: 5,
-		abv_max: 7,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 10,
-		ebc_max: 20
-	},
-	"25C": {
-		code: "25C",
-		category: "25",
-		name: "Belgian Golden Strong Ale",
-		og_min: 1.07,
-		og_max: 1.095,
-		fg_min: 1.005,
-		fg_max: 1.016,
-		abv_min: 7.5,
-		abv_max: 10.5,
-		ibu_min: 22,
-		ibu_max: 35,
-		ebc_min: 6,
-		ebc_max: 10
-	},
-	"26A": {
-		code: "26A",
-		category: "26",
-		name: "Trappist Single",
-		og_min: 1.044,
-		og_max: 1.054,
-		fg_min: 1.004,
-		fg_max: 1.01,
-		abv_min: 4.8,
-		abv_max: 6,
-		ibu_min: 25,
-		ibu_max: 45,
-		ebc_min: 6,
-		ebc_max: 10
-	},
-	"26B": {
-		code: "26B",
-		category: "26",
-		name: "Belgian Dubbel",
-		og_min: 1.062,
-		og_max: 1.075,
-		fg_min: 1.008,
-		fg_max: 1.018,
-		abv_min: 6,
-		abv_max: 7.6,
-		ibu_min: 15,
-		ibu_max: 25,
-		ebc_min: 20,
-		ebc_max: 34
-	},
-	"26C": {
-		code: "26C",
-		category: "26",
-		name: "Belgian Tripel",
-		og_min: 1.075,
-		og_max: 1.085,
-		fg_min: 1.008,
-		fg_max: 1.014,
-		abv_min: 7.5,
-		abv_max: 9.5,
-		ibu_min: 20,
-		ibu_max: 40,
-		ebc_min: 8,
-		ebc_max: 14
-	},
-	"26D": {
-		code: "26D",
-		category: "26",
-		name: "Belgian Dark Strong Ale",
-		og_min: 1.075,
-		og_max: 1.11,
-		fg_min: 1.01,
-		fg_max: 1.024,
-		abv_min: 8,
-		abv_max: 12,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 24,
-		ebc_max: 45
-	},
-	"27A": {
-		code: "27A",
-		category: "27",
-		name: "Grodziskie",
-		og_min: 1.028,
-		og_max: 1.032,
-		fg_min: 1.006,
-		fg_max: 1.012,
-		abv_min: 2.5,
-		abv_max: 3.3,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 6,
-		ebc_max: 12
-	},
-	"27B": {
-		code: "27B",
-		category: "27",
-		name: "Lichtenhainer",
-		og_min: 1.032,
-		og_max: 1.04,
-		fg_min: 1.004,
-		fg_max: 1.008,
-		abv_min: 3.5,
-		abv_max: 4.7,
-		ibu_min: 5,
-		ibu_max: 12,
-		ebc_min: 6,
-		ebc_max: 12
-	},
-	"27C": {
-		code: "27C",
-		category: "27",
-		name: "Roggenbier",
-		og_min: 1.046,
-		og_max: 1.056,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 4.5,
-		abv_max: 6,
-		ibu_min: 10,
-		ibu_max: 20,
-		ebc_min: 24,
-		ebc_max: 40
-	},
-	"28A": {
-		code: "28A",
-		category: "28",
-		name: "Brett Beer",
-		og_min: 1.03,
-		og_max: 1.08,
-		fg_min: 1,
-		fg_max: 1.012,
-		abv_min: 3,
-		abv_max: 9,
-		ibu_min: 0,
-		ibu_max: 50,
-		ebc_min: 4,
-		ebc_max: 40
-	},
-	"29A": {
-		code: "29A",
-		category: "29",
-		name: "Fruit Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"30A": {
-		code: "30A",
-		category: "30",
-		name: "Spice, Herb or Vegetable Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"31A": {
-		code: "31A",
-		category: "31",
-		name: "Alternative Grain Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"32A": {
-		code: "32A",
-		category: "32",
-		name: "Classic Style Smoked Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.004,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"33A": {
-		code: "33A",
-		category: "33",
-		name: "Wood-Aged Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.004,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"34C": {
-		code: "34C",
-		category: "34",
-		name: "Experimental Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 0,
-		ibu_max: 100,
-		ebc_min: 0,
-		ebc_max: 100
-	}
-};
-function findStyle$1(q) {
-	if (BJCP$1[q]) return BJCP$1[q];
-	const lq = q.toLowerCase();
-	for (const s of Object.values(BJCP$1)) if (s.name.toLowerCase().includes(lq)) return s;
-	const m = q.match(/\bBJ\s+([0-9A-Z]+)\b/i) ?? q.match(/\b([0-9]{1,2}[A-Z][0-9]?)\b/i);
-	if (m) {
-		const code = m[1].toUpperCase();
-		if (BJCP$1[code]) return BJCP$1[code];
-	}
-}
-function quickCheck(r, style) {
-	const issues = [];
-	const warnings = [];
-	const abv = (r.og - r.fg) * 131.25;
-	if (style) {
-		if (r.og < style.og_min || r.og > style.og_max) issues.push(`OG ${r.og.toFixed(3)} fuori range (${style.og_min.toFixed(3)}–${style.og_max.toFixed(3)})`);
-		if (r.ibu < style.ibu_min || r.ibu > style.ibu_max) issues.push(`IBU ${r.ibu} fuori range (${style.ibu_min}–${style.ibu_max})`);
-		if (abv < style.abv_min || abv > style.abv_max) issues.push(`ABV ${abv.toFixed(1)}% fuori range (${style.abv_min}–${style.abv_max}%)`);
-		if (r.fg < style.fg_min || r.fg > style.fg_max) warnings.push(`FG ${r.fg.toFixed(3)} fuori range (${style.fg_min.toFixed(3)}–${style.fg_max.toFixed(3)})`);
-		if (r.ebc !== void 0 && (r.ebc < style.ebc_min || r.ebc > style.ebc_max)) warnings.push(`EBC ${r.ebc} fuori range (${style.ebc_min}–${style.ebc_max})`);
-	}
-	const ibuRatio = r.ibu / ((r.og - 1) * 1e3);
-	if (ibuRatio < .2) issues.push("Rapporto IBU/OG molto basso (<0.2)");
-	else if (ibuRatio > 1.5) issues.push("Rapporto IBU/OG molto alto (>1.5)");
-	const totalKg = r.grain_bill.reduce((s, g) => s + g.kg, 0);
-	let specPct = 0;
-	for (const g of r.grain_bill) {
-		const pct = g.percent ?? (totalKg > 0 ? g.kg / totalKg * 100 : 0);
-		const n = g.malt.toLowerCase();
-		if (n.includes("crystal") || n.includes("caramel") || n.includes("chocolate") || n.includes("black") || n.includes("roast") || n.includes("special") || n.includes("cara")) specPct += pct;
-	}
-	if (specPct > 25) issues.push(`Malti speciali al ${specPct.toFixed(0)}%`);
-	const brewdayMissing = [];
-	if (r.mash_water_liters === void 0) brewdayMissing.push("agua de ammostamento (mash_water_liters)");
-	if (r.sparge_water_liters === void 0) brewdayMissing.push("agua de lavado (sparge_water_liters)");
-	if (r.total_water_liters === void 0) brewdayMissing.push("agua total (total_water_liters)");
-	if (r.mash_salts === void 0) brewdayMissing.push("sales de mash (mash_salts)");
-	if (r.mash_in_temp_c === void 0) brewdayMissing.push("temperatura de mash-in (mash_in_temp_c)");
-	if (r.pre_boil_og === void 0) brewdayMissing.push("gravedad pre-boil (pre_boil_og)");
-	if (r.post_boil_og === void 0) brewdayMissing.push("gravedad post-boil (post_boil_og)");
-	if (r.boil_time_minutes === void 0) brewdayMissing.push("duración de la ebullición (boil_time_minutes)");
-	if (r.fermentation_temp_c === void 0) brewdayMissing.push("temperatura de fermentación (fermentation_temp_c)");
-	if (r.primary_days === void 0) brewdayMissing.push("días de fermentación primaria (primary_days)");
-	if (r.carbonation_volumes === void 0) brewdayMissing.push("carbonatación (carbonation_volumes)");
-	if (r.packaging_volume_liters === void 0) brewdayMissing.push("volumen de envasado (packaging_volume_liters)");
-	if (r.bottle_type === void 0) brewdayMissing.push("tipo de botella (bottle_type)");
-	if (brewdayMissing.length > 0) issues.push(`Datos de cotización incompletos — faltan: ${brewdayMissing.join(", ")}`);
-	if (r.mash_water_liters !== void 0 && r.sparge_water_liters !== void 0 && r.total_water_liters !== void 0) {
-		const sum = r.mash_water_liters + r.sparge_water_liters;
-		if (Math.abs(sum - r.total_water_liters) > 1) issues.push(`Agua total (${r.total_water_liters}L) ≠ mash (${r.mash_water_liters}L) + sparge (${r.sparge_water_liters}L) = ${sum.toFixed(1)}L`);
-	}
-	return {
-		issues,
-		warnings,
-		abv,
-		ibuRatio,
-		specPct
-	};
-}
-function buildLlmReviewPrompt(r) {
-	const style = findStyle$1(r.beer_style);
-	const { issues, warnings, abv, ibuRatio, specPct } = quickCheck(r, style);
-	const recipeSummary = [
-		`Ricetta: ${r.recipe_name}`,
-		`Stile: ${r.beer_style}${style ? ` (${style.code} — ${style.name}, Cat. ${style.category})` : ""}`,
-		`Batch: ${r.batch_size_liters}L | OG: ${r.og.toFixed(3)} | FG: ${r.fg.toFixed(3)} | IBU: ${r.ibu} | ABV: ${abv.toFixed(1)}%`,
-		r.ebc !== void 0 ? `EBC: ${r.ebc}` : null,
-		r.impianto ? `Impianto: ${r.impianto}` : null,
-		r.efficiency_percent !== void 0 ? `Efficienza: ${r.efficiency_percent}%` : null,
-		"",
-		"── Grist ──",
-		...r.grain_bill.map((g) => `  ${g.malt}: ${g.kg}kg${g.percent !== void 0 ? ` (${g.percent}%)` : ""}${g.ebc !== void 0 ? ` [EBC ${g.ebc}]` : ""}${g.note ? ` — ${g.note}` : ""}`),
-		"",
-		"── Luppolatura ──",
-		...r.hop_schedule.map((h) => `  ${h.variety}: ${h.grams}g @ ${h.time_minutes}min (${h.use})${h.aa_percent !== void 0 ? ` AA ${h.aa_percent}%` : ""}${h.ibu_contrib !== void 0 ? ` [${h.ibu_contrib} IBU]` : ""}${h.note ? ` — ${h.note}` : ""}`),
-		"",
-		`── Lievito ──`,
-		`  ${r.yeast.strain}${r.yeast.lab ? ` (${r.yeast.lab})` : ""}${r.yeast.attenuation_percent !== void 0 ? ` att. ${r.yeast.attenuation_percent}%` : ""}`,
-		r.fermentation_temp_c !== void 0 ? `  Temperatura: ${r.fermentation_temp_c}°C` : null,
-		"",
-		r.mash_temp_c !== void 0 || r.mash_steps && r.mash_steps.length > 0 ? "── Mash ──" : null,
-		r.mash_temp_c !== void 0 ? `  Single infusion: ${r.mash_temp_c}°C` : null,
-		...(r.mash_steps ?? []).map((s) => `  Step: ${s.temperature_c}°C × ${s.time_minutes}min${s.note ? ` (${s.note})` : ""}`),
-		"",
-		r.water_profile ? "── Acqua ──" : null,
-		r.water_profile ? `  Ca:${r.water_profile.ca} Mg:${r.water_profile.mg} Na:${r.water_profile.na} Cl:${r.water_profile.cl} SO₄:${r.water_profile.so4} HCO₃:${r.water_profile.hco3}` : null,
-		"",
-		r.carbonation_volumes !== void 0 ? `Carbonazione: ${r.carbonation_volumes} vol${r.carbonation_method ? ` (${r.carbonation_method})` : ""}${r.priming_sugar_gl !== void 0 ? ` — ${r.priming_sugar_gl} g/L priming` : ""}` : null,
-		r.boil_time_minutes !== void 0 ? `Bollitura: ${r.boil_time_minutes} min` : null,
-		r.pre_boil_volume_liters !== void 0 || r.post_boil_volume_liters !== void 0 ? `Volumi: pre-boil ${r.pre_boil_volume_liters ?? "?"}L, post-boil ${r.post_boil_volume_liters ?? "?"}L, fermentatore ${r.fermentation_volume_liters ?? "?"}L, confezionamento ${r.packaging_volume_liters ?? "?"}L` : null,
-		"",
-		r.mash_water_liters !== void 0 || r.sparge_water_liters !== void 0 || r.total_water_liters !== void 0 ? "── Agua de cotización ──" : null,
-		r.mash_water_liters !== void 0 ? `  Agua de ammostamento: ${r.mash_water_liters}L` : null,
-		r.sparge_water_liters !== void 0 ? `  Agua de lavado (sparge): ${r.sparge_water_liters}L` : null,
-		r.total_water_liters !== void 0 ? `  Agua total: ${r.total_water_liters}L` : null,
-		r.mash_salts ? `  Sales mash: ${[
-			r.mash_salts.gypsum_g !== void 0 ? `gesso ${r.mash_salts.gypsum_g}g` : null,
-			r.mash_salts.cacl2_g !== void 0 ? `CaCl₂ ${r.mash_salts.cacl2_g}g` : null,
-			r.mash_salts.epsom_g !== void 0 ? `Epsom ${r.mash_salts.epsom_g}g` : null,
-			r.mash_salts.nahco3_g !== void 0 ? `NaHCO₃ ${r.mash_salts.nahco3_g}g` : null,
-			r.mash_salts.lactic_acid_ml !== void 0 ? `ácido láctico ${r.mash_salts.lactic_acid_ml}ml` : null
-		].filter((x) => x !== null).join(", ")}` : null,
-		r.mash_in_temp_c !== void 0 ? `  Mash-in: ${r.mash_in_temp_c}°C` : null,
-		r.pre_boil_og !== void 0 ? `  OG pre-boil: ${r.pre_boil_og.toFixed(3)}` : null,
-		r.post_boil_og !== void 0 ? `  OG post-boil: ${r.post_boil_og.toFixed(3)}` : null,
-		r.primary_days !== void 0 ? `  Fermentación primaria: ${r.primary_days} días` : null,
-		r.conditioning_days !== void 0 ? `  Maduración: ${r.conditioning_days} días` : null,
-		r.serving_temp_c !== void 0 ? `  Servicio: ${r.serving_temp_c}°C` : null,
-		r.bottle_type !== void 0 ? `  Botella: ${r.bottle_type}` : null,
-		"",
-		r.descrizione ? `Descrizione: ${r.descrizione}` : null,
-		r.note ? `Note: ${r.note}` : null
-	].filter((x) => x !== null).join("\n");
-	const quickReport = [
-		`=== QUICK-CHECK DETERMINISTICO ===`,
-		`ABV calcolato: ${abv.toFixed(1)}%`,
-		`IBU/OG ratio: ${ibuRatio.toFixed(2)}`,
-		`Malti speciali: ${specPct.toFixed(1)}%`,
-		style ? `Stile BJCP: ${issues.length === 0 ? "✅ OK" : "❌ " + issues.length + " problemi"}` : "Stile BJCP: non trovato",
-		...issues.map((i) => `  ❌ ${i}`),
-		...warnings.map((w) => `  ⚠️ ${w}`)
-	].join("\n");
-	return [
-		`Sei un revisore brassicolo senior specializzato in homebrewing all grain e`,
-		`impianti all-in-one.`,
-		``,
-		`Devi revisionare criticamente una ricetta di birra. Non devi assecondare la`,
-		`ricetta né riscriverla subito. Devi trovare errori, contraddizioni, rischi e`,
-		`scelte subottimali.`,
-		``,
-		`Riceverai:`,
-		``,
-		`1. la ricetta strutturata;`,
-		`2. un quick-check deterministico;`,
-		`3. eventuali dati BJCP;`,
-		`4. dati ufficiali degli ingredienti e del lievito, quando disponibili.`,
-		``,
-		`Valuta separatamente:`,
-		``,
-		`- validità matematica;`,
-		`- coerenza dei volumi;`,
-		`- compatibilità con l'impianto;`,
-		`- mash e filtrabilità;`,
-		`- grist;`,
-		`- luppolatura;`,
-		`- lievito e fermentazione;`,
-		`- acqua;`,
-		`- carbonazione e sicurezza;`,
-		`- conformità stilistica;`,
-		`- plausibilità sensoriale;`,
-		`- chiarezza e riproducibilità della procedura;`,
-		`- attendibilità delle affermazioni storiche o tecniche.`,
-		``,
-		`Verifica che la ricetta contenga TUTTI los datos necesarios para seguir la`,
-		`cotización de principio a fin, hasta el embotellado: agua total, agua de`,
-		`ammostamento y de lavado (sparge), sales de mash y ácido láctico,`,
-		`temperatura de mash-in, gravedad pre-boil y post-boil, duración de la`,
-		`ebullición, temperatura y días de fermentación, carbonatación y tipo de`,
-		`botella. Señala cualquier dato faltante como critical_issue o warning.`,
-		``,
-		`Regole:`,
-		``,
-		`- Non considerare corretta una scelta solo perché è comune.`,
-		`- Non inventare dati mancanti.`,
-		`- Distingui tra errore critico, warning e scelta opzionale.`,
-		`- Distingui validità tecnica da conformità BJCP.`,
-		`- Se una ricetta è creativa, non penalizzarla automaticamente: verifica però`,
-		`  che sia classificata correttamente.`,
-		`- Non ripetere i soli errori già riportati dal quick-check deterministico:`,
-		`  spiegane l'impatto pratico.`,
-		`- Segnala contraddizioni tra campi strutturati e testo descrittivo.`,
-		`- Contesta affermazioni assolute non supportate.`,
-		`- Proponi correzioni minime prima di ridisegnare l'intera ricetta.`,
-		`- Ogni correzione deve indicare cosa cambia e perché.`,
-		``,
-		`Restituisci esclusivamente JSON conforme allo schema richiesto.`,
-		``,
-		`=== RICETTA ===`,
-		recipeSummary,
-		``,
-		`=== DATI BJCP ===`,
-		style ? `${style.code} — ${style.name} (Cat. ${style.category}): OG ${style.og_min.toFixed(3)}-${style.og_max.toFixed(3)}, FG ${style.fg_min.toFixed(3)}-${style.fg_max.toFixed(3)}, ABV ${style.abv_min}-${style.abv_max}%, IBU ${style.ibu_min}-${style.ibu_max}, EBC ${style.ebc_min}-${style.ebc_max}` : "Stile non trovato nel database BJCP.",
-		``,
-		quickReport
-	].join("\n");
-}
-const OUTPUT_SCHEMA = {
-	type: "object",
-	properties: {
-		overall_status: {
-			type: "string",
-			enum: [
-				"valid",
-				"needs_revision",
-				"invalid"
-			],
-			description: "Giudizio complessivo"
-		},
-		technical_validity: {
-			type: "string",
-			enum: [
-				"valid",
-				"questionable",
-				"invalid"
-			],
-			description: "Validità tecnica/matematica"
-		},
-		style_conformity: {
-			type: "string",
-			enum: [
-				"in_style",
-				"borderline",
-				"out_of_style",
-				"creative"
-			],
-			description: "Conformità BJCP"
-		},
-		confidence: {
-			type: "number",
-			minimum: 0,
-			maximum: 1,
-			description: "Confidenza del revisore (0-1)"
-		},
-		critical_issues: {
-			type: "array",
-			items: {
-				type: "object",
-				properties: {
-					code: {
-						type: "string",
-						description: "Codice errore (es. MASH_PLAN_CONTRADICTION)"
-					},
-					area: {
-						type: "string",
-						description: "Area: mash, grist, hops, yeast, water, volumes, carbonation, style, procedure, safety"
-					},
-					finding: {
-						type: "string",
-						description: "Descrizione del problema"
-					},
-					impact: {
-						type: "string",
-						description: "Impatto pratico"
-					},
-					recommended_change: {
-						type: "string",
-						description: "Correzione proposta"
-					}
-				},
-				required: [
-					"code",
-					"area",
-					"finding",
-					"impact",
-					"recommended_change"
-				]
-			}
-		},
-		warnings: {
-			type: "array",
-			items: {
-				type: "object",
-				properties: {
-					code: { type: "string" },
-					area: { type: "string" },
-					finding: { type: "string" },
-					suggestion: { type: "string" }
-				},
-				required: [
-					"code",
-					"area",
-					"finding",
-					"suggestion"
-				]
-			}
-		},
-		sensory_assessment: {
-			type: "object",
-			properties: {
-				expected_balance: {
-					type: "string",
-					description: "Bilanciamento atteso"
-				},
-				main_risk: {
-					type: "string",
-					description: "Rischio sensoriale principale"
-				},
-				coherence: {
-					type: "string",
-					enum: [
-						"excellent",
-						"good",
-						"questionable",
-						"contradictory"
-					]
-				}
-			},
-			required: [
-				"expected_balance",
-				"main_risk",
-				"coherence"
-			]
-		},
-		style_assessment: {
-			type: "object",
-			properties: {
-				declared_style: { type: "string" },
-				classification: {
-					type: "string",
-					enum: [
-						"in_style",
-						"borderline",
-						"out_of_style",
-						"creative"
-					]
-				},
-				deviations: {
-					type: "array",
-					items: { type: "string" }
-				}
-			},
-			required: [
-				"declared_style",
-				"classification",
-				"deviations"
-			]
-		},
-		recommended_actions: {
-			type: "array",
-			items: {
-				type: "object",
-				properties: {
-					priority: {
-						type: "integer",
-						minimum: 1
-					},
-					action: { type: "string" },
-					detail: { type: "string" }
-				},
-				required: ["priority", "action"]
-			}
-		}
-	},
-	required: [
-		"overall_status",
-		"technical_validity",
-		"style_conformity",
-		"confidence",
-		"critical_issues",
-		"warnings",
-		"sensory_assessment",
-		"style_assessment",
-		"recommended_actions"
-	]
-};
-var RecipeValidatorTool = class {
-	name = "recipe_validator";
-	description = "Produces a complete LLM review prompt for deep qualitative analysis of a beer recipe. Pass the structured recipe data (as returned by yaml_validator or built manually) to get: recipe summary, BJCP style data, quick deterministic check, the LLM review prompt, and the expected JSON output schema. Use AFTER yaml_validator for deterministic validation.";
-	parameters = toInputJsonSchema(RecipeValidatorInputSchema);
-	resolveExecution(args) {
-		return {
-			description: `Build LLM review prompt: ${args.recipe_name}`,
-			approvalRule: this.name,
-			execute: () => this.execute(args)
-		};
-	}
-	execute(args) {
-		try {
-			const style = findStyle$1(args.beer_style);
-			const llmPrompt = buildLlmReviewPrompt(args);
-			const fullOutput = [
-				`**Revisione LLM per: ${args.recipe_name}**`,
-				style ? `Stile: ${style.code} — ${style.name} (Cat. ${style.category})` : `Stile "${args.beer_style}" non trovato nel database BJCP.`,
-				"",
-				"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-				"📋 LLM REVIEW PROMPT (da inoltrare al modello)",
-				"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-				"",
-				llmPrompt,
-				"",
-				"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-				"📐 OUTPUT SCHEMA (JSON atteso)",
-				"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-				"",
-				"```json",
-				JSON.stringify(OUTPUT_SCHEMA, null, 2),
-				"```"
-			].join("\n");
-			return Promise.resolve({ output: fullOutput });
-		} catch (e) {
-			return Promise.resolve({
-				isError: true,
-				output: e instanceof Error ? e.message : String(e)
-			});
-		}
-	}
-};
-registerTool(RecipeValidatorTool);
-
-//#endregion
-//#region src/brewing/inventory-search.ts
-/**
-* Inventory search — search a virtual inventory of malts, hops, and yeasts.
-*/
-const InventorySearchInputSchema = object({
-	query: string().describe("Search query."),
-	category: _enum([
-		"malt",
-		"hop",
-		"yeast",
-		"all"
-	]).default("all"),
-	include_unavailable: boolean().default(false)
-});
-const INVENTORY = [
-	{
-		name: "Pilsner Malt (Weyermann)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Base",
-			ebc: "3-4",
-			origin: "Germany",
-			usage: "Up to 100%"
-		},
-		substitutes: ["Pale Ale Malt", "Vienna Malt"]
-	},
-	{
-		name: "Pale Ale Malt (Crisp)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Base",
-			ebc: "5-7",
-			origin: "UK",
-			usage: "Up to 100%"
-		},
-		substitutes: ["Maris Otter", "Pilsner Malt"]
-	},
-	{
-		name: "Maris Otter (Crisp)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Base",
-			ebc: "4-6",
-			origin: "UK",
-			usage: "Up to 100%"
-		},
-		substitutes: ["Pale Ale Malt", "Golden Promise"]
-	},
-	{
-		name: "Vienna Malt (Weyermann)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Base",
-			ebc: "6-9",
-			origin: "Germany",
-			usage: "Up to 100%"
-		},
-		substitutes: ["Munich Light", "Pale Ale Malt"]
-	},
-	{
-		name: "Munich Malt Light (Weyermann)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Base",
-			ebc: "15-25",
-			origin: "Germany",
-			usage: "Up to 100%"
-		},
-		substitutes: ["Vienna Malt", "Munich Dark"]
-	},
-	{
-		name: "Wheat Malt (Weyermann)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Base",
-			ebc: "3-5",
-			origin: "Germany",
-			usage: "Up to 70%"
-		},
-		substitutes: ["Pale Wheat Malt", "Flaked Wheat"]
-	},
-	{
-		name: "Rye Malt (Weyermann)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Base",
-			ebc: "4-10",
-			origin: "Germany",
-			usage: "Up to 60%"
-		},
-		substitutes: ["Flaked Rye", "Wheat Malt"]
-	},
-	{
-		name: "CaraPils (Weyermann)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Crystal",
-			ebc: "3-5",
-			origin: "Germany",
-			usage: "Up to 10%"
-		},
-		substitutes: ["Dextrin Malt", "Flaked Barley"]
-	},
-	{
-		name: "CaraHell (Weyermann)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Crystal",
-			ebc: "20-30",
-			origin: "Germany",
-			usage: "Up to 15%"
-		},
-		substitutes: ["Crystal 10L", "CaraAmber"]
-	},
-	{
-		name: "CaraAmber (Weyermann)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Crystal",
-			ebc: "60-80",
-			origin: "Germany",
-			usage: "Up to 15%"
-		},
-		substitutes: ["Crystal 30L", "CaraRed"]
-	},
-	{
-		name: "CaraMunich I (Weyermann)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Crystal",
-			ebc: "80-100",
-			origin: "Germany",
-			usage: "Up to 15%"
-		},
-		substitutes: ["Crystal 60L", "CaraMunich II"]
-	},
-	{
-		name: "Crystal 60L (Briess)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Crystal",
-			ebc: "120",
-			origin: "USA",
-			usage: "Up to 10%"
-		},
-		substitutes: ["CaraMunich I", "Crystal 80L"]
-	},
-	{
-		name: "Crystal 120L (Briess)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Crystal",
-			ebc: "240",
-			origin: "USA",
-			usage: "Up to 5%"
-		},
-		substitutes: ["CaraMunich III", "Special B"]
-	},
-	{
-		name: "Special B (Dingemans)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Crystal",
-			ebc: "280-350",
-			origin: "Belgium",
-			usage: "Up to 5%"
-		},
-		substitutes: ["Crystal 120L", "Chocolate Malt"]
-	},
-	{
-		name: "Chocolate Malt (Crisp)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Roasted",
-			ebc: "900-1100",
-			origin: "UK",
-			usage: "Up to 10%"
-		},
-		substitutes: ["Pale Chocolate", "Black Patent"]
-	},
-	{
-		name: "Black Patent Malt (Crisp)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Roasted",
-			ebc: "1300-1500",
-			origin: "UK",
-			usage: "Up to 5%"
-		},
-		substitutes: ["Roasted Barley", "Chocolate Malt"]
-	},
-	{
-		name: "Roasted Barley (Briess)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Roasted",
-			ebc: "600-800",
-			origin: "USA",
-			usage: "Up to 5%"
-		},
-		substitutes: ["Black Patent", "Chocolate Malt"]
-	},
-	{
-		name: "Carafa Special I (Weyermann)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Roasted",
-			ebc: "800-1000",
-			origin: "Germany",
-			usage: "Up to 5%"
-		},
-		substitutes: ["Chocolate Malt", "Black Patent"]
-	},
-	{
-		name: "Flaked Barley",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Adjunct",
-			ebc: "3",
-			origin: "Various",
-			usage: "Up to 20%"
-		},
-		substitutes: ["Flaked Oats", "Flaked Wheat"]
-	},
-	{
-		name: "Flaked Oats",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Adjunct",
-			ebc: "2",
-			origin: "Various",
-			usage: "Up to 30%"
-		},
-		substitutes: ["Oat Malt", "Flaked Barley"]
-	},
-	{
-		name: "Flaked Wheat",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Adjunct",
-			ebc: "2",
-			origin: "Various",
-			usage: "Up to 40%"
-		},
-		substitutes: ["Wheat Malt", "Flaked Barley"]
-	},
-	{
-		name: "Acidulated Malt (Weyermann)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Specialty",
-			ebc: "3-6",
-			origin: "Germany",
-			usage: "Up to 10%"
-		},
-		substitutes: ["Lactic Acid", "Phosphoric Acid"]
-	},
-	{
-		name: "Smoked Malt (Weyermann)",
-		category: "malt",
-		available: true,
-		specs: {
-			type: "Specialty",
-			ebc: "4-8",
-			origin: "Germany",
-			usage: "Up to 100%"
-		},
-		substitutes: ["Rauchmalz", "Peated Malt"]
-	},
-	{
-		name: "Citra (USA)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Aroma",
-			aa: "11-13%",
-			origin: "USA",
-			characteristics: "Tropical, citrus, grapefruit"
-		},
-		substitutes: ["Mosaic", "Galaxy"]
-	},
-	{
-		name: "Mosaic (USA)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Aroma",
-			aa: "11-14%",
-			origin: "USA",
-			characteristics: "Blueberry, tropical, earthy"
-		},
-		substitutes: ["Citra", "Simcoe"]
-	},
-	{
-		name: "Simcoe (USA)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Dual",
-			aa: "12-14%",
-			origin: "USA",
-			characteristics: "Pine, citrus, passionfruit"
-		},
-		substitutes: ["Citra", "Chinook"]
-	},
-	{
-		name: "Cascade (USA)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Aroma",
-			aa: "5-7%",
-			origin: "USA",
-			characteristics: "Grapefruit, floral, spicy"
-		},
-		substitutes: ["Centennial", "Amarillo"]
-	},
-	{
-		name: "Centennial (USA)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Dual",
-			aa: "9-11%",
-			origin: "USA",
-			characteristics: "Floral, citrus, pine"
-		},
-		substitutes: ["Cascade", "Chinook"]
-	},
-	{
-		name: "Chinook (USA)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Dual",
-			aa: "12-14%",
-			origin: "USA",
-			characteristics: "Pine, spice, grapefruit"
-		},
-		substitutes: ["Simcoe", "Columbus"]
-	},
-	{
-		name: "Magnum (Germany)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Bittering",
-			aa: "12-14%",
-			origin: "Germany",
-			characteristics: "Clean, smooth bittering"
-		},
-		substitutes: ["Warrior", "Herkules"]
-	},
-	{
-		name: "Hallertau Mittelfrüh (Germany)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Aroma",
-			aa: "3-5%",
-			origin: "Germany",
-			characteristics: "Floral, spicy, noble"
-		},
-		substitutes: ["Hallertau Hersbrucker", "Saaz"]
-	},
-	{
-		name: "Saaz (Czech)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Aroma",
-			aa: "3-4%",
-			origin: "Czech Republic",
-			characteristics: "Spicy, earthy, noble"
-		},
-		substitutes: ["Tettnang", "Hallertau"]
-	},
-	{
-		name: "Fuggles (UK)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Aroma",
-			aa: "4-5%",
-			origin: "UK",
-			characteristics: "Earthy, woody, mild"
-		},
-		substitutes: ["East Kent Goldings", "Willamette"]
-	},
-	{
-		name: "East Kent Goldings (UK)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Aroma",
-			aa: "5-6%",
-			origin: "UK",
-			characteristics: "Floral, honey, earthy"
-		},
-		substitutes: ["Fuggles", "Willamette"]
-	},
-	{
-		name: "Amarillo (USA)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Aroma",
-			aa: "8-10%",
-			origin: "USA",
-			characteristics: "Orange, floral, citrus"
-		},
-		substitutes: ["Cascade", "Centennial"]
-	},
-	{
-		name: "Galaxy (Australia)",
-		category: "hop",
-		available: false,
-		specs: {
-			type: "Aroma",
-			aa: "13-15%",
-			origin: "Australia",
-			characteristics: "Passionfruit, peach, citrus"
-		},
-		substitutes: ["Citra", "Mosaic"]
-	},
-	{
-		name: "El Dorado (USA)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Aroma",
-			aa: "14-16%",
-			origin: "USA",
-			characteristics: "Tropical, watermelon, stone fruit"
-		},
-		substitutes: ["Citra", "Mosaic"]
-	},
-	{
-		name: "Strata (USA)",
-		category: "hop",
-		available: true,
-		specs: {
-			type: "Aroma",
-			aa: "11-13%",
-			origin: "USA",
-			characteristics: "Passionfruit, grapefruit, dank"
-		},
-		substitutes: ["Citra", "Mosaic"]
-	},
-	{
-		name: "SafAle US-05",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Ale",
-			form: "Dry",
-			attenuation: "78-82%",
-			temp_range: "15-24°C",
-			flocculation: "Medium"
-		},
-		substitutes: ["WLP001", "Wyeast 1056"]
-	},
-	{
-		name: "SafAle S-04",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Ale",
-			form: "Dry",
-			attenuation: "72-76%",
-			temp_range: "15-24°C",
-			flocculation: "High"
-		},
-		substitutes: ["WLP002", "Wyeast 1098"]
-	},
-	{
-		name: "SafLager W-34/70",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Lager",
-			form: "Dry",
-			attenuation: "80-84%",
-			temp_range: "9-15°C",
-			flocculation: "High"
-		},
-		substitutes: ["WLP830", "Wyeast 2124"]
-	},
-	{
-		name: "SafBrew WB-06",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Wheat",
-			form: "Dry",
-			attenuation: "86-90%",
-			temp_range: "15-24°C",
-			flocculation: "Low"
-		},
-		substitutes: ["WLP300", "Wyeast 3068"]
-	},
-	{
-		name: "SafBrew T-58",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Specialty",
-			form: "Dry",
-			attenuation: "72-78%",
-			temp_range: "15-24°C",
-			flocculation: "Medium"
-		},
-		substitutes: ["WLP500", "Wyeast 1214"]
-	},
-	{
-		name: "SafBrew BE-256",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Abbey",
-			form: "Dry",
-			attenuation: "78-82%",
-			temp_range: "15-24°C",
-			flocculation: "Medium"
-		},
-		substitutes: ["WLP530", "Wyeast 1762"]
-	},
-	{
-		name: "WLP001 California Ale",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Ale",
-			form: "Liquid",
-			attenuation: "73-80%",
-			temp_range: "18-22°C",
-			flocculation: "Medium"
-		},
-		substitutes: ["US-05", "Wyeast 1056"]
-	},
-	{
-		name: "WLP002 English Ale",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Ale",
-			form: "Liquid",
-			attenuation: "63-70%",
-			temp_range: "18-21°C",
-			flocculation: "Very High"
-		},
-		substitutes: ["S-04", "Wyeast 1098"]
-	},
-	{
-		name: "WLP004 Irish Ale",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Ale",
-			form: "Liquid",
-			attenuation: "69-74%",
-			temp_range: "18-21°C",
-			flocculation: "Medium"
-		},
-		substitutes: ["Wyeast 1084", "S-04"]
-	},
-	{
-		name: "WLP300 Hefeweizen Ale",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Wheat",
-			form: "Liquid",
-			attenuation: "73-77%",
-			temp_range: "18-24°C",
-			flocculation: "Low"
-		},
-		substitutes: ["WB-06", "WLP041"]
-	},
-	{
-		name: "WLP400 Belgian Wit Ale",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Wheat",
-			form: "Liquid",
-			attenuation: "74-78%",
-			temp_range: "18-22°C",
-			flocculation: "Low"
-		},
-		substitutes: ["WB-06", "WLP300"]
-	},
-	{
-		name: "WLP500 Trappist Ale",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Abbey",
-			form: "Liquid",
-			attenuation: "75-80%",
-			temp_range: "18-24°C",
-			flocculation: "Medium"
-		},
-		substitutes: ["BE-256", "Wyeast 1214"]
-	},
-	{
-		name: "WLP565 Belgian Saison I",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Saison",
-			form: "Liquid",
-			attenuation: "65-75%",
-			temp_range: "20-25°C",
-			flocculation: "Low"
-		},
-		substitutes: ["Wyeast 3711", "WLP566"]
-	},
-	{
-		name: "WLP800 Pilsner Lager",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Lager",
-			form: "Liquid",
-			attenuation: "72-78%",
-			temp_range: "10-14°C",
-			flocculation: "Medium-High"
-		},
-		substitutes: ["W-34/70", "WLP830"]
-	},
-	{
-		name: "WLP830 German Lager",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Lager",
-			form: "Liquid",
-			attenuation: "74-79%",
-			temp_range: "10-14°C",
-			flocculation: "Medium"
-		},
-		substitutes: ["W-34/70", "WLP800"]
-	},
-	{
-		name: "Kveik Voss",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Kveik",
-			form: "Dry",
-			attenuation: "75-82%",
-			temp_range: "20-40°C",
-			flocculation: "Medium"
-		},
-		substitutes: ["Kveik Hornindal", "Kveik Lutra"]
-	},
-	{
-		name: "Kveik Hornindal",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Kveik",
-			form: "Dry",
-			attenuation: "75-82%",
-			temp_range: "20-40°C",
-			flocculation: "High"
-		},
-		substitutes: ["Kveik Voss", "Kveik Lutra"]
-	},
-	{
-		name: "Kveik Lutra",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Kveik",
-			form: "Dry",
-			attenuation: "75-82%",
-			temp_range: "20-40°C",
-			flocculation: "Medium"
-		},
-		substitutes: ["Kveik Voss", "Kveik Hornindal"]
-	},
-	{
-		name: "Lallemand WildBrew Philly Sour",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Sour",
-			form: "Dry",
-			attenuation: "75-85%",
-			temp_range: "20-30°C",
-			flocculation: "High"
-		},
-		substitutes: ["WLP677", "Omega Lactobacillus Blend"]
-	},
-	{
-		name: "Wyeast 1056 American Ale",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Ale",
-			form: "Liquid",
-			attenuation: "73-77%",
-			temp_range: "15-22°C",
-			flocculation: "Medium"
-		},
-		substitutes: ["US-05", "WLP001"]
-	},
-	{
-		name: "Wyeast 3068 Weihenstephan Weizen",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Wheat",
-			form: "Liquid",
-			attenuation: "73-77%",
-			temp_range: "18-24°C",
-			flocculation: "Low"
-		},
-		substitutes: ["WLP300", "WB-06"]
-	},
-	{
-		name: "Wyeast 3711 French Saison",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Saison",
-			form: "Liquid",
-			attenuation: "77-83%",
-			temp_range: "18-25°C",
-			flocculation: "Low"
-		},
-		substitutes: ["WLP565", "WLP566"]
-	},
-	{
-		name: "WLP677 Lactobacillus",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Sour",
-			form: "Liquid",
-			attenuation: "N/A",
-			temp_range: "20-40°C",
-			flocculation: "N/A"
-		},
-		substitutes: ["Wyeast 5335", "Omega Lacto Blend"]
-	},
-	{
-		name: "WLP650 Brettanomyces Bruxellensis",
-		category: "yeast",
-		available: true,
-		specs: {
-			type: "Wild",
-			form: "Liquid",
-			attenuation: "N/A",
-			temp_range: "18-25°C",
-			flocculation: "N/A"
-		},
-		substitutes: ["Wyeast 5112", "Omega Brett Blend"]
-	}
-];
-var InventorySearchTool = class {
-	name = "inventory_search";
-	description = "Search a virtual inventory of brewing ingredients (malts, hops, yeasts). Filter by category, check availability, find substitutes, and get technical specifications.";
-	parameters = toInputJsonSchema(InventorySearchInputSchema);
-	resolveExecution(args) {
-		return {
-			description: `Inventory search: ${args.query}`,
-			approvalRule: this.name,
-			execute: () => this.execute(args)
-		};
-	}
-	execute(args) {
-		try {
-			const q = args.query.toLowerCase();
-			const cat = args.category ?? "all";
-			const results = INVENTORY.filter((item) => {
-				if (cat !== "all" && item.category !== cat) return false;
-				if (!args.include_unavailable && !item.available) return false;
-				return item.name.toLowerCase().includes(q) || Object.values(item.specs).some((v) => v.toLowerCase().includes(q)) || item.substitutes?.some((s) => s.toLowerCase().includes(q));
-			});
-			if (results.length === 0) return Promise.resolve({ output: `Nessun risultato per "${args.query}".` });
-			const lines = [`**${results.length} risultato/i per "${args.query}"**`, ""];
-			for (const item of results.slice(0, 20)) {
-				const status = item.available ? "✅ Disponibile" : "❌ Non disponibile";
-				lines.push(`**${item.name}** (${item.category}) — ${status}`);
-				for (const [k, v] of Object.entries(item.specs)) lines.push(`  ${k}: ${v}`);
-				if (item.substitutes?.length) lines.push(`  Sostituti: ${item.substitutes.join(", ")}`);
-				lines.push("");
-			}
-			if (results.length > 20) lines.push(`... e altri ${results.length - 20} risultati.`);
-			return Promise.resolve({ output: lines.join("\n") });
-		} catch (e) {
-			return Promise.resolve({
-				isError: true,
-				output: e instanceof Error ? e.message : String(e)
-			});
-		}
-	}
-};
-registerTool(InventorySearchTool);
-
-//#endregion
-//#region src/brewing/data-root.ts
-/**
-* Shared data-root resolution for the brewmaster plugin.
-*
-* Persistent brewing data is stored below the user's sandbox:
-* `<sandbox>/users/<username>/.brewing-data`.
-*
-* Never fall back to a process-global directory. A missing user context is an
-* error because a fallback would silently merge different users' data.
-*/
-function userChroot(args) {
-	if (args === null || typeof args !== "object") return void 0;
-	const user = args["_kimi_user"];
-	if (user === null || typeof user !== "object") return void 0;
-	const chroot = user["chroot"];
-	return typeof chroot === "string" && chroot.length > 0 ? chroot : void 0;
-}
-function userSession(args) {
-	if (args === null || typeof args !== "object") return void 0;
-	const user = args["_kimi_user"];
-	if (user === null || typeof user !== "object") return void 0;
-	return user;
-}
-function safeUserName(user) {
-	const raw = user.username ?? user.userId;
-	if (typeof raw !== "string" || raw.trim() === "") return void 0;
-	const name = raw.trim().replace(/[^a-zA-Z0-9._-]+/g, "_");
-	return name && name !== "." && name !== ".." ? name : void 0;
-}
-/** Stable key used for other per-user in-memory state. */
-function userScopeKey(args) {
-	const user = userSession(args);
-	const chroot = userChroot(args);
-	const name = user ? safeUserName(user) : void 0;
-	if (!chroot || !name) throw new Error("Contesto utente mancante: impossibile determinare la sandbox users/<nome-utente>.");
-	return `${chroot}:${name}`;
-}
-function dataRoot(args) {
-	const user = userSession(args);
-	const chroot = userChroot(args);
-	const name = user ? safeUserName(user) : void 0;
-	if (!chroot || !name) throw new Error("Contesto utente mancante: i dati devono essere salvati in users/<nome-utente>.");
-	const userDir = basename(dirname(resolve(chroot))) === "users" && basename(resolve(chroot)) === name ? resolve(chroot) : join(resolve(chroot), "users", name);
-	return join(userDir, ".brewing-data");
-}
-
-//#endregion
-//#region src/brewing/inventory-manager.ts
-/**
-* Inventory manager tool — persistent stock management for brewing raw materials.
-*
-* Manages a persistent inventory of brewing ingredients (malts, hops, yeasts,
-* spices, adjuncts, water salts, etc.) stored per-user under the data root
-* (`.brewing-data` inside the user's chroot, else `~/.kimi-code/brewing`).
-*
-* Each item tracks: name, category, quantity (with unit), purchase date, cost,
-* supplier, best-before / expiry date, lot, storage notes, and free notes.
-*
-* Supported operations:
-*   - add      : add a new item (or restock an existing one)
-*   - remove   : remove an item entirely
-*   - adjust   : add/subtract quantity to/from an existing item
-*   - list     : list items, optionally filtered by category / expiring / low stock
-*   - search   : search by name or notes
-*   - stats    : summary of stock value, expiring items, low stock
-*
-* This helps when elaborating a recipe: the agent can see what is already on
-* hand, what needs to be bought, and what is about to expire.
-*/
-const INVENTORY_CATEGORIES = [
-	"malt",
-	"hop",
-	"yeast",
-	"spice",
-	"adjunct",
-	"water_salt",
-	"sugar",
-	"other"
-];
-function inventoryPath(root) {
-	return join(root, "inventory.json");
-}
-function ensureDir$1(root) {
-	const dir = dirname(inventoryPath(root));
-	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-}
-function loadItems(root) {
-	const path = inventoryPath(root);
-	if (!existsSync(path)) return [];
-	try {
-		const raw = readFileSync(path, "utf-8");
-		const parsed = JSON.parse(raw);
-		if (parsed.version === 1 && Array.isArray(parsed.items)) return parsed.items;
-		return [];
-	} catch {
-		return [];
-	}
-}
-function saveItems(root, items) {
-	ensureDir$1(root);
-	const file = {
-		version: 1,
-		items
-	};
-	writeFileSync(inventoryPath(root), JSON.stringify(file, null, 2), "utf-8");
-}
-function makeId() {
-	return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-function normalizeName$2(name) {
-	return name.trim().toLowerCase().replace(/\s+/g, " ");
-}
-function findItem(items, name) {
-	const target = normalizeName$2(name);
-	return items.find((i) => normalizeName$2(i.name) === target);
-}
-function todayIso() {
-	return (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-}
-function daysUntil(dateIso) {
-	const target = (/* @__PURE__ */ new Date(`${dateIso}T00:00:00`)).getTime();
-	const now = (/* @__PURE__ */ new Date(`${todayIso()}T00:00:00`)).getTime();
-	return Math.round((target - now) / 864e5);
-}
-function formatQty(item) {
-	return `${item.quantity} ${item.unit}`;
-}
-function formatCost(item) {
-	if (item.cost === void 0) return "—";
-	return `€${item.cost.toFixed(2)}/${item.unit}`;
-}
-function expiryLabel(item) {
-	if (!item.bestBefore) return "";
-	const d = daysUntil(item.bestBefore);
-	if (d < 0) return ` ⚠️ SCADUTO da ${-d}g`;
-	if (d === 0) return " ⚠️ SCADE OGGI";
-	if (d <= 30) return ` ⏳ scade tra ${d}g`;
-	return "";
-}
-function itemToLine(item) {
-	const parts = [`**${item.name}** [${item.category}] — ${formatQty(item)}`];
-	if (item.cost !== void 0) parts.push(`Costo: ${formatCost(item)}`);
-	if (item.purchaseDate) parts.push(`Acquisto: ${item.purchaseDate}`);
-	if (item.supplier) parts.push(`Fornitore: ${item.supplier}`);
-	if (item.bestBefore) parts.push(`Scadenza: ${item.bestBefore}${expiryLabel(item)}`);
-	if (item.lot) parts.push(`Lotto: ${item.lot}`);
-	if (item.storage) parts.push(`Conservazione: ${item.storage}`);
-	if (item.notes) parts.push(`Note: ${item.notes}`);
-	return parts.join(" | ");
-}
-const InventoryManagerInputSchema = object({
-	operation: _enum([
-		"add",
-		"remove",
-		"adjust",
-		"list",
-		"search",
-		"stats"
-	]).describe("Operazione da eseguire: add (aggiungi/riapprovvigiona), remove (elimina), adjust (aggiungi/sottrai quantità), list (elenca), search (cerca), stats (riepilogo)."),
-	name: string().optional().describe("Nome dell'ingrediente (es. \"Pilsner Malt Weyermann\", \"Citra\"). Obbligatorio per add/remove/adjust/search."),
-	category: _enum(INVENTORY_CATEGORIES).optional().describe("Tipologia merce: malt, hop, yeast, spice, adjunct, water_salt, sugar, other."),
-	quantity: number().optional().describe("Quantità. Per add: quantità iniziale o da aggiungere. Per adjust: delta (positivo aggiunge, negativo sottrae)."),
-	unit: string().optional().describe("Unità di misura (kg, g, pcs, packets, L, ml...). Default \"kg\" per malti/adjunct, \"g\" per luppoli/spezie, \"pcs\" per lieviti."),
-	purchaseDate: string().optional().describe("Data di acquisto in formato YYYY-MM-DD."),
-	cost: number().optional().describe("Costo unitario in EUR (per unità)."),
-	supplier: string().optional().describe("Fornitore / negozio."),
-	bestBefore: string().optional().describe("Data di scadenza in formato YYYY-MM-DD."),
-	lot: string().optional().describe("Numero di lotto / partita."),
-	storage: string().optional().describe("Note di conservazione (frigo, buio, freezer...)."),
-	notes: string().optional().describe("Note libere."),
-	expiringWithinDays: number().optional().describe("Per list: mostra solo gli articoli che scadono entro questo numero di giorni."),
-	lowStockBelow: number().optional().describe("Per list: mostra solo gli articoli con quantità inferiore a questo valore."),
-	includeExpired: boolean().default(false).describe("Per list: include anche gli articoli scaduti. Default false.")
-});
-var InventoryManagerTool = class {
-	name = "inventory_manager";
-	description = "Gestisci l'inventario persistente delle materie prime brassicole (malti, luppoli, lieviti, spezie, adjunct, sali acqua, zuccheri). Aggiungi/rimuovi/regola quantità, elenca, cerca e ottieni riepiloghi di scorte, valore e scadenze. I dati sono salvati per utente in .brewing-data dentro la chroot dell'utente (fallback ~/.kimi-code/brewing).";
-	parameters = toInputJsonSchema(InventoryManagerInputSchema);
-	resolveExecution(args) {
-		const root = dataRoot(args);
-		return {
-			description: `Inventory ${args.operation}${args.name ? `: ${args.name}` : ""}`,
-			approvalRule: this.name,
-			execute: () => this.execute(args, root)
-		};
-	}
-	execute(args, root) {
-		try {
-			switch (args.operation) {
-				case "add": return Promise.resolve(this.add(args, root));
-				case "remove": return Promise.resolve(this.remove(args, root));
-				case "adjust": return Promise.resolve(this.adjust(args, root));
-				case "list": return Promise.resolve(this.list(args, root));
-				case "search": return Promise.resolve(this.search(args, root));
-				case "stats": return Promise.resolve(this.stats(root));
-			}
-		} catch (e) {
-			return Promise.resolve({
-				isError: true,
-				output: e instanceof Error ? e.message : String(e)
-			});
-		}
-	}
-	add(args, root) {
-		const name = args.name?.trim();
-		if (!name) return {
-			isError: true,
-			output: "Specifica un nome per l'articolo (campo \"name\")."
-		};
-		const items = loadItems(root);
-		const existing = findItem(items, name);
-		if (existing) {
-			const delta = args.quantity ?? 0;
-			existing.quantity += delta;
-			if (args.category) existing.category = args.category;
-			if (args.unit) existing.unit = args.unit;
-			if (args.purchaseDate) existing.purchaseDate = args.purchaseDate;
-			if (args.cost !== void 0) existing.cost = args.cost;
-			if (args.supplier) existing.supplier = args.supplier;
-			if (args.bestBefore) existing.bestBefore = args.bestBefore;
-			if (args.lot) existing.lot = args.lot;
-			if (args.storage) existing.storage = args.storage;
-			if (args.notes) existing.notes = args.notes;
-			existing.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-			saveItems(root, items);
-			return { output: `Riapprovvigionato **${existing.name}**: ora ${formatQty(existing)} (aggiunti ${delta} ${existing.unit}).\n${itemToLine(existing)}` };
-		}
-		const category = args.category ?? inferCategory(name);
-		const unit = args.unit ?? defaultUnit(category);
-		const now = (/* @__PURE__ */ new Date()).toISOString();
-		const item = {
-			id: makeId(),
-			name,
-			category,
-			quantity: args.quantity ?? 0,
-			unit,
-			purchaseDate: args.purchaseDate,
-			cost: args.cost,
-			supplier: args.supplier,
-			bestBefore: args.bestBefore,
-			lot: args.lot,
-			storage: args.storage,
-			notes: args.notes,
-			createdAt: now,
-			updatedAt: now
-		};
-		items.push(item);
-		saveItems(root, items);
-		return { output: `Aggiunto **${item.name}** [${item.category}] — ${formatQty(item)}.\n${itemToLine(item)}` };
-	}
-	remove(args, root) {
-		const name = args.name?.trim();
-		if (!name) return {
-			isError: true,
-			output: "Specifica il nome dell'articolo da rimuovere (campo \"name\")."
-		};
-		const items = loadItems(root);
-		const idx = items.findIndex((i) => normalizeName$2(i.name) === normalizeName$2(name));
-		if (idx < 0) return {
-			isError: true,
-			output: `Nessun articolo trovato con nome "${name}".`
-		};
-		const [removed] = items.splice(idx, 1);
-		saveItems(root, items);
-		return { output: `Rimosso **${removed.name}** [${removed.category}] dall'inventario.` };
-	}
-	adjust(args, root) {
-		const name = args.name?.trim();
-		if (!name) return {
-			isError: true,
-			output: "Specifica il nome dell'articolo da regolare (campo \"name\")."
-		};
-		if (args.quantity === void 0) return {
-			isError: true,
-			output: "Specifica il delta di quantità (campo \"quantity\", positivo per aggiungere, negativo per sottrarre)."
-		};
-		const items = loadItems(root);
-		const item = findItem(items, name);
-		if (!item) return {
-			isError: true,
-			output: `Nessun articolo trovato con nome "${name}".`
-		};
-		item.quantity += args.quantity;
-		if (item.quantity < 0) item.quantity = 0;
-		item.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-		saveItems(root, items);
-		const direction = args.quantity >= 0 ? "aggiunti" : "sottratti";
-		const status = item.quantity === 0 ? " ⚠️ ESAURITO" : "";
-		return { output: `Regolato **${item.name}**: ${direction} ${Math.abs(args.quantity)} ${item.unit} → ora ${formatQty(item)}${status}.\n${itemToLine(item)}` };
-	}
-	list(args, root) {
-		let items = loadItems(root);
-		if (items.length === 0) return { output: "Inventario vuoto. Usa l'operazione \"add\" per aggiungere materie prime." };
-		if (args.category) items = items.filter((i) => i.category === args.category);
-		if (args.expiringWithinDays !== void 0) items = items.filter((i) => i.bestBefore && daysUntil(i.bestBefore) <= args.expiringWithinDays);
-		if (args.lowStockBelow !== void 0) items = items.filter((i) => i.quantity < args.lowStockBelow);
-		if (!args.includeExpired) items = items.filter((i) => !i.bestBefore || daysUntil(i.bestBefore) >= 0);
-		if (items.length === 0) return { output: "Nessun articolo corrisponde ai filtri specificati." };
-		const sorted = [...items].sort((a, b) => {
-			const cat = a.category.localeCompare(b.category);
-			return cat !== 0 ? cat : a.name.localeCompare(b.name);
-		});
-		const lines = [`**${sorted.length} articolo/i in inventario**`, ""];
-		let currentCat = "";
-		for (const item of sorted) {
-			if (item.category !== currentCat) {
-				currentCat = item.category;
-				lines.push(`### ${currentCat}`);
-			}
-			lines.push(`- ${itemToLine(item)}`);
-		}
-		return { output: lines.join("\n") };
-	}
-	search(args, root) {
-		const q = (args.name ?? "").trim().toLowerCase();
-		if (!q) return {
-			isError: true,
-			output: "Specifica un termine di ricerca (campo \"name\")."
-		};
-		const items = loadItems(root).filter((i) => i.name.toLowerCase().includes(q) || (i.notes ?? "").toLowerCase().includes(q) || (i.supplier ?? "").toLowerCase().includes(q) || (i.lot ?? "").toLowerCase().includes(q));
-		if (items.length === 0) return { output: `Nessun articolo trovato per "${q}".` };
-		const lines = [`**${items.length} risultato/i per "${q}"**`, ""];
-		for (const item of items) lines.push(`- ${itemToLine(item)}`);
-		return { output: lines.join("\n") };
-	}
-	stats(root) {
-		const items = loadItems(root);
-		if (items.length === 0) return { output: "Inventario vuoto. Usa l'operazione \"add\" per aggiungere materie prime." };
-		const totalValue = items.reduce((sum, i) => sum + (i.cost !== void 0 ? i.cost * i.quantity : 0), 0);
-		const expiring = items.filter((i) => i.bestBefore && daysUntil(i.bestBefore) <= 30).sort((a, b) => a.bestBefore < b.bestBefore ? -1 : 1);
-		const expired = items.filter((i) => i.bestBefore && daysUntil(i.bestBefore) < 0);
-		items.filter((i) => i.quantity === 0);
-		const outOfStock = items.filter((i) => i.quantity <= 0);
-		const byCategory = {};
-		for (const i of items) byCategory[i.category] = (byCategory[i.category] ?? 0) + 1;
-		const lines = [
-			`**Riepilogo inventario**`,
-			"",
-			`- Articoli totali: ${items.length}`,
-			`- Valore stimato: €${totalValue.toFixed(2)}`,
-			`- Esauriti (qty 0): ${outOfStock.length}`,
-			"",
-			"Per categoria:",
-			...Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([cat, n]) => `  - ${cat}: ${n}`)
-		];
-		if (expired.length > 0) {
-			lines.push("", `**Scaduti (${expired.length}):**`);
-			for (const i of expired) lines.push(`  - ${i.name} — scaduto da ${-daysUntil(i.bestBefore)}g`);
-		}
-		if (expiring.length > 0) {
-			lines.push("", `**In scadenza entro 30 giorni (${expiring.length}):**`);
-			for (const i of expiring) lines.push(`  - ${i.name} — ${i.bestBefore}${expiryLabel(i)}`);
-		}
-		if (outOfStock.length > 0) {
-			lines.push("", `**Da riacquistare (${outOfStock.length}):**`);
-			for (const i of outOfStock) lines.push(`  - ${i.name} [${i.category}]`);
-		}
-		return { output: lines.join("\n") };
-	}
-};
-function inferCategory(name) {
-	const n = name.toLowerCase();
-	if (/\b(hop|luppolo|luppoli)\b/.test(n) || /(citra|mosaic|simcoe|cascade|saaz|hallertau|chinook|centennial|amarillo|galaxy|magnum|fuggles|goldings|willamette|columbus|warrior|strata|el dorado|tettnang|hersbrucker|nelson|motueka|azacca|idaho|bru-1|talus|sabro|vic secret|enigma|phoenix|northdown|target|challenger|brewers gold|perle|spalt|tradition|liberty|crystal|mt hood|sterling|santiam|glacier|summit|bravo|zeus|apollo|equinox|jarrylo|cashmere|lemon drop|mandarina|huell melon|polaris|comet|cluster|nugget|willamette)\b/.test(n)) return "hop";
-	if (/\b(yeast|lievito|lieviti|safale|safbrew|saflager|wlp|wyeast|omega|lallemand|fermentis|mangrove|kveik|us-05|s-04|w-34)\b/.test(n)) return "yeast";
-	if (/\b(spice|spezia|spezie|corriandolo|buccia|arancia|vaniglia|cannella|noce moscata|zenzero|pepe|chiodi|cardamomo|anice|finocchio|lavanda|rosmarino|timo|salvia|hibiscus|ibisco|ciliegia|frutto|frutta)\b/.test(n)) return "spice";
-	if (/\b(salt|sale|calcio|magnesio|sodio|cloruro|solfato|bicarbonato|gypsum|epsom|calcium|magnesium|acqua|water)\b/.test(n)) return "water_salt";
-	if (/\b(sugar|zucchero|destrosio|saccarosio|miele|melassa|sciroppo|glucosio|fruttosio|lattosio|brown sugar|turbinado|demerara|belgian candi|candi)\b/.test(n)) return "sugar";
-	if (/\b(adjunct|fiocchi|flaked|riso|mais|avena|orzo|grano|farro|segale|rye|wheat|oats|rice|corn|barley|triticale|sorgo|miglio|quinoa)\b/.test(n)) return "adjunct";
-	return "malt";
-}
-function defaultUnit(category) {
-	switch (category) {
-		case "hop":
-		case "spice":
-		case "water_salt": return "g";
-		case "yeast": return "pcs";
-		case "sugar": return "kg";
-		default: return "kg";
-	}
-}
-registerTool(InventoryManagerTool);
-
-//#endregion
 //#region node_modules/js-yaml/dist/js-yaml.mjs
 function getDefaultExportFromCjs(x) {
 	return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -12385,6 +9316,3828 @@ function requireJsYaml() {
 }
 const yaml = /* @__PURE__ */ getDefaultExportFromCjs(requireJsYaml());
 const { Type, Schema, FAILSAFE_SCHEMA, JSON_SCHEMA, CORE_SCHEMA, DEFAULT_SCHEMA, load, loadAll, dump, YAMLException, types, safeLoad, safeLoadAll, safeDump } = yaml;
+
+//#endregion
+//#region src/brewing/yaml-validator.ts
+/**
+* YAML recipe validator — reads a beer recipe YAML, validates it against
+* BJCP style guidelines with deterministic checks, then produces an LLM
+* review prompt with full context for deep qualitative analysis.
+*/
+const CalculatorReferenceSchema = object({
+	tool: string(),
+	calculation: string().optional(),
+	ok: boolean().optional(),
+	status: string().optional(),
+	result: record(string(), unknown()).nullable().optional(),
+	errors: array(unknown()).optional()
+}).passthrough();
+const YamlValidatorInputSchema = object({
+	input_file: string().describe("Percorso del file YAML della ricetta."),
+	calculator_results: object({
+		water: CalculatorReferenceSchema.optional(),
+		brewing: CalculatorReferenceSchema.optional(),
+		ibu: CalculatorReferenceSchema.optional(),
+		priming: CalculatorReferenceSchema.optional()
+	}).optional().describe("Risultati JSON dei calculator già eseguiti.")
+});
+const BJCP = {
+	"1A": {
+		code: "1A",
+		category: "1",
+		name: "American Light Lager",
+		og_min: 1.028,
+		og_max: 1.04,
+		fg_min: .998,
+		fg_max: 1.008,
+		abv_min: 2.8,
+		abv_max: 4.2,
+		ibu_min: 8,
+		ibu_max: 12,
+		ebc_min: 4,
+		ebc_max: 6
+	},
+	"1B": {
+		code: "1B",
+		category: "1",
+		name: "American Lager",
+		og_min: 1.04,
+		og_max: 1.05,
+		fg_min: 1.004,
+		fg_max: 1.01,
+		abv_min: 4.2,
+		abv_max: 5.3,
+		ibu_min: 8,
+		ibu_max: 18,
+		ebc_min: 4,
+		ebc_max: 8
+	},
+	"1C": {
+		code: "1C",
+		category: "1",
+		name: "Cream Ale",
+		og_min: 1.042,
+		og_max: 1.055,
+		fg_min: 1.006,
+		fg_max: 1.012,
+		abv_min: 4.2,
+		abv_max: 5.6,
+		ibu_min: 8,
+		ibu_max: 20,
+		ebc_min: 4,
+		ebc_max: 10
+	},
+	"1D": {
+		code: "1D",
+		category: "1",
+		name: "American Wheat Beer",
+		og_min: 1.04,
+		og_max: 1.055,
+		fg_min: 1.008,
+		fg_max: 1.013,
+		abv_min: 4,
+		abv_max: 5.5,
+		ibu_min: 15,
+		ibu_max: 30,
+		ebc_min: 6,
+		ebc_max: 12
+	},
+	"2A": {
+		code: "2A",
+		category: "2",
+		name: "International Pale Lager",
+		og_min: 1.042,
+		og_max: 1.05,
+		fg_min: 1.008,
+		fg_max: 1.012,
+		abv_min: 4.6,
+		abv_max: 6,
+		ibu_min: 18,
+		ibu_max: 25,
+		ebc_min: 4,
+		ebc_max: 10
+	},
+	"2B": {
+		code: "2B",
+		category: "2",
+		name: "International Amber Lager",
+		og_min: 1.042,
+		og_max: 1.055,
+		fg_min: 1.008,
+		fg_max: 1.014,
+		abv_min: 4.6,
+		abv_max: 6,
+		ibu_min: 8,
+		ibu_max: 25,
+		ebc_min: 14,
+		ebc_max: 34
+	},
+	"2C": {
+		code: "2C",
+		category: "2",
+		name: "International Dark Lager",
+		og_min: 1.044,
+		og_max: 1.056,
+		fg_min: 1.008,
+		fg_max: 1.012,
+		abv_min: 4.5,
+		abv_max: 6,
+		ibu_min: 8,
+		ibu_max: 20,
+		ebc_min: 28,
+		ebc_max: 50
+	},
+	"3A": {
+		code: "3A",
+		category: "3",
+		name: "Czech Pale Lager",
+		og_min: 1.028,
+		og_max: 1.044,
+		fg_min: 1.008,
+		fg_max: 1.014,
+		abv_min: 3,
+		abv_max: 4,
+		ibu_min: 20,
+		ibu_max: 35,
+		ebc_min: 6,
+		ebc_max: 14
+	},
+	"3B": {
+		code: "3B",
+		category: "3",
+		name: "Czech Premium Pale Lager",
+		og_min: 1.044,
+		og_max: 1.06,
+		fg_min: 1.013,
+		fg_max: 1.017,
+		abv_min: 4.2,
+		abv_max: 5.8,
+		ibu_min: 30,
+		ibu_max: 45,
+		ebc_min: 6,
+		ebc_max: 14
+	},
+	"3C": {
+		code: "3C",
+		category: "3",
+		name: "Czech Amber Lager",
+		og_min: 1.044,
+		og_max: 1.06,
+		fg_min: 1.013,
+		fg_max: 1.017,
+		abv_min: 4.4,
+		abv_max: 5.8,
+		ibu_min: 20,
+		ibu_max: 35,
+		ebc_min: 20,
+		ebc_max: 40
+	},
+	"3D": {
+		code: "3D",
+		category: "3",
+		name: "Czech Dark Lager",
+		og_min: 1.044,
+		og_max: 1.056,
+		fg_min: 1.013,
+		fg_max: 1.017,
+		abv_min: 4.4,
+		abv_max: 5.8,
+		ibu_min: 18,
+		ibu_max: 34,
+		ebc_min: 34,
+		ebc_max: 70
+	},
+	"4A": {
+		code: "4A",
+		category: "4",
+		name: "Munich Helles",
+		og_min: 1.044,
+		og_max: 1.048,
+		fg_min: 1.006,
+		fg_max: 1.012,
+		abv_min: 4.7,
+		abv_max: 5.4,
+		ibu_min: 16,
+		ibu_max: 22,
+		ebc_min: 6,
+		ebc_max: 10
+	},
+	"4B": {
+		code: "4B",
+		category: "4",
+		name: "Festbier",
+		og_min: 1.054,
+		og_max: 1.058,
+		fg_min: 1.01,
+		fg_max: 1.014,
+		abv_min: 5.8,
+		abv_max: 6.3,
+		ibu_min: 18,
+		ibu_max: 25,
+		ebc_min: 8,
+		ebc_max: 14
+	},
+	"4C": {
+		code: "4C",
+		category: "4",
+		name: "Helles Bock",
+		og_min: 1.064,
+		og_max: 1.072,
+		fg_min: 1.011,
+		fg_max: 1.018,
+		abv_min: 6.3,
+		abv_max: 7.4,
+		ibu_min: 23,
+		ibu_max: 35,
+		ebc_min: 12,
+		ebc_max: 20
+	},
+	"5A": {
+		code: "5A",
+		category: "5",
+		name: "German Leichtbier",
+		og_min: 1.026,
+		og_max: 1.034,
+		fg_min: 1.006,
+		fg_max: 1.01,
+		abv_min: 2.4,
+		abv_max: 3.6,
+		ibu_min: 15,
+		ibu_max: 28,
+		ebc_min: 4,
+		ebc_max: 8
+	},
+	"5B": {
+		code: "5B",
+		category: "5",
+		name: "Kölsch",
+		og_min: 1.044,
+		og_max: 1.05,
+		fg_min: 1.007,
+		fg_max: 1.011,
+		abv_min: 4.4,
+		abv_max: 5.2,
+		ibu_min: 18,
+		ibu_max: 30,
+		ebc_min: 7,
+		ebc_max: 10
+	},
+	"5C": {
+		code: "5C",
+		category: "5",
+		name: "German Helles Exportbier",
+		og_min: 1.048,
+		og_max: 1.056,
+		fg_min: 1.01,
+		fg_max: 1.015,
+		abv_min: 4.8,
+		abv_max: 6,
+		ibu_min: 20,
+		ibu_max: 30,
+		ebc_min: 8,
+		ebc_max: 12
+	},
+	"5D": {
+		code: "5D",
+		category: "5",
+		name: "German Pils",
+		og_min: 1.044,
+		og_max: 1.05,
+		fg_min: 1.008,
+		fg_max: 1.013,
+		abv_min: 4.4,
+		abv_max: 5.2,
+		ibu_min: 22,
+		ibu_max: 40,
+		ebc_min: 4,
+		ebc_max: 8
+	},
+	"6A": {
+		code: "6A",
+		category: "6",
+		name: "Märzen",
+		og_min: 1.054,
+		og_max: 1.06,
+		fg_min: 1.01,
+		fg_max: 1.014,
+		abv_min: 5.8,
+		abv_max: 6.3,
+		ibu_min: 18,
+		ibu_max: 24,
+		ebc_min: 16,
+		ebc_max: 30
+	},
+	"6B": {
+		code: "6B",
+		category: "6",
+		name: "Rauchbier",
+		og_min: 1.05,
+		og_max: 1.057,
+		fg_min: 1.012,
+		fg_max: 1.016,
+		abv_min: 4.8,
+		abv_max: 6,
+		ibu_min: 20,
+		ibu_max: 30,
+		ebc_min: 24,
+		ebc_max: 44
+	},
+	"6C": {
+		code: "6C",
+		category: "6",
+		name: "Dunkels Bock",
+		og_min: 1.064,
+		og_max: 1.072,
+		fg_min: 1.013,
+		fg_max: 1.019,
+		abv_min: 6.3,
+		abv_max: 7.2,
+		ibu_min: 20,
+		ibu_max: 27,
+		ebc_min: 28,
+		ebc_max: 44
+	},
+	"7A": {
+		code: "7A",
+		category: "7",
+		name: "Vienna Lager",
+		og_min: 1.048,
+		og_max: 1.055,
+		fg_min: 1.01,
+		fg_max: 1.014,
+		abv_min: 4.7,
+		abv_max: 5.5,
+		ibu_min: 18,
+		ibu_max: 30,
+		ebc_min: 18,
+		ebc_max: 30
+	},
+	"7B": {
+		code: "7B",
+		category: "7",
+		name: "Altbier",
+		og_min: 1.044,
+		og_max: 1.052,
+		fg_min: 1.008,
+		fg_max: 1.014,
+		abv_min: 4.3,
+		abv_max: 5.5,
+		ibu_min: 25,
+		ibu_max: 50,
+		ebc_min: 22,
+		ebc_max: 34
+	},
+	"7C": {
+		code: "7C",
+		category: "7",
+		name: "Kellerbier",
+		og_min: 1.045,
+		og_max: 1.051,
+		fg_min: 1.008,
+		fg_max: 1.013,
+		abv_min: 4.7,
+		abv_max: 5.4,
+		ibu_min: 20,
+		ibu_max: 35,
+		ebc_min: 6,
+		ebc_max: 20
+	},
+	"8A": {
+		code: "8A",
+		category: "8",
+		name: "Munich Dunkel",
+		og_min: 1.048,
+		og_max: 1.056,
+		fg_min: 1.01,
+		fg_max: 1.016,
+		abv_min: 4.5,
+		abv_max: 5.6,
+		ibu_min: 18,
+		ibu_max: 28,
+		ebc_min: 28,
+		ebc_max: 46
+	},
+	"8B": {
+		code: "8B",
+		category: "8",
+		name: "Schwarzbier",
+		og_min: 1.046,
+		og_max: 1.052,
+		fg_min: 1.01,
+		fg_max: 1.016,
+		abv_min: 4.4,
+		abv_max: 5.4,
+		ibu_min: 22,
+		ibu_max: 30,
+		ebc_min: 34,
+		ebc_max: 62
+	},
+	"9A": {
+		code: "9A",
+		category: "9",
+		name: "Doppelbock",
+		og_min: 1.072,
+		og_max: 1.112,
+		fg_min: 1.016,
+		fg_max: 1.024,
+		abv_min: 7,
+		abv_max: 10,
+		ibu_min: 16,
+		ibu_max: 26,
+		ebc_min: 24,
+		ebc_max: 45
+	},
+	"9B": {
+		code: "9B",
+		category: "9",
+		name: "Eisbock",
+		og_min: 1.078,
+		og_max: 1.12,
+		fg_min: 1.02,
+		fg_max: 1.035,
+		abv_min: 9,
+		abv_max: 14,
+		ibu_min: 25,
+		ibu_max: 35,
+		ebc_min: 36,
+		ebc_max: 68
+	},
+	"9C": {
+		code: "9C",
+		category: "9",
+		name: "Baltic Porter",
+		og_min: 1.06,
+		og_max: 1.09,
+		fg_min: 1.016,
+		fg_max: 1.024,
+		abv_min: 6.5,
+		abv_max: 9.5,
+		ibu_min: 20,
+		ibu_max: 40,
+		ebc_min: 34,
+		ebc_max: 60
+	},
+	"10A": {
+		code: "10A",
+		category: "10",
+		name: "Weissbier",
+		og_min: 1.044,
+		og_max: 1.052,
+		fg_min: 1.01,
+		fg_max: 1.014,
+		abv_min: 4.3,
+		abv_max: 5.6,
+		ibu_min: 8,
+		ibu_max: 15,
+		ebc_min: 4,
+		ebc_max: 14
+	},
+	"10B": {
+		code: "10B",
+		category: "10",
+		name: "Dunkles Weissbier",
+		og_min: 1.044,
+		og_max: 1.056,
+		fg_min: 1.01,
+		fg_max: 1.014,
+		abv_min: 4.3,
+		abv_max: 5.6,
+		ibu_min: 10,
+		ibu_max: 18,
+		ebc_min: 28,
+		ebc_max: 46
+	},
+	"10C": {
+		code: "10C",
+		category: "10",
+		name: "Weizenbock",
+		og_min: 1.064,
+		og_max: 1.09,
+		fg_min: 1.015,
+		fg_max: 1.022,
+		abv_min: 6.5,
+		abv_max: 9,
+		ibu_min: 15,
+		ibu_max: 30,
+		ebc_min: 12,
+		ebc_max: 44
+	},
+	"11A": {
+		code: "11A",
+		category: "11",
+		name: "Ordinary Bitter",
+		og_min: 1.03,
+		og_max: 1.039,
+		fg_min: 1.007,
+		fg_max: 1.011,
+		abv_min: 3.2,
+		abv_max: 3.8,
+		ibu_min: 25,
+		ibu_max: 35,
+		ebc_min: 16,
+		ebc_max: 28
+	},
+	"11B": {
+		code: "11B",
+		category: "11",
+		name: "Best Bitter",
+		og_min: 1.04,
+		og_max: 1.048,
+		fg_min: 1.008,
+		fg_max: 1.012,
+		abv_min: 3.8,
+		abv_max: 4.6,
+		ibu_min: 25,
+		ibu_max: 40,
+		ebc_min: 16,
+		ebc_max: 28
+	},
+	"11C": {
+		code: "11C",
+		category: "11",
+		name: "Strong Bitter",
+		og_min: 1.048,
+		og_max: 1.06,
+		fg_min: 1.01,
+		fg_max: 1.016,
+		abv_min: 4.6,
+		abv_max: 6.2,
+		ibu_min: 30,
+		ibu_max: 50,
+		ebc_min: 18,
+		ebc_max: 40
+	},
+	"12A": {
+		code: "12A",
+		category: "12",
+		name: "British Golden Ale",
+		og_min: 1.038,
+		og_max: 1.053,
+		fg_min: 1.006,
+		fg_max: 1.012,
+		abv_min: 3.8,
+		abv_max: 5,
+		ibu_min: 20,
+		ibu_max: 45,
+		ebc_min: 4,
+		ebc_max: 12
+	},
+	"12B": {
+		code: "12B",
+		category: "12",
+		name: "Australian Sparkling Ale",
+		og_min: 1.038,
+		og_max: 1.05,
+		fg_min: 1.004,
+		fg_max: 1.006,
+		abv_min: 4.5,
+		abv_max: 6,
+		ibu_min: 20,
+		ibu_max: 35,
+		ebc_min: 4,
+		ebc_max: 14
+	},
+	"12C": {
+		code: "12C",
+		category: "12",
+		name: "English IPA",
+		og_min: 1.05,
+		og_max: 1.075,
+		fg_min: 1.01,
+		fg_max: 1.018,
+		abv_min: 5,
+		abv_max: 7.5,
+		ibu_min: 40,
+		ibu_max: 60,
+		ebc_min: 12,
+		ebc_max: 30
+	},
+	"13A": {
+		code: "13A",
+		category: "13",
+		name: "Dark Mild",
+		og_min: 1.03,
+		og_max: 1.038,
+		fg_min: 1.008,
+		fg_max: 1.013,
+		abv_min: 3,
+		abv_max: 3.8,
+		ibu_min: 10,
+		ibu_max: 25,
+		ebc_min: 24,
+		ebc_max: 44
+	},
+	"13B": {
+		code: "13B",
+		category: "13",
+		name: "British Brown Ale",
+		og_min: 1.04,
+		og_max: 1.052,
+		fg_min: 1.008,
+		fg_max: 1.013,
+		abv_min: 4.2,
+		abv_max: 5.9,
+		ibu_min: 20,
+		ibu_max: 30,
+		ebc_min: 24,
+		ebc_max: 44
+	},
+	"13C": {
+		code: "13C",
+		category: "13",
+		name: "English Porter",
+		og_min: 1.04,
+		og_max: 1.052,
+		fg_min: 1.008,
+		fg_max: 1.014,
+		abv_min: 4,
+		abv_max: 5.4,
+		ibu_min: 18,
+		ibu_max: 35,
+		ebc_min: 40,
+		ebc_max: 60
+	},
+	"14A": {
+		code: "14A",
+		category: "14",
+		name: "Scottish Light",
+		og_min: 1.03,
+		og_max: 1.035,
+		fg_min: 1.01,
+		fg_max: 1.013,
+		abv_min: 2.5,
+		abv_max: 3.2,
+		ibu_min: 10,
+		ibu_max: 20,
+		ebc_min: 30,
+		ebc_max: 50
+	},
+	"14B": {
+		code: "14B",
+		category: "14",
+		name: "Scottish Heavy",
+		og_min: 1.035,
+		og_max: 1.04,
+		fg_min: 1.01,
+		fg_max: 1.015,
+		abv_min: 3.2,
+		abv_max: 3.9,
+		ibu_min: 10,
+		ibu_max: 20,
+		ebc_min: 24,
+		ebc_max: 40
+	},
+	"14C": {
+		code: "14C",
+		category: "14",
+		name: "Scottish Export",
+		og_min: 1.04,
+		og_max: 1.06,
+		fg_min: 1.01,
+		fg_max: 1.016,
+		abv_min: 3.9,
+		abv_max: 6,
+		ibu_min: 15,
+		ibu_max: 30,
+		ebc_min: 24,
+		ebc_max: 40
+	},
+	"15A": {
+		code: "15A",
+		category: "15",
+		name: "Irish Red Ale",
+		og_min: 1.036,
+		og_max: 1.046,
+		fg_min: 1.01,
+		fg_max: 1.014,
+		abv_min: 3.8,
+		abv_max: 5,
+		ibu_min: 18,
+		ibu_max: 28,
+		ebc_min: 18,
+		ebc_max: 36
+	},
+	"15B": {
+		code: "15B",
+		category: "15",
+		name: "Irish Stout",
+		og_min: 1.036,
+		og_max: 1.044,
+		fg_min: 1.007,
+		fg_max: 1.011,
+		abv_min: 4,
+		abv_max: 4.5,
+		ibu_min: 25,
+		ibu_max: 45,
+		ebc_min: 50,
+		ebc_max: 80
+	},
+	"15C": {
+		code: "15C",
+		category: "15",
+		name: "Irish Extra Stout",
+		og_min: 1.052,
+		og_max: 1.062,
+		fg_min: 1.01,
+		fg_max: 1.014,
+		abv_min: 5.5,
+		abv_max: 6.5,
+		ibu_min: 35,
+		ibu_max: 50,
+		ebc_min: 60,
+		ebc_max: 80
+	},
+	"16A": {
+		code: "16A",
+		category: "16",
+		name: "Sweet Stout",
+		og_min: 1.044,
+		og_max: 1.06,
+		fg_min: 1.012,
+		fg_max: 1.024,
+		abv_min: 4,
+		abv_max: 6,
+		ibu_min: 20,
+		ibu_max: 40,
+		ebc_min: 60,
+		ebc_max: 100
+	},
+	"16B": {
+		code: "16B",
+		category: "16",
+		name: "Oatmeal Stout",
+		og_min: 1.045,
+		og_max: 1.065,
+		fg_min: 1.01,
+		fg_max: 1.018,
+		abv_min: 4.2,
+		abv_max: 5.9,
+		ibu_min: 25,
+		ibu_max: 40,
+		ebc_min: 40,
+		ebc_max: 80
+	},
+	"16C": {
+		code: "16C",
+		category: "16",
+		name: "Tropical Stout",
+		og_min: 1.056,
+		og_max: 1.075,
+		fg_min: 1.01,
+		fg_max: 1.018,
+		abv_min: 5.5,
+		abv_max: 8,
+		ibu_min: 30,
+		ibu_max: 50,
+		ebc_min: 60,
+		ebc_max: 100
+	},
+	"16D": {
+		code: "16D",
+		category: "16",
+		name: "Foreign Extra Stout",
+		og_min: 1.056,
+		og_max: 1.075,
+		fg_min: 1.01,
+		fg_max: 1.018,
+		abv_min: 6.3,
+		abv_max: 8,
+		ibu_min: 50,
+		ibu_max: 70,
+		ebc_min: 60,
+		ebc_max: 100
+	},
+	"17A": {
+		code: "17A",
+		category: "17",
+		name: "British Strong Ale",
+		og_min: 1.055,
+		og_max: 1.08,
+		fg_min: 1.015,
+		fg_max: 1.022,
+		abv_min: 5.5,
+		abv_max: 8,
+		ibu_min: 30,
+		ibu_max: 60,
+		ebc_min: 16,
+		ebc_max: 44
+	},
+	"17B": {
+		code: "17B",
+		category: "17",
+		name: "Old Ale",
+		og_min: 1.055,
+		og_max: 1.088,
+		fg_min: 1.015,
+		fg_max: 1.022,
+		abv_min: 5.5,
+		abv_max: 9,
+		ibu_min: 30,
+		ibu_max: 60,
+		ebc_min: 24,
+		ebc_max: 44
+	},
+	"17C": {
+		code: "17C",
+		category: "17",
+		name: "Wee Heavy",
+		og_min: 1.07,
+		og_max: 1.13,
+		fg_min: 1.018,
+		fg_max: 1.04,
+		abv_min: 6.5,
+		abv_max: 10,
+		ibu_min: 17,
+		ibu_max: 35,
+		ebc_min: 28,
+		ebc_max: 60
+	},
+	"17D": {
+		code: "17D",
+		category: "17",
+		name: "English Barley Wine",
+		og_min: 1.08,
+		og_max: 1.12,
+		fg_min: 1.018,
+		fg_max: 1.03,
+		abv_min: 8,
+		abv_max: 12,
+		ibu_min: 35,
+		ibu_max: 70,
+		ebc_min: 20,
+		ebc_max: 44
+	},
+	"18A": {
+		code: "18A",
+		category: "18",
+		name: "Blonde Ale",
+		og_min: 1.038,
+		og_max: 1.054,
+		fg_min: 1.008,
+		fg_max: 1.013,
+		abv_min: 3.8,
+		abv_max: 5.5,
+		ibu_min: 15,
+		ibu_max: 28,
+		ebc_min: 6,
+		ebc_max: 14
+	},
+	"18B": {
+		code: "18B",
+		category: "18",
+		name: "American Pale Ale",
+		og_min: 1.045,
+		og_max: 1.06,
+		fg_min: 1.01,
+		fg_max: 1.015,
+		abv_min: 4.5,
+		abv_max: 6.2,
+		ibu_min: 30,
+		ibu_max: 50,
+		ebc_min: 10,
+		ebc_max: 20
+	},
+	"19A": {
+		code: "19A",
+		category: "19",
+		name: "American Amber Ale",
+		og_min: 1.045,
+		og_max: 1.06,
+		fg_min: 1.01,
+		fg_max: 1.015,
+		abv_min: 4.5,
+		abv_max: 6.2,
+		ibu_min: 25,
+		ibu_max: 40,
+		ebc_min: 20,
+		ebc_max: 34
+	},
+	"19B": {
+		code: "19B",
+		category: "19",
+		name: "California Common",
+		og_min: 1.048,
+		og_max: 1.054,
+		fg_min: 1.011,
+		fg_max: 1.014,
+		abv_min: 4.5,
+		abv_max: 5.5,
+		ibu_min: 30,
+		ibu_max: 45,
+		ebc_min: 20,
+		ebc_max: 28
+	},
+	"19C": {
+		code: "19C",
+		category: "19",
+		name: "American Brown Ale",
+		og_min: 1.045,
+		og_max: 1.06,
+		fg_min: 1.01,
+		fg_max: 1.016,
+		abv_min: 4.3,
+		abv_max: 6.2,
+		ibu_min: 20,
+		ibu_max: 30,
+		ebc_min: 36,
+		ebc_max: 60
+	},
+	"20A": {
+		code: "20A",
+		category: "20",
+		name: "American Porter",
+		og_min: 1.05,
+		og_max: 1.07,
+		fg_min: 1.012,
+		fg_max: 1.018,
+		abv_min: 4.8,
+		abv_max: 6.5,
+		ibu_min: 25,
+		ibu_max: 50,
+		ebc_min: 40,
+		ebc_max: 80
+	},
+	"20B": {
+		code: "20B",
+		category: "20",
+		name: "American Stout",
+		og_min: 1.05,
+		og_max: 1.075,
+		fg_min: 1.01,
+		fg_max: 1.022,
+		abv_min: 5,
+		abv_max: 7,
+		ibu_min: 35,
+		ibu_max: 75,
+		ebc_min: 60,
+		ebc_max: 100
+	},
+	"20C": {
+		code: "20C",
+		category: "20",
+		name: "Imperial Stout",
+		og_min: 1.075,
+		og_max: 1.115,
+		fg_min: 1.018,
+		fg_max: 1.03,
+		abv_min: 8,
+		abv_max: 12,
+		ibu_min: 50,
+		ibu_max: 90,
+		ebc_min: 60,
+		ebc_max: 100
+	},
+	"21A": {
+		code: "21A",
+		category: "21",
+		name: "American IPA",
+		og_min: 1.056,
+		og_max: 1.07,
+		fg_min: 1.008,
+		fg_max: 1.014,
+		abv_min: 5.5,
+		abv_max: 7.5,
+		ibu_min: 40,
+		ibu_max: 70,
+		ebc_min: 12,
+		ebc_max: 28
+	},
+	"21B": {
+		code: "21B",
+		category: "21",
+		name: "Specialty IPA",
+		og_min: 1.05,
+		og_max: 1.085,
+		fg_min: 1.008,
+		fg_max: 1.02,
+		abv_min: 5,
+		abv_max: 9,
+		ibu_min: 25,
+		ibu_max: 100,
+		ebc_min: 6,
+		ebc_max: 80
+	},
+	"21B1": {
+		code: "21B1",
+		category: "21",
+		name: "New England IPA",
+		og_min: 1.06,
+		og_max: 1.085,
+		fg_min: 1.01,
+		fg_max: 1.02,
+		abv_min: 6,
+		abv_max: 9,
+		ibu_min: 25,
+		ibu_max: 60,
+		ebc_min: 6,
+		ebc_max: 16
+	},
+	"21C": {
+		code: "21C",
+		category: "21",
+		name: "Hazy IPA",
+		og_min: 1.06,
+		og_max: 1.085,
+		fg_min: 1.01,
+		fg_max: 1.02,
+		abv_min: 6,
+		abv_max: 9,
+		ibu_min: 25,
+		ibu_max: 60,
+		ebc_min: 6,
+		ebc_max: 16
+	},
+	"22A": {
+		code: "22A",
+		category: "22",
+		name: "Double IPA",
+		og_min: 1.065,
+		og_max: 1.085,
+		fg_min: 1.01,
+		fg_max: 1.02,
+		abv_min: 7.5,
+		abv_max: 10,
+		ibu_min: 60,
+		ibu_max: 120,
+		ebc_min: 12,
+		ebc_max: 30
+	},
+	"22B": {
+		code: "22B",
+		category: "22",
+		name: "American Strong Ale",
+		og_min: 1.062,
+		og_max: 1.09,
+		fg_min: 1.014,
+		fg_max: 1.024,
+		abv_min: 6.3,
+		abv_max: 10,
+		ibu_min: 50,
+		ibu_max: 100,
+		ebc_min: 14,
+		ebc_max: 44
+	},
+	"22C": {
+		code: "22C",
+		category: "22",
+		name: "American Barleywine",
+		og_min: 1.08,
+		og_max: 1.12,
+		fg_min: 1.016,
+		fg_max: 1.03,
+		abv_min: 8,
+		abv_max: 12,
+		ibu_min: 50,
+		ibu_max: 100,
+		ebc_min: 20,
+		ebc_max: 40
+	},
+	"22D": {
+		code: "22D",
+		category: "22",
+		name: "Wheatwine",
+		og_min: 1.08,
+		og_max: 1.12,
+		fg_min: 1.016,
+		fg_max: 1.03,
+		abv_min: 8,
+		abv_max: 12,
+		ibu_min: 30,
+		ibu_max: 60,
+		ebc_min: 16,
+		ebc_max: 30
+	},
+	"23A": {
+		code: "23A",
+		category: "23",
+		name: "Berliner Weisse",
+		og_min: 1.028,
+		og_max: 1.032,
+		fg_min: 1.003,
+		fg_max: 1.006,
+		abv_min: 2.8,
+		abv_max: 3.8,
+		ibu_min: 3,
+		ibu_max: 8,
+		ebc_min: 4,
+		ebc_max: 6
+	},
+	"23B": {
+		code: "23B",
+		category: "23",
+		name: "Flanders Red Ale",
+		og_min: 1.048,
+		og_max: 1.057,
+		fg_min: 1.002,
+		fg_max: 1.012,
+		abv_min: 4.6,
+		abv_max: 6.5,
+		ibu_min: 10,
+		ibu_max: 25,
+		ebc_min: 20,
+		ebc_max: 34
+	},
+	"23C": {
+		code: "23C",
+		category: "23",
+		name: "Oud Bruin",
+		og_min: 1.04,
+		og_max: 1.074,
+		fg_min: 1.008,
+		fg_max: 1.012,
+		abv_min: 4,
+		abv_max: 8,
+		ibu_min: 20,
+		ibu_max: 25,
+		ebc_min: 30,
+		ebc_max: 44
+	},
+	"23D": {
+		code: "23D",
+		category: "23",
+		name: "Lambic",
+		og_min: 1.04,
+		og_max: 1.054,
+		fg_min: 1.001,
+		fg_max: 1.01,
+		abv_min: 5,
+		abv_max: 6.5,
+		ibu_min: 0,
+		ibu_max: 10,
+		ebc_min: 6,
+		ebc_max: 26
+	},
+	"23E": {
+		code: "23E",
+		category: "23",
+		name: "Gueuze",
+		og_min: 1.04,
+		og_max: 1.06,
+		fg_min: 1,
+		fg_max: 1.006,
+		abv_min: 5,
+		abv_max: 8,
+		ibu_min: 0,
+		ibu_max: 10,
+		ebc_min: 6,
+		ebc_max: 26
+	},
+	"23F": {
+		code: "23F",
+		category: "23",
+		name: "Fruit Lambic",
+		og_min: 1.04,
+		og_max: 1.06,
+		fg_min: 1,
+		fg_max: 1.01,
+		abv_min: 5,
+		abv_max: 7,
+		ibu_min: 0,
+		ibu_max: 10,
+		ebc_min: 6,
+		ebc_max: 26
+	},
+	"23G": {
+		code: "23G",
+		category: "23",
+		name: "Gose",
+		og_min: 1.036,
+		og_max: 1.056,
+		fg_min: 1.006,
+		fg_max: 1.01,
+		abv_min: 4.2,
+		abv_max: 4.8,
+		ibu_min: 5,
+		ibu_max: 12,
+		ebc_min: 6,
+		ebc_max: 12
+	},
+	"24A": {
+		code: "24A",
+		category: "24",
+		name: "Witbier",
+		og_min: 1.044,
+		og_max: 1.052,
+		fg_min: 1.008,
+		fg_max: 1.012,
+		abv_min: 4.5,
+		abv_max: 5.5,
+		ibu_min: 10,
+		ibu_max: 20,
+		ebc_min: 4,
+		ebc_max: 8
+	},
+	"24B": {
+		code: "24B",
+		category: "24",
+		name: "Belgian Pale Ale",
+		og_min: 1.048,
+		og_max: 1.054,
+		fg_min: 1.01,
+		fg_max: 1.014,
+		abv_min: 4.8,
+		abv_max: 5.5,
+		ibu_min: 20,
+		ibu_max: 30,
+		ebc_min: 16,
+		ebc_max: 28
+	},
+	"24C": {
+		code: "24C",
+		category: "24",
+		name: "Bière de Garde",
+		og_min: 1.06,
+		og_max: 1.08,
+		fg_min: 1.008,
+		fg_max: 1.016,
+		abv_min: 6,
+		abv_max: 8.5,
+		ibu_min: 18,
+		ibu_max: 28,
+		ebc_min: 12,
+		ebc_max: 38
+	},
+	"25A": {
+		code: "25A",
+		category: "25",
+		name: "Belgian Blond Ale",
+		og_min: 1.062,
+		og_max: 1.075,
+		fg_min: 1.008,
+		fg_max: 1.018,
+		abv_min: 6,
+		abv_max: 7.5,
+		ibu_min: 15,
+		ibu_max: 30,
+		ebc_min: 8,
+		ebc_max: 14
+	},
+	"25B": {
+		code: "25B",
+		category: "25",
+		name: "Saison",
+		og_min: 1.048,
+		og_max: 1.065,
+		fg_min: 1.002,
+		fg_max: 1.008,
+		abv_min: 5,
+		abv_max: 7,
+		ibu_min: 20,
+		ibu_max: 35,
+		ebc_min: 10,
+		ebc_max: 20
+	},
+	"25C": {
+		code: "25C",
+		category: "25",
+		name: "Belgian Golden Strong Ale",
+		og_min: 1.07,
+		og_max: 1.095,
+		fg_min: 1.005,
+		fg_max: 1.016,
+		abv_min: 7.5,
+		abv_max: 10.5,
+		ibu_min: 22,
+		ibu_max: 35,
+		ebc_min: 6,
+		ebc_max: 10
+	},
+	"26A": {
+		code: "26A",
+		category: "26",
+		name: "Trappist Single",
+		og_min: 1.044,
+		og_max: 1.054,
+		fg_min: 1.004,
+		fg_max: 1.01,
+		abv_min: 4.8,
+		abv_max: 6,
+		ibu_min: 25,
+		ibu_max: 45,
+		ebc_min: 6,
+		ebc_max: 10
+	},
+	"26B": {
+		code: "26B",
+		category: "26",
+		name: "Belgian Dubbel",
+		og_min: 1.062,
+		og_max: 1.075,
+		fg_min: 1.008,
+		fg_max: 1.018,
+		abv_min: 6,
+		abv_max: 7.6,
+		ibu_min: 15,
+		ibu_max: 25,
+		ebc_min: 20,
+		ebc_max: 34
+	},
+	"26C": {
+		code: "26C",
+		category: "26",
+		name: "Belgian Tripel",
+		og_min: 1.075,
+		og_max: 1.085,
+		fg_min: 1.008,
+		fg_max: 1.014,
+		abv_min: 7.5,
+		abv_max: 9.5,
+		ibu_min: 20,
+		ibu_max: 40,
+		ebc_min: 8,
+		ebc_max: 14
+	},
+	"26D": {
+		code: "26D",
+		category: "26",
+		name: "Belgian Dark Strong Ale",
+		og_min: 1.075,
+		og_max: 1.11,
+		fg_min: 1.01,
+		fg_max: 1.024,
+		abv_min: 8,
+		abv_max: 12,
+		ibu_min: 20,
+		ibu_max: 35,
+		ebc_min: 24,
+		ebc_max: 45
+	},
+	"27A": {
+		code: "27A",
+		category: "27",
+		name: "Grodziskie",
+		og_min: 1.028,
+		og_max: 1.032,
+		fg_min: 1.006,
+		fg_max: 1.012,
+		abv_min: 2.5,
+		abv_max: 3.3,
+		ibu_min: 20,
+		ibu_max: 35,
+		ebc_min: 6,
+		ebc_max: 12
+	},
+	"27B": {
+		code: "27B",
+		category: "27",
+		name: "Lichtenhainer",
+		og_min: 1.032,
+		og_max: 1.04,
+		fg_min: 1.004,
+		fg_max: 1.008,
+		abv_min: 3.5,
+		abv_max: 4.7,
+		ibu_min: 5,
+		ibu_max: 12,
+		ebc_min: 6,
+		ebc_max: 12
+	},
+	"27C": {
+		code: "27C",
+		category: "27",
+		name: "Roggenbier",
+		og_min: 1.046,
+		og_max: 1.056,
+		fg_min: 1.01,
+		fg_max: 1.014,
+		abv_min: 4.5,
+		abv_max: 6,
+		ibu_min: 10,
+		ibu_max: 20,
+		ebc_min: 24,
+		ebc_max: 40
+	},
+	"27D": {
+		code: "27D",
+		category: "27",
+		name: "Sahti",
+		og_min: 1.076,
+		og_max: 1.12,
+		fg_min: 1.016,
+		fg_max: 1.04,
+		abv_min: 7,
+		abv_max: 11,
+		ibu_min: 0,
+		ibu_max: 15,
+		ebc_min: 8,
+		ebc_max: 44
+	},
+	"27E": {
+		code: "27E",
+		category: "27",
+		name: "Kentucky Common",
+		og_min: 1.044,
+		og_max: 1.055,
+		fg_min: 1.01,
+		fg_max: 1.018,
+		abv_min: 4,
+		abv_max: 5.5,
+		ibu_min: 15,
+		ibu_max: 30,
+		ebc_min: 22,
+		ebc_max: 50
+	},
+	"27F": {
+		code: "27F",
+		category: "27",
+		name: "Pre-Prohibition Lager",
+		og_min: 1.044,
+		og_max: 1.06,
+		fg_min: 1.01,
+		fg_max: 1.015,
+		abv_min: 4.5,
+		abv_max: 6,
+		ibu_min: 25,
+		ibu_max: 40,
+		ebc_min: 6,
+		ebc_max: 12
+	},
+	"27G": {
+		code: "27G",
+		category: "27",
+		name: "Pre-Prohibition Porter",
+		og_min: 1.046,
+		og_max: 1.06,
+		fg_min: 1.01,
+		fg_max: 1.016,
+		abv_min: 4.5,
+		abv_max: 6,
+		ibu_min: 20,
+		ibu_max: 30,
+		ebc_min: 40,
+		ebc_max: 80
+	},
+	"27H": {
+		code: "27H",
+		category: "27",
+		name: "London Brown Ale",
+		og_min: 1.033,
+		og_max: 1.038,
+		fg_min: 1.012,
+		fg_max: 1.015,
+		abv_min: 2.8,
+		abv_max: 3.6,
+		ibu_min: 15,
+		ibu_max: 20,
+		ebc_min: 44,
+		ebc_max: 70
+	},
+	"28A": {
+		code: "28A",
+		category: "28",
+		name: "Brett Beer",
+		og_min: 1.03,
+		og_max: 1.08,
+		fg_min: 1,
+		fg_max: 1.012,
+		abv_min: 3,
+		abv_max: 9,
+		ibu_min: 0,
+		ibu_max: 50,
+		ebc_min: 4,
+		ebc_max: 40
+	},
+	"28B": {
+		code: "28B",
+		category: "28",
+		name: "Mixed Fermentation Sour Beer",
+		og_min: 1.03,
+		og_max: 1.08,
+		fg_min: 1,
+		fg_max: 1.012,
+		abv_min: 3,
+		abv_max: 9,
+		ibu_min: 0,
+		ibu_max: 30,
+		ebc_min: 4,
+		ebc_max: 40
+	},
+	"28C": {
+		code: "28C",
+		category: "28",
+		name: "Wild Specialty Beer",
+		og_min: 1.03,
+		og_max: 1.08,
+		fg_min: 1,
+		fg_max: 1.012,
+		abv_min: 3,
+		abv_max: 9,
+		ibu_min: 0,
+		ibu_max: 30,
+		ebc_min: 4,
+		ebc_max: 40
+	},
+	"28D": {
+		code: "28D",
+		category: "28",
+		name: "Straight Sour Beer",
+		og_min: 1.03,
+		og_max: 1.05,
+		fg_min: 1,
+		fg_max: 1.012,
+		abv_min: 3,
+		abv_max: 5,
+		ibu_min: 0,
+		ibu_max: 15,
+		ebc_min: 4,
+		ebc_max: 16
+	},
+	"29A": {
+		code: "29A",
+		category: "29",
+		name: "Fruit Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.001,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"29B": {
+		code: "29B",
+		category: "29",
+		name: "Fruit and Spice Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.001,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"29C": {
+		code: "29C",
+		category: "29",
+		name: "Specialty Fruit Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.001,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"29D": {
+		code: "29D",
+		category: "29",
+		name: "Grape Ale",
+		og_min: 1.04,
+		og_max: 1.11,
+		fg_min: 1.004,
+		fg_max: 1.03,
+		abv_min: 4.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 50,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"30A": {
+		code: "30A",
+		category: "30",
+		name: "Spice, Herb or Vegetable Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.001,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"30B": {
+		code: "30B",
+		category: "30",
+		name: "Autumn Seasonal Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.001,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"30C": {
+		code: "30C",
+		category: "30",
+		name: "Winter Seasonal Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.001,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"31A": {
+		code: "31A",
+		category: "31",
+		name: "Alternative Grain Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.001,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"31B": {
+		code: "31B",
+		category: "31",
+		name: "Alternative Sugar Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.001,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"32A": {
+		code: "32A",
+		category: "32",
+		name: "Classic Style Smoked Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.004,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"32B": {
+		code: "32B",
+		category: "32",
+		name: "Specialty Smoked Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.004,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"33A": {
+		code: "33A",
+		category: "33",
+		name: "Wood-Aged Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.004,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"33B": {
+		code: "33B",
+		category: "33",
+		name: "Specialty Wood-Aged Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.004,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"34A": {
+		code: "34A",
+		category: "34",
+		name: "Commercial Specialty Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.001,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"34B": {
+		code: "34B",
+		category: "34",
+		name: "Mixed-Style Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.001,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 5,
+		ibu_max: 70,
+		ebc_min: 4,
+		ebc_max: 100
+	},
+	"34C": {
+		code: "34C",
+		category: "34",
+		name: "Experimental Beer",
+		og_min: 1.03,
+		og_max: 1.11,
+		fg_min: 1.001,
+		fg_max: 1.024,
+		abv_min: 2.5,
+		abv_max: 12,
+		ibu_min: 0,
+		ibu_max: 100,
+		ebc_min: 0,
+		ebc_max: 100
+	}
+};
+function findStyle(q) {
+	if (BJCP[q]) return BJCP[q];
+	const lq = q.toLowerCase();
+	for (const s of Object.values(BJCP)) {
+		if (s.name.toLowerCase().includes(lq)) return s;
+		if (s.code.toLowerCase() === lq) return s;
+	}
+	const codeMatch = q.match(/\bBJCP\s+([0-9]+[A-Za-z]?)\b/i);
+	if (codeMatch) {
+		const code = codeMatch[1].toUpperCase();
+		if (BJCP[code]) return BJCP[code];
+	}
+	const bareCode = q.match(/\b([0-9]{1,2}[A-Z][0-9]?)\b/i);
+	if (bareCode) {
+		const code = bareCode[1].toUpperCase();
+		if (BJCP[code]) return BJCP[code];
+	}
+}
+function findAllStyles(query) {
+	const lq = query.toLowerCase();
+	const matches = Object.values(BJCP).filter((s) => s.name.toLowerCase().includes(lq) || s.code.toLowerCase().includes(lq));
+	if (matches.length > 0) return matches;
+	const m = query.match(/\bBJ\s+([0-9A-Z]+)\b/i) ?? query.match(/\b([0-9]{1,2}[A-Z][0-9]?)\b/i);
+	if (m) {
+		const code = m[1].toUpperCase();
+		const s = BJCP[code];
+		if (s) return [s];
+	}
+	return [];
+}
+const VALID_HOP_USES = /* @__PURE__ */ new Set([
+	"boil",
+	"whirlpool",
+	"dry_hop",
+	"first_wort",
+	"mash",
+	"hopback",
+	"dip_hop",
+	"hop_stand"
+]);
+function pickNum(obj, keys) {
+	if (!obj) return void 0;
+	for (const k of keys) {
+		const v = obj[k];
+		if (v != null && !Number.isNaN(Number(v))) return Number(v);
+	}
+}
+function pickStr(obj, keys) {
+	if (!obj) return void 0;
+	for (const k of keys) {
+		const v = obj[k];
+		if (typeof v === "string" && v.trim() !== "") return v;
+	}
+}
+const YAML_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
+	"schema_version",
+	"nome",
+	"stile",
+	"codice_bjcp",
+	"descrizione",
+	"note",
+	"parametri",
+	"grist",
+	"luppolatura",
+	"lievito",
+	"mash",
+	"fermentazione",
+	"bollitura",
+	"acqua",
+	"agua",
+	"sparge",
+	"sales",
+	"mash_salts",
+	"carbonazione",
+	"spezie",
+	"zuccheri",
+	"confezionamento",
+	"obiettivi_sensoriali",
+	"vincoli_produzione",
+	"fonte"
+]);
+function collectSchemaIssues(data) {
+	const issues = [];
+	for (const key of Object.keys(data)) if (!YAML_TOP_LEVEL_KEYS.has(key)) issues.push({
+		path: key,
+		message: "Campo non riconosciuto."
+	});
+	for (const key of ["nome", "stile"]) if (data[key] !== void 0 && typeof data[key] !== "string") issues.push({
+		path: key,
+		message: "Il valore deve essere una stringa."
+	});
+	const params = data["parametri"];
+	if (params !== void 0 && (typeof params !== "object" || params === null || Array.isArray(params))) issues.push({
+		path: "parametri",
+		message: "Il valore deve essere un oggetto."
+	});
+	else if (params && typeof params === "object" && !Array.isArray(params)) {
+		const parameterRecord = params;
+		for (const key of [
+			"batch_size_litri",
+			"og",
+			"fg",
+			"ibu",
+			"ebc",
+			"abv_percent",
+			"efficienza_percent",
+			"bollitura_min",
+			"pre_boil_litri",
+			"post_boil_litri",
+			"fermentatore_litri",
+			"confezionamento_litri",
+			"carbonazione_vol",
+			"priming_gl"
+		]) if (key in parameterRecord && (typeof parameterRecord[key] !== "number" || !Number.isFinite(parameterRecord[key]))) issues.push({
+			path: `parametri.${key}`,
+			message: "Il valore deve essere un numero finito."
+		});
+	}
+	for (const [section, value] of Object.entries(data)) if ([
+		"grist",
+		"luppolatura",
+		"spezie",
+		"zuccheri"
+	].includes(section) && value !== void 0 && !Array.isArray(value)) issues.push({
+		path: section,
+		message: "Il valore deve essere una lista."
+	});
+	return issues;
+}
+function parseYamlRecipe(filePath) {
+	if (!existsSync(filePath)) throw new Error(`File non trovato: ${filePath}`);
+	const raw = readFileSync(filePath, "utf-8");
+	const data = load(raw);
+	if (typeof data !== "object" || data === null) throw new Error("Il file YAML non contiene un oggetto valido.");
+	const d = data;
+	const schemaIssues = collectSchemaIssues(d);
+	const schemaVersion = d["schema_version"];
+	if (schemaVersion !== void 0 && typeof schemaVersion !== "string") schemaIssues.push({
+		path: "schema_version",
+		message: "La versione dello schema deve essere una stringa."
+	});
+	if (schemaIssues.length > 0) throw new Error(`Schema YAML non valido: ${schemaIssues.map((issue) => `${issue.path}: ${issue.message}`).join("; ")}`);
+	const params = d["parametri"] ?? {};
+	const recipe_name = typeof d["nome"] === "string" ? d["nome"].trim() : "";
+	const beer_style = typeof d["stile"] === "string" ? d["stile"].trim() : "";
+	const batch_size_liters = Number(params["batch_size_litri"]);
+	const og = Number(params["og"]);
+	const fg = Number(params["fg"]);
+	const ibu = Number(params["ibu"]);
+	const ebc = params["ebc"] != null ? Number(params["ebc"]) : void 0;
+	const abv_percent = params["abv_percent"] != null ? Number(params["abv_percent"]) : void 0;
+	const efficiency_percent = params["efficienza_percent"] != null ? Number(params["efficienza_percent"]) : void 0;
+	const bollitura = d["bollitura"] ?? d["bolliura"];
+	const boil_time_minutes = pickNum(params, ["bollitura_min", "duracion_bollitura_min"]) ?? pickNum(bollitura, [
+		"durata_min",
+		"duration_min",
+		"duracion_min"
+	]);
+	const pre_boil_volume_liters = pickNum(params, ["pre_boil_litri", "pre_boil_volumen_litri"]) ?? pickNum(bollitura, [
+		"volume_pre_boil_litri",
+		"pre_boil_litri",
+		"volumen_pre_boil_litri"
+	]);
+	const post_boil_volume_liters = pickNum(params, ["post_boil_litri", "post_boil_volumen_litri"]) ?? pickNum(bollitura, [
+		"volume_post_boil_litri",
+		"post_boil_litri",
+		"volumen_post_boil_litri"
+	]);
+	const fermentation_volume_liters = pickNum(params, [
+		"fermentatore_litri",
+		"volume_fermentatore",
+		"fermentador_litri"
+	]);
+	const packaging_volume_liters = pickNum(params, [
+		"confezionamento_litri",
+		"confezionamiento_litri",
+		"envasado_litri",
+		"embotellado_litri"
+	]);
+	const impianto = typeof params["impianto"] === "string" ? params["impianto"] : void 0;
+	const carbonazione = d["carbonazione"] ?? d["carbonatacion"];
+	const carbonation_volumes = pickNum(params, ["carbonazione_vol", "co2_volumi"]) ?? pickNum(carbonazione, [
+		"co2_volumi",
+		"co2_vol",
+		"volumen_co2",
+		"vol_co2"
+	]);
+	const carbonation_method = pickStr(params, ["carbonazione_metodo", "metodo_carbonatacion"]) ?? pickStr(carbonazione, ["metodo", "metodo_carbonatacion"]);
+	const priming_sugar_gl = pickNum(params, ["priming_gl", "priming_g_l"]) ?? pickNum(carbonazione, [
+		"zucchero_g_per_litro",
+		"azucar_g_por_litro",
+		"priming_gl"
+	]);
+	const grain_bill = (Array.isArray(d["grist"]) ? d["grist"] : []).map((g) => ({
+		malt: String(g["malto"] ?? ""),
+		kg: Number(g["kg"] ?? 0),
+		percent: g["percent"] != null ? Number(g["percent"]) : void 0,
+		ebc: g["ebc"] != null ? Number(g["ebc"]) : void 0,
+		note: typeof g["note"] === "string" ? g["note"] : void 0
+	}));
+	const hop_schedule = (Array.isArray(d["luppolatura"]) ? d["luppolatura"] : []).map((h) => ({
+		variety: String(h["varieta"] ?? ""),
+		grams: Number(h["grammi"] ?? 0),
+		time_minutes: Number(h["tempo_min"] ?? 0),
+		use: String(h["uso"] ?? "boil"),
+		aa_percent: h["aa_percent"] != null ? Number(h["aa_percent"]) : void 0,
+		ibu_contrib: h["ibu_stimati"] != null ? Number(h["ibu_stimati"]) : void 0,
+		note: typeof h["note"] === "string" ? h["note"] : void 0
+	}));
+	const lievito = d["lievito"] ?? {};
+	const yeast = {
+		strain: String(lievito["ceppo"] ?? ""),
+		attenuation_percent: lievito["attenuazione_percent"] != null ? Number(lievito["attenuazione_percent"]) : void 0,
+		lab: typeof lievito["laboratorio"] === "string" ? lievito["laboratorio"] : void 0,
+		temperature_c_min: lievito["temp_min_c"] != null ? Number(lievito["temp_min_c"]) : void 0,
+		temperature_c_max: lievito["temp_max_c"] != null ? Number(lievito["temp_max_c"]) : void 0
+	};
+	const mash = d["mash"] ?? {};
+	const mash_temp_c = mash["temperatura_c"] != null ? Number(mash["temperatura_c"]) : void 0;
+	const mash_steps = Array.isArray(mash["steps"]) ? mash["steps"].map((s) => ({
+		temperature_c: Number(s["temperatura_c"] ?? 0),
+		time_minutes: Number(s["tempo_min"] ?? 0),
+		note: typeof s["note"] === "string" ? s["note"] : void 0
+	})) : void 0;
+	const ferm = d["fermentazione"] ?? {};
+	const fermentation_temp_c = ferm["temperatura_c"] != null ? Number(ferm["temperatura_c"]) : void 0;
+	const acqua = d["acqua"];
+	const water_profile = acqua ? {
+		ca: Number(pickNum(acqua, ["ca", "ca_mg_l"]) ?? 0),
+		mg: Number(pickNum(acqua, ["mg", "mg_mg_l"]) ?? 0),
+		na: Number(pickNum(acqua, ["na", "na_mg_l"]) ?? 0),
+		cl: Number(pickNum(acqua, ["cl", "cl_mg_l"]) ?? 0),
+		so4: Number(pickNum(acqua, ["so4", "so4_mg_l"]) ?? 0),
+		hco3: Number(pickNum(acqua, ["hco3", "hco3_mg_l"]) ?? 0)
+	} : void 0;
+	const descrizione = typeof d["descrizione"] === "string" ? d["descrizione"] : void 0;
+	const note = typeof d["note"] === "string" ? d["note"] : void 0;
+	const spezie = Array.isArray(d["spezie"]) ? d["spezie"].map((s) => ({
+		nome: String(s["nome"] ?? ""),
+		grammi: Number(s["grammi"] ?? 0),
+		uso: String(s["uso"] ?? "boil"),
+		tempo_min: s["tempo_min"] != null ? Number(s["tempo_min"]) : void 0,
+		note: typeof s["note"] === "string" ? s["note"] : void 0
+	})) : void 0;
+	const zuccheri = Array.isArray(d["zuccheri"]) ? d["zuccheri"].map((z) => ({
+		tipo: String(z["tipo"] ?? ""),
+		grammi: Number(z["grammi"] ?? 0),
+		note: typeof z["note"] === "string" ? z["note"] : void 0
+	})) : void 0;
+	const agua = d["agua"] ?? d["acqua"];
+	const mash_water_liters = pickNum(agua, [
+		"mash_litri",
+		"mash_agua_litri",
+		"strike_litri"
+	]) ?? pickNum(mash, [
+		"acqua_strike_litri",
+		"strike_litri",
+		"agua_strike_litri"
+	]);
+	const sparge_water_liters = pickNum(agua, ["sparge_litri", "sparge_agua_litri"]) ?? pickNum(d["sparge"], [
+		"sparge_litri",
+		"volumen_litri",
+		"litri"
+	]);
+	const total_water_liters = pickNum(agua, [
+		"total_litri",
+		"total_agua_litri",
+		"agua_total_litri"
+	]);
+	const sales = d["sales"] ?? d["mash_salts"];
+	const mash_salts = sales ? {
+		gypsum_g: pickNum(sales, [
+			"gesso_g",
+			"gypsum_g",
+			"gesso"
+		]),
+		cacl2_g: pickNum(sales, ["cacl2_g", "cacl2"]),
+		epsom_g: pickNum(sales, ["epsom_g", "epsom"]),
+		nahco3_g: pickNum(sales, ["nahco3_g", "nahco3"]),
+		lactic_acid_ml: pickNum(sales, [
+			"acido_lactico_ml",
+			"lactic_acid_ml",
+			"acido_lactico"
+		])
+	} : void 0;
+	const mashInTemp = pickNum(mash, [
+		"temperatura_in_c",
+		"mash_in_c",
+		"temperatura_strike_c",
+		"strike_c"
+	]);
+	const pre_boil_og = pickNum(bollitura, [
+		"og_pre_boil",
+		"gravedad_pre_boil",
+		"pre_boil_og"
+	]) ?? pickNum(params, ["og_pre_boil", "pre_boil_og"]);
+	const post_boil_og = pickNum(bollitura, [
+		"og_post_boil",
+		"gravedad_post_boil",
+		"post_boil_og"
+	]) ?? pickNum(params, ["og_post_boil", "post_boil_og"]);
+	const primary_days = pickNum(ferm, [
+		"primaria_giorni",
+		"primaria_dias",
+		"dias_primaria"
+	]);
+	const conditioning_days = pickNum(ferm, [
+		"madurazione_giorni",
+		"maduracion_dias",
+		"dias_maduracion"
+	]);
+	const serving_temp_c = pickNum(carbonazione, [
+		"temperatura_servizio_c",
+		"temperatura_servicio_c",
+		"servicio_c"
+	]);
+	const bottle_type = pickStr(carbonazione, [
+		"tipo_botella",
+		"tipo_botella",
+		"botella"
+	]);
+	const missing = [];
+	if (!recipe_name) missing.push("nome");
+	if (!beer_style) missing.push("stile");
+	if (isNaN(batch_size_liters) || batch_size_liters <= 0) missing.push("parametri.batch_size_litri");
+	if (isNaN(og) || og <= 0) missing.push("parametri.og");
+	if (isNaN(fg) || fg <= 0) missing.push("parametri.fg");
+	if (isNaN(ibu) || ibu < 0) missing.push("parametri.ibu");
+	if (missing.length > 0) throw new Error(`Campi obbligatori mancanti o non validi: ${missing.join(", ")}`);
+	return {
+		schema_version: typeof schemaVersion === "string" ? schemaVersion : void 0,
+		recipe_name,
+		beer_style,
+		batch_size_liters,
+		og,
+		fg,
+		ibu,
+		ebc: isNaN(ebc) ? void 0 : ebc,
+		abv_percent: isNaN(abv_percent) ? void 0 : abv_percent,
+		efficiency_percent: isNaN(efficiency_percent) ? void 0 : efficiency_percent,
+		grain_bill,
+		hop_schedule,
+		yeast,
+		mash_temp_c: isNaN(mash_temp_c) ? void 0 : mash_temp_c,
+		mash_steps,
+		fermentation_temp_c: isNaN(fermentation_temp_c) ? void 0 : fermentation_temp_c,
+		water_profile,
+		boil_time_minutes: isNaN(boil_time_minutes) ? void 0 : boil_time_minutes,
+		pre_boil_volume_liters: isNaN(pre_boil_volume_liters) ? void 0 : pre_boil_volume_liters,
+		post_boil_volume_liters: isNaN(post_boil_volume_liters) ? void 0 : post_boil_volume_liters,
+		fermentation_volume_liters: isNaN(fermentation_volume_liters) ? void 0 : fermentation_volume_liters,
+		packaging_volume_liters: isNaN(packaging_volume_liters) ? void 0 : packaging_volume_liters,
+		carbonation_volumes: isNaN(carbonation_volumes) ? void 0 : carbonation_volumes,
+		carbonation_method,
+		priming_sugar_gl: isNaN(priming_sugar_gl) ? void 0 : priming_sugar_gl,
+		impianto,
+		descrizione,
+		note,
+		spezie,
+		zuccheri,
+		mash_water_liters: isNaN(mash_water_liters) ? void 0 : mash_water_liters,
+		sparge_water_liters: isNaN(sparge_water_liters) ? void 0 : sparge_water_liters,
+		total_water_liters: isNaN(total_water_liters) ? void 0 : total_water_liters,
+		mash_salts,
+		mash_in_temp_c: isNaN(mashInTemp) ? void 0 : mashInTemp,
+		pre_boil_og: isNaN(pre_boil_og) ? void 0 : pre_boil_og,
+		post_boil_og: isNaN(post_boil_og) ? void 0 : post_boil_og,
+		primary_days: isNaN(primary_days) ? void 0 : primary_days,
+		conditioning_days: isNaN(conditioning_days) ? void 0 : conditioning_days,
+		serving_temp_c: isNaN(serving_temp_c) ? void 0 : serving_temp_c,
+		bottle_type,
+		rawYaml: raw
+	};
+}
+function validateRecipe(r) {
+	const style = findStyle(r.beer_style);
+	const issues = [];
+	const warnings = [];
+	const styleDeviations = [];
+	const volumeIssues = [];
+	const carbonationIssues = [];
+	const abv = (r.og - r.fg) * 131.25;
+	const totalGrainKg = r.grain_bill.reduce((s, g) => s + g.kg, 0);
+	const totalHopGrams = r.hop_schedule.reduce((s, h) => s + h.grams, 0);
+	const dryHopGrams = r.hop_schedule.filter((h) => h.use === "dry_hop").reduce((s, h) => s + h.grams, 0);
+	if (style) {
+		if (r.og < style.og_min) styleDeviations.push(`OG ${r.og.toFixed(3)} < min ${style.og_min.toFixed(3)}`);
+		if (r.og > style.og_max) styleDeviations.push(`OG ${r.og.toFixed(3)} > max ${style.og_max.toFixed(3)}`);
+		if (r.fg < style.fg_min) styleDeviations.push(`FG ${r.fg.toFixed(3)} < min ${style.fg_min.toFixed(3)}`);
+		if (r.fg > style.fg_max) styleDeviations.push(`FG ${r.fg.toFixed(3)} > max ${style.fg_max.toFixed(3)}`);
+		if (r.ibu < style.ibu_min) styleDeviations.push(`IBU ${r.ibu} < min ${style.ibu_min}`);
+		if (r.ibu > style.ibu_max) styleDeviations.push(`IBU ${r.ibu} > max ${style.ibu_max}`);
+		if (abv < style.abv_min) styleDeviations.push(`ABV ${abv.toFixed(1)}% < min ${style.abv_min}%`);
+		if (abv > style.abv_max) styleDeviations.push(`ABV ${abv.toFixed(1)}% > max ${style.abv_max}%`);
+		if (r.ebc !== void 0 && (r.ebc < style.ebc_min || r.ebc > style.ebc_max)) styleDeviations.push(`EBC ${r.ebc} fuori range (${style.ebc_min}–${style.ebc_max})`);
+	}
+	if (style) for (const deviation of styleDeviations) warnings.push(`Deviazione BJCP: ${deviation}`);
+	const ibuRatio = r.ibu / ((r.og - 1) * 1e3);
+	const buGu = r.og > 1 ? r.ibu / ((r.og - 1) * 1e3) : 0;
+	if (ibuRatio < .2) issues.push("Rapporto IBU/OG molto basso (<0.2) — sbilanciata verso il malto.");
+	else if (ibuRatio > 1.5) issues.push("Rapporto IBU/OG molto alto (>1.5) — amaro eccessivo.");
+	else if (ibuRatio > 1) warnings.push("Rapporto IBU/OG alto — verifica lo stile.");
+	let specPct = 0, basePct = 0;
+	for (const g of r.grain_bill) {
+		const pct = g.percent ?? g.kg / totalGrainKg * 100;
+		const n = g.malt.toLowerCase();
+		if (n.includes("pilsner") || n.includes("pale") || n.includes("maris otter") || n.includes("munich") || n.includes("vienna") || n.includes("wheat") || n.includes("base") || n.includes("pils")) basePct += pct;
+		if (n.includes("crystal") || n.includes("caramel") || n.includes("chocolate") || n.includes("black") || n.includes("roast") || n.includes("special") || n.includes("cara") || n.includes("melanoidin") || n.includes("aromatic") || n.includes("biscuit")) specPct += pct;
+		if (pct > 20 && !n.includes("base") && !n.includes("pilsner") && !n.includes("pale") && !n.includes("pils")) warnings.push(`Malto "${g.malt}" al ${pct.toFixed(0)}% — percentuale alta.`);
+	}
+	if (specPct > 25) issues.push(`Malti speciali al ${specPct.toFixed(0)}% — rischio dolcezza/astringenza.`);
+	else if (specPct > 15) warnings.push(`Malti speciali al ${specPct.toFixed(0)}%.`);
+	if (basePct < 60 && totalGrainKg > 0) warnings.push(`Malto base al ${basePct.toFixed(0)}% — basso.`);
+	if (dryHopGrams > 20 * r.batch_size_liters) warnings.push(`Dry hop molto alto (${dryHopGrams}g in ${r.batch_size_liters}L) — rischio astringenza/ossidazione.`);
+	const hopUses = new Set(r.hop_schedule.map((h) => h.use));
+	for (const u of hopUses) if (!VALID_HOP_USES.has(u)) warnings.push(`Uso luppolo sconosciuto: "${u}".`);
+	const boilHops = r.hop_schedule.filter((h) => h.use === "boil");
+	const hasBittering = boilHops.some((h) => h.time_minutes >= 45);
+	if (boilHops.length > 0 && !hasBittering && r.ibu > 10) warnings.push("Nessun luppolo in boil ≥45 min — gli IBU potrebbero provenire solo da whirlpool/hop stand.");
+	const boilHopsWithoutAA = boilHops.filter((h) => h.aa_percent === void 0 && h.ibu_contrib === void 0);
+	if (boilHopsWithoutAA.length > 0 && boilHops.length > 0) warnings.push(`${boilHopsWithoutAA.length} luppoli in boil senza AA% — impossibile verificare il calcolo IBU.`);
+	if (r.mash_temp_c !== void 0) {
+		if (r.mash_temp_c < 60) issues.push("Temperatura mash <60°C — enzimi inattivi.");
+		else if (r.mash_temp_c < 63) warnings.push("Temperatura mash <63°C — corpo molto secco, possibile scarsa conversione.");
+		else if (r.mash_temp_c > 72) warnings.push("Temperatura mash >72°C — corpo pieno, possibile scarsa fermentabilità.");
+	}
+	if (r.water_profile) {
+		const w = r.water_profile;
+		const so4cl = w.cl > 0 ? w.so4 / w.cl : 0;
+		if (so4cl > 4) warnings.push(`Rapporto SO₄/Cl = ${so4cl.toFixed(1)} — profilo molto amaro (bitter).`);
+		else if (so4cl < .5 && w.ca > 0) warnings.push(`Rapporto SO₄/Cl = ${so4cl.toFixed(1)} — profilo morbido (malty).`);
+		if (w.hco3 > 250) warnings.push(`Bicarbonati alti (${w.hco3} ppm) — adatto solo a birre scure.`);
+		if (w.ca < 50) warnings.push("Calcio basso (<50 ppm) — può influire sulla salute del lievito e sulla flocculazione.");
+		if (w.ca > 150) warnings.push("Calcio alto (>150 ppm) — può causare precipitazioni di ossalato.");
+		const cationSum = w.ca / 20.04 + w.mg / 12.15 + w.na / 23;
+		const anionSum = w.cl / 35.45 + w.so4 / 48.03 + w.hco3 / 61;
+		if (Math.abs(cationSum - anionSum) > .5) warnings.push(`Bilancio ionico non neutro (diff ${Math.abs(cationSum - anionSum).toFixed(2)} meq/L) — il profilo acqua potrebbe non essere realistico.`);
+	}
+	if (r.pre_boil_volume_liters !== void 0 && r.post_boil_volume_liters !== void 0) {
+		if (r.pre_boil_volume_liters <= r.post_boil_volume_liters) volumeIssues.push(`Pre-boil (${r.pre_boil_volume_liters}L) ≤ post-boil (${r.post_boil_volume_liters}L) — l'evaporazione è negativa o assente.`);
+	}
+	if (r.post_boil_volume_liters !== void 0 && r.fermentation_volume_liters !== void 0) {
+		if (r.post_boil_volume_liters < r.fermentation_volume_liters) volumeIssues.push(`Post-boil (${r.post_boil_volume_liters}L) < fermentatore (${r.fermentation_volume_liters}L) — volume aumentato senza spiegazione.`);
+	}
+	if (r.fermentation_volume_liters !== void 0 && r.packaging_volume_liters !== void 0) {
+		if (r.packaging_volume_liters > r.fermentation_volume_liters) volumeIssues.push(`Confezionamento (${r.packaging_volume_liters}L) > fermentatore (${r.fermentation_volume_liters}L).`);
+	}
+	if (r.batch_size_liters > 0) {
+		if (r.fermentation_volume_liters !== void 0 && Math.abs(r.fermentation_volume_liters - r.batch_size_liters) > r.batch_size_liters * .3) volumeIssues.push(`Volume fermentatore (${r.fermentation_volume_liters}L) ≠ batch size (${r.batch_size_liters}L) — differenza >30%.`);
+		if (r.packaging_volume_liters !== void 0 && Math.abs(r.packaging_volume_liters - r.batch_size_liters) > r.batch_size_liters * .2) volumeIssues.push(`Volume confezionamento (${r.packaging_volume_liters}L) ≠ batch size (${r.batch_size_liters}L) — differenza >20%.`);
+	}
+	if (r.carbonation_volumes !== void 0) {
+		if (r.carbonation_volumes < 1.2) carbonationIssues.push(`Carbonazione molto bassa (${r.carbonation_volumes} vol) — birra quasi piatta.`);
+		else if (r.carbonation_volumes > 4) carbonationIssues.push(`Carbonazione molto alta (${r.carbonation_volumes} vol) — rischio bottiglia esplosiva senza bottiglie adeguate.`);
+	}
+	if (r.priming_sugar_gl !== void 0 && r.carbonation_volumes !== void 0) {
+		const expectedPriming = (r.carbonation_volumes - .85) * 4 * r.batch_size_liters;
+		if (Math.abs(r.priming_sugar_gl * r.batch_size_liters - expectedPriming) > expectedPriming * .4) carbonationIssues.push(`Dosaggio priming (${r.priming_sugar_gl} g/L) incoerente con carbonazione target (${r.carbonation_volumes} vol).`);
+	}
+	if (r.abv_percent !== void 0 && Math.abs(r.abv_percent - abv) > .5) warnings.push(`ABV dichiarato (${r.abv_percent}%) ≠ calcolato (${abv.toFixed(1)}%) — differenza >0.5%.`);
+	const brewdayMissing = [];
+	if (r.mash_water_liters === void 0) brewdayMissing.push("acqua di ammostamento (acqua.mash_litri)");
+	if (r.total_water_liters === void 0) brewdayMissing.push("acqua totale (acqua.total_litri)");
+	if (r.mash_in_temp_c === void 0) brewdayMissing.push("temperatura di mash-in (mash.temperatura_in_c)");
+	if (r.pre_boil_og === void 0) brewdayMissing.push("gravità pre-boil (bollitura.og_pre_boil)");
+	if (r.post_boil_og === void 0) brewdayMissing.push("gravità post-boil (bollitura.og_post_boil)");
+	if (r.boil_time_minutes === void 0) brewdayMissing.push("durata della bollitura (parametri.bollitura_min)");
+	if (r.fermentation_temp_c === void 0) brewdayMissing.push("temperatura di fermentazione (fermentazione.temperatura_c)");
+	if (r.primary_days === void 0) brewdayMissing.push("giorni di fermentazione primaria (fermentazione.primaria_giorni)");
+	if (r.carbonation_volumes === void 0) brewdayMissing.push("carbonatazione (carbonazione.co2_volumi)");
+	if (r.packaging_volume_liters === void 0) brewdayMissing.push("volume di confezionamento (parametri.confezionamento_litri)");
+	if (!(r.carbonation_method?.toLowerCase().includes("keg") || r.carbonation_method?.toLowerCase().includes("fusto")) && r.bottle_type === void 0) brewdayMissing.push("tipo di bottiglia (carbonazione.tipo_botella)");
+	if (brewdayMissing.length > 0) issues.push(`Dati di quotazione incompleti — mancano: ${brewdayMissing.join(", ")}`);
+	if (r.mash_water_liters !== void 0 && r.sparge_water_liters !== void 0 && r.total_water_liters !== void 0) {
+		const sum = r.mash_water_liters + r.sparge_water_liters;
+		if (Math.abs(sum - r.total_water_liters) > 1) volumeIssues.push(`Acqua totale (${r.total_water_liters}L) ≠ mash (${r.mash_water_liters}L) + sparge (${r.sparge_water_liters}L) = ${sum.toFixed(1)}L`);
+	}
+	if (r.pre_boil_og !== void 0 && r.post_boil_og !== void 0 && r.post_boil_og < r.pre_boil_og) volumeIssues.push(`OG post-boil (${r.post_boil_og.toFixed(3)}) < OG pre-boil (${r.pre_boil_og.toFixed(3)}) — la bollitura non può ridurre la gravità.`);
+	if (r.efficiency_percent !== void 0) {
+		if (r.efficiency_percent > 100) warnings.push("Efficienza >100% — impossibile senza errori di misura.");
+		else if (r.efficiency_percent < 50) warnings.push("Efficienza <50% — molto bassa, verificare la macinatura e il mash.");
+		else if (r.efficiency_percent > 85) warnings.push("Efficienza >85% — molto alta per homebrewing standard.");
+	}
+	if (totalGrainKg > 0 && r.batch_size_liters > 0) {
+		const expectedMaxOG = 1 + totalGrainKg * .08 / r.batch_size_liters;
+		if (r.og > expectedMaxOG * 1.05) warnings.push(`OG (${r.og.toFixed(3)}) troppo alto per ${totalGrainKg.toFixed(1)}kg di grani in ${r.batch_size_liters}L (max stimato ~${expectedMaxOG.toFixed(3)}).`);
+	}
+	return {
+		issues,
+		warnings,
+		abv,
+		ibuRatio,
+		specPct,
+		totalGrainKg,
+		totalHopGrams,
+		dryHopGrams,
+		buGu,
+		styleName: style?.name,
+		styleCode: style?.code,
+		styleMatch: styleDeviations.length === 0,
+		styleDeviations,
+		volumeIssues,
+		carbonationIssues
+	};
+}
+function issueFromMessage(code, path, message, source = "yaml_validator") {
+	return {
+		code,
+		severity: "error",
+		path,
+		message,
+		source
+	};
+}
+function referenceStatus(reference) {
+	if (!reference) return "not_verified";
+	if (reference.ok === false || reference.status === "error") return "failed";
+	if (reference.ok === true || reference.status === "ok") return "passed";
+	return "not_verified";
+}
+function calculatorValue(reference, key) {
+	const result = reference?.result;
+	return result && typeof result === "object" ? result[key] : void 0;
+}
+function compareCalculatorValues(errors, checks, recipe, references) {
+	const comparisons = [
+		{
+			calculator: "brewing",
+			key: "estimated_og",
+			path: "parametri.og",
+			declared: recipe.og,
+			code: "BREWING_OG_MISMATCH"
+		},
+		{
+			calculator: "brewing",
+			key: "estimated_fg",
+			path: "parametri.fg",
+			declared: recipe.fg,
+			code: "BREWING_FG_MISMATCH"
+		},
+		{
+			calculator: "brewing",
+			key: "abv_percent",
+			path: "parametri.abv_percent",
+			declared: recipe.abv_percent,
+			code: "BREWING_ABV_MISMATCH"
+		},
+		{
+			calculator: "ibu",
+			key: "total_ibu",
+			path: "parametri.ibu",
+			declared: recipe.ibu,
+			code: "IBU_TOTAL_MISMATCH"
+		},
+		{
+			calculator: "priming",
+			key: "packaging_volume_l",
+			path: "parametri.confezionamento_litri",
+			declared: recipe.packaging_volume_liters,
+			code: "PRIMING_VOLUME_MISMATCH"
+		},
+		{
+			calculator: "priming",
+			key: "dosage_g_per_l",
+			path: "carbonazione.priming_gl",
+			declared: recipe.priming_sugar_gl,
+			code: "PRIMING_DOSAGE_MISMATCH"
+		},
+		{
+			calculator: "priming",
+			key: "target_co2_volumes",
+			path: "carbonazione.co2_volumi",
+			declared: recipe.carbonation_volumes,
+			code: "PRIMING_TARGET_MISMATCH"
+		}
+	];
+	for (const comparison of comparisons) {
+		const reference = references?.[comparison.calculator];
+		if (!reference || referenceStatus(reference) !== "passed" || comparison.declared === void 0) continue;
+		const expected = calculatorValue(reference, comparison.key);
+		if (typeof expected !== "number") continue;
+		const tolerance = comparison.key === "total_ibu" ? .2 : comparison.key.includes("volume") ? .1 : .01;
+		const passed = Math.abs(comparison.declared - expected) <= tolerance;
+		checks.push({
+			id: comparison.code,
+			status: passed ? "passed" : "failed",
+			message: passed ? "Valore dichiarato coerente con il calculator." : "Valore dichiarato diverso dal calculator.",
+			source: `${comparison.calculator}_calculator`
+		});
+		if (!passed) errors.push({
+			code: comparison.code,
+			severity: "error",
+			path: comparison.path,
+			declared: comparison.declared,
+			expected,
+			message: "Il valore dichiarato non coincide con il risultato strutturato del calculator.",
+			source: `${comparison.calculator}_calculator`
+		});
+	}
+}
+function buildValidationReport(recipe, validation, calculatorResults) {
+	const errors = validation.issues.map((message, index) => issueFromMessage(index === 0 ? "RECIPE_DATA_INVALID" : "RECIPE_CONSISTENCY_ERROR", "recipe", message));
+	for (const message of validation.volumeIssues) errors.push(issueFromMessage("WATER_VOLUME_MISMATCH", "acqua", message, "yaml_validator"));
+	for (const message of validation.carbonationIssues) errors.push(issueFromMessage("CARBONATION_MISMATCH", "carbonazione", message, "yaml_validator"));
+	const warnings = validation.warnings.map((message) => ({
+		code: message.startsWith("Deviazione BJCP:") ? "BJCP_DEVIATION" : "RECIPE_REVIEW_WARNING",
+		severity: "warning",
+		path: "recipe",
+		message,
+		source: "yaml_validator"
+	}));
+	const checks = [
+		{
+			id: "yaml_schema",
+			status: "passed",
+			message: "Parsing YAML e controlli strutturali completati.",
+			source: "yaml_validator"
+		},
+		{
+			id: "recipe_consistency",
+			status: errors.length > 0 ? "failed" : "passed",
+			message: errors.length > 0 ? "Sono presenti errori deterministici." : "Valori dichiarati coerenti.",
+			source: "yaml_validator"
+		},
+		{
+			id: "water_calculator",
+			status: referenceStatus(calculatorResults?.water),
+			message: calculatorResults?.water ? "Risultato Water Calculator ricevuto." : "Risultato Water Calculator non fornito.",
+			source: "water_profile_calculator"
+		},
+		{
+			id: "brewing_calculator",
+			status: referenceStatus(calculatorResults?.brewing),
+			message: calculatorResults?.brewing ? "Risultato Brewing Calculator ricevuto." : "Risultato Brewing Calculator non fornito.",
+			source: "brewing_calculator"
+		},
+		{
+			id: "ibu_calculator",
+			status: referenceStatus(calculatorResults?.ibu),
+			message: calculatorResults?.ibu ? "Risultato IBU Calculator ricevuto." : "Risultato IBU Calculator non fornito.",
+			source: "ibu_calculator"
+		},
+		{
+			id: "priming_calculator",
+			status: referenceStatus(calculatorResults?.priming),
+			message: calculatorResults?.priming ? "Risultato Priming Calculator ricevuto." : "Risultato Priming Calculator non fornito.",
+			source: "priming_calculator"
+		}
+	];
+	for (const [name, reference] of Object.entries(calculatorResults ?? {})) if (reference && (reference.ok === false || reference.status === "error")) errors.push(issueFromMessage("CALCULATOR_ERROR", `calculator_references.${name}`, `Il calculator ${name} ha restituito un errore; i controlli dipendenti non sono verificati.`, name));
+	compareCalculatorValues(errors, checks, recipe, calculatorResults);
+	const validationStatus = errors.length > 0 ? "invalid" : "valid";
+	return {
+		schema_version: recipe.schema_version ?? "1.0",
+		recipe_id: recipe.recipe_name,
+		validation_status: validationStatus,
+		errors,
+		warnings,
+		info: [],
+		checks,
+		normalized_recipe: recipe,
+		calculator_references: calculatorResults ?? null,
+		summary: validationStatus === "valid" ? "Ricetta strutturalmente valida; la conformità BJCP resta una valutazione separata." : `Ricetta non valida: ${errors.length} errore/i deterministico/i.`
+	};
+}
+var YamlValidatorTool = class {
+	name = "yaml_validator";
+	description = "Valida deterministicamente una ricetta YAML e restituisce un report JSON con ricetta normalizzata, errori, warning, controlli e riferimenti ai calculator.";
+	parameters = toInputJsonSchema(YamlValidatorInputSchema);
+	resolveExecution(args) {
+		return {
+			description: `Validate YAML recipe: ${args.input_file}`,
+			approvalRule: this.name,
+			execute: () => this.execute(args)
+		};
+	}
+	execute(args) {
+		try {
+			const recipe = parseYamlRecipe(args.input_file);
+			const v = validateRecipe(recipe);
+			const style = findStyle(recipe.beer_style);
+			const allMatches = findAllStyles(recipe.beer_style);
+			const report = buildValidationReport(recipe, v, args.calculator_results);
+			if (!style && allMatches.length > 0) report.warnings.push({
+				code: "BJCP_STYLE_AMBIGUOUS",
+				severity: "warning",
+				path: "stile",
+				message: `Stile non riconosciuto esattamente; candidati: ${allMatches.map((s) => `${s.code} ${s.name}`).join(", ")}.`,
+				source: "bjcp_database"
+			});
+			return Promise.resolve({ output: JSON.stringify(report, null, 2) });
+		} catch (e) {
+			return Promise.resolve({
+				isError: true,
+				output: e instanceof Error ? e.message : String(e)
+			});
+		}
+	}
+};
+registerTool(YamlValidatorTool);
+
+//#endregion
+//#region src/brewing/recipe-validator.ts
+/**
+* Richiesta di revisione qualitativa di una ricetta gia validata.
+* Questo tool non sostituisce il YAML validator e non esegue calcoli.
+*/
+const RecipePayloadSchema = record(string(), unknown());
+const RecipeValidatorInputSchema = object({
+	normalized_recipe: RecipePayloadSchema.describe("Ricetta normalizzata restituita da yaml_validator."),
+	validation_report: RecipePayloadSchema.describe("Report JSON restituito da yaml_validator."),
+	calculator_results: record(string(), unknown()).optional().describe("Risultati strutturati pertinenti dei calculator."),
+	beer_style: string().optional().describe("Stile BJCP dichiarato, se non presente nella ricetta."),
+	base_style: string().optional().describe("Stile base per categorie Specialty."),
+	sensory_objectives: array(string()).optional().describe("Obiettivi sensoriali dichiarati."),
+	production_constraints: array(string()).optional().describe("Vincoli dell impianto o del processo."),
+	user_notes: string().optional().describe("Note dell utente per la revisione.")
+});
+const ReviewOutputSchema = {
+	type: "object",
+	properties: {
+		review_status: {
+			type: "string",
+			enum: [
+				"completed",
+				"needs_revision",
+				"blocked"
+			]
+		},
+		technical_issues: { type: "array" },
+		qualitative_warnings: { type: "array" },
+		sensory_assessment: { type: "object" },
+		style_assessment: { type: "object" },
+		repeatability_issues: { type: "array" },
+		recommendations: { type: "array" },
+		recalculate: { type: "array" },
+		missing_data: { type: "array" }
+	},
+	required: [
+		"review_status",
+		"technical_issues",
+		"qualitative_warnings",
+		"sensory_assessment",
+		"style_assessment",
+		"repeatability_issues",
+		"recommendations",
+		"recalculate",
+		"missing_data"
+	]
+};
+function buildReviewPrompt(args) {
+	const recipe = args.normalized_recipe;
+	const styleName = args.beer_style ?? (typeof recipe.beer_style === "string" ? recipe.beer_style : "non dichiarato");
+	const style = findStyle(styleName);
+	const report = args.validation_report;
+	const errors = Array.isArray(report.errors) ? report.errors : [];
+	const warnings = Array.isArray(report.warnings) ? report.warnings : [];
+	return [
+		"Sei un revisore brassicolo senior. Esegui una revisione qualitativa, senza riscrivere automaticamente la ricetta.",
+		"Il YAML validator ha gia eseguito i controlli deterministici: non ricalcolare ABV, volumi, efficienza, IBU o priming.",
+		"Distingui tra errore tecnico gia presente nel report, conseguenza brassicola e nuova criticita qualitativa.",
+		"Una birra Specialty, Spice, Fruit o Experimental non va penalizzata per il solo scostamento BJCP: valuta stile base e obiettivo dichiarato.",
+		"Ogni raccomandazione deve indicare problema, motivazione tecnica, modifica proposta, impatto sensoriale, compromesso e priorita.",
+		"Non modificare lo YAML. Indica i parametri da ricalcolare dopo una modifica sostanziale.",
+		"",
+		"=== RICETTA NORMALIZZATA ===",
+		JSON.stringify(recipe, null, 2),
+		"",
+		"=== REPORT DETERMINISTICO ===",
+		JSON.stringify({
+			validation_status: report.validation_status,
+			errors,
+			warnings,
+			checks: report.checks ?? []
+		}, null, 2),
+		"",
+		"=== CALCULATORI ===",
+		JSON.stringify(args.calculator_results ?? report.calculator_references ?? null, null, 2),
+		"",
+		"=== CONTESTO ===",
+		JSON.stringify({
+			stile: style ? {
+				code: style.code,
+				name: style.name,
+				category: style.category,
+				og: [style.og_min, style.og_max],
+				fg: [style.fg_min, style.fg_max],
+				abv: [style.abv_min, style.abv_max],
+				ibu: [style.ibu_min, style.ibu_max],
+				ebc: [style.ebc_min, style.ebc_max]
+			} : { declared: styleName },
+			stile_base: args.base_style ?? null,
+			obiettivi_sensoriali: args.sensory_objectives ?? [],
+			vincoli_produzione: args.production_constraints ?? [],
+			note_utente: args.user_notes ?? null
+		}, null, 2),
+		"",
+		"Restituisci esclusivamente JSON conforme allo schema seguente:",
+		JSON.stringify(ReviewOutputSchema, null, 2)
+	].join("\n");
+}
+var RecipeValidatorTool = class {
+	name = "recipe_validator";
+	description = "Prepara una review_request JSON usando la ricetta normalizzata e il report di yaml_validator. Non esegue calcoli e non simula una revisione LLM completata.";
+	parameters = toInputJsonSchema(RecipeValidatorInputSchema);
+	resolveExecution(args) {
+		const parsed = RecipeValidatorInputSchema.safeParse(args);
+		return {
+			description: "Prepara richiesta di revisione qualitativa della ricetta",
+			approvalRule: this.name,
+			execute: () => parsed.success ? this.execute(parsed.data) : Promise.resolve({
+				isError: true,
+				output: JSON.stringify({
+					status: "error",
+					errors: parsed.error.issues
+				})
+			})
+		};
+	}
+	execute(args) {
+		try {
+			const report = args.validation_report;
+			const blocked = report.validation_status === "invalid";
+			const output = {
+				schema_version: "1.0",
+				request_type: "review_request",
+				review_status: blocked ? "blocked" : "pending_llm",
+				recipe_id: args.normalized_recipe.recipe_name ?? null,
+				deterministic_report_status: report.validation_status ?? "unknown",
+				prompt: buildReviewPrompt(args),
+				output_schema: ReviewOutputSchema,
+				instructions: blocked ? ["Il report deterministico contiene ERROR. Descrivere l impatto senza ripetere meccanicamente i messaggi e senza correggere automaticamente la ricetta."] : ["La revisione LLM non e stata eseguita da questo tool; Gaia deve inoltrare il prompt e validare nuovamente dopo modifiche sostanziali."]
+			};
+			return Promise.resolve({ output: JSON.stringify(output, null, 2) });
+		} catch (error) {
+			return Promise.resolve({
+				isError: true,
+				output: JSON.stringify({
+					status: "error",
+					errors: [error instanceof Error ? error.message : String(error)]
+				})
+			});
+		}
+	}
+};
+registerTool(RecipeValidatorTool);
+
+//#endregion
+//#region src/brewing/inventory-search.ts
+/**
+* Inventory search — search a virtual inventory of malts, hops, and yeasts.
+*/
+const InventorySearchInputSchema = object({
+	query: string().describe("Search query."),
+	category: _enum([
+		"malt",
+		"hop",
+		"yeast",
+		"all"
+	]).default("all"),
+	include_unavailable: boolean().default(false)
+});
+const INVENTORY = [
+	{
+		name: "Pilsner Malt (Weyermann)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Base",
+			ebc: "3-4",
+			origin: "Germany",
+			usage: "Up to 100%"
+		},
+		substitutes: ["Pale Ale Malt", "Vienna Malt"]
+	},
+	{
+		name: "Pale Ale Malt (Crisp)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Base",
+			ebc: "5-7",
+			origin: "UK",
+			usage: "Up to 100%"
+		},
+		substitutes: ["Maris Otter", "Pilsner Malt"]
+	},
+	{
+		name: "Maris Otter (Crisp)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Base",
+			ebc: "4-6",
+			origin: "UK",
+			usage: "Up to 100%"
+		},
+		substitutes: ["Pale Ale Malt", "Golden Promise"]
+	},
+	{
+		name: "Vienna Malt (Weyermann)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Base",
+			ebc: "6-9",
+			origin: "Germany",
+			usage: "Up to 100%"
+		},
+		substitutes: ["Munich Light", "Pale Ale Malt"]
+	},
+	{
+		name: "Munich Malt Light (Weyermann)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Base",
+			ebc: "15-25",
+			origin: "Germany",
+			usage: "Up to 100%"
+		},
+		substitutes: ["Vienna Malt", "Munich Dark"]
+	},
+	{
+		name: "Wheat Malt (Weyermann)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Base",
+			ebc: "3-5",
+			origin: "Germany",
+			usage: "Up to 70%"
+		},
+		substitutes: ["Pale Wheat Malt", "Flaked Wheat"]
+	},
+	{
+		name: "Rye Malt (Weyermann)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Base",
+			ebc: "4-10",
+			origin: "Germany",
+			usage: "Up to 60%"
+		},
+		substitutes: ["Flaked Rye", "Wheat Malt"]
+	},
+	{
+		name: "CaraPils (Weyermann)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Crystal",
+			ebc: "3-5",
+			origin: "Germany",
+			usage: "Up to 10%"
+		},
+		substitutes: ["Dextrin Malt", "Flaked Barley"]
+	},
+	{
+		name: "CaraHell (Weyermann)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Crystal",
+			ebc: "20-30",
+			origin: "Germany",
+			usage: "Up to 15%"
+		},
+		substitutes: ["Crystal 10L", "CaraAmber"]
+	},
+	{
+		name: "CaraAmber (Weyermann)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Crystal",
+			ebc: "60-80",
+			origin: "Germany",
+			usage: "Up to 15%"
+		},
+		substitutes: ["Crystal 30L", "CaraRed"]
+	},
+	{
+		name: "CaraMunich I (Weyermann)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Crystal",
+			ebc: "80-100",
+			origin: "Germany",
+			usage: "Up to 15%"
+		},
+		substitutes: ["Crystal 60L", "CaraMunich II"]
+	},
+	{
+		name: "Crystal 60L (Briess)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Crystal",
+			ebc: "120",
+			origin: "USA",
+			usage: "Up to 10%"
+		},
+		substitutes: ["CaraMunich I", "Crystal 80L"]
+	},
+	{
+		name: "Crystal 120L (Briess)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Crystal",
+			ebc: "240",
+			origin: "USA",
+			usage: "Up to 5%"
+		},
+		substitutes: ["CaraMunich III", "Special B"]
+	},
+	{
+		name: "Special B (Dingemans)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Crystal",
+			ebc: "280-350",
+			origin: "Belgium",
+			usage: "Up to 5%"
+		},
+		substitutes: ["Crystal 120L", "Chocolate Malt"]
+	},
+	{
+		name: "Chocolate Malt (Crisp)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Roasted",
+			ebc: "900-1100",
+			origin: "UK",
+			usage: "Up to 10%"
+		},
+		substitutes: ["Pale Chocolate", "Black Patent"]
+	},
+	{
+		name: "Black Patent Malt (Crisp)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Roasted",
+			ebc: "1300-1500",
+			origin: "UK",
+			usage: "Up to 5%"
+		},
+		substitutes: ["Roasted Barley", "Chocolate Malt"]
+	},
+	{
+		name: "Roasted Barley (Briess)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Roasted",
+			ebc: "600-800",
+			origin: "USA",
+			usage: "Up to 5%"
+		},
+		substitutes: ["Black Patent", "Chocolate Malt"]
+	},
+	{
+		name: "Carafa Special I (Weyermann)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Roasted",
+			ebc: "800-1000",
+			origin: "Germany",
+			usage: "Up to 5%"
+		},
+		substitutes: ["Chocolate Malt", "Black Patent"]
+	},
+	{
+		name: "Flaked Barley",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Adjunct",
+			ebc: "3",
+			origin: "Various",
+			usage: "Up to 20%"
+		},
+		substitutes: ["Flaked Oats", "Flaked Wheat"]
+	},
+	{
+		name: "Flaked Oats",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Adjunct",
+			ebc: "2",
+			origin: "Various",
+			usage: "Up to 30%"
+		},
+		substitutes: ["Oat Malt", "Flaked Barley"]
+	},
+	{
+		name: "Flaked Wheat",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Adjunct",
+			ebc: "2",
+			origin: "Various",
+			usage: "Up to 40%"
+		},
+		substitutes: ["Wheat Malt", "Flaked Barley"]
+	},
+	{
+		name: "Acidulated Malt (Weyermann)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Specialty",
+			ebc: "3-6",
+			origin: "Germany",
+			usage: "Up to 10%"
+		},
+		substitutes: ["Lactic Acid", "Phosphoric Acid"]
+	},
+	{
+		name: "Smoked Malt (Weyermann)",
+		category: "malt",
+		available: true,
+		specs: {
+			type: "Specialty",
+			ebc: "4-8",
+			origin: "Germany",
+			usage: "Up to 100%"
+		},
+		substitutes: ["Rauchmalz", "Peated Malt"]
+	},
+	{
+		name: "Citra (USA)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Aroma",
+			aa: "11-13%",
+			origin: "USA",
+			characteristics: "Tropical, citrus, grapefruit"
+		},
+		substitutes: ["Mosaic", "Galaxy"]
+	},
+	{
+		name: "Mosaic (USA)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Aroma",
+			aa: "11-14%",
+			origin: "USA",
+			characteristics: "Blueberry, tropical, earthy"
+		},
+		substitutes: ["Citra", "Simcoe"]
+	},
+	{
+		name: "Simcoe (USA)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Dual",
+			aa: "12-14%",
+			origin: "USA",
+			characteristics: "Pine, citrus, passionfruit"
+		},
+		substitutes: ["Citra", "Chinook"]
+	},
+	{
+		name: "Cascade (USA)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Aroma",
+			aa: "5-7%",
+			origin: "USA",
+			characteristics: "Grapefruit, floral, spicy"
+		},
+		substitutes: ["Centennial", "Amarillo"]
+	},
+	{
+		name: "Centennial (USA)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Dual",
+			aa: "9-11%",
+			origin: "USA",
+			characteristics: "Floral, citrus, pine"
+		},
+		substitutes: ["Cascade", "Chinook"]
+	},
+	{
+		name: "Chinook (USA)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Dual",
+			aa: "12-14%",
+			origin: "USA",
+			characteristics: "Pine, spice, grapefruit"
+		},
+		substitutes: ["Simcoe", "Columbus"]
+	},
+	{
+		name: "Magnum (Germany)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Bittering",
+			aa: "12-14%",
+			origin: "Germany",
+			characteristics: "Clean, smooth bittering"
+		},
+		substitutes: ["Warrior", "Herkules"]
+	},
+	{
+		name: "Hallertau Mittelfrüh (Germany)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Aroma",
+			aa: "3-5%",
+			origin: "Germany",
+			characteristics: "Floral, spicy, noble"
+		},
+		substitutes: ["Hallertau Hersbrucker", "Saaz"]
+	},
+	{
+		name: "Saaz (Czech)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Aroma",
+			aa: "3-4%",
+			origin: "Czech Republic",
+			characteristics: "Spicy, earthy, noble"
+		},
+		substitutes: ["Tettnang", "Hallertau"]
+	},
+	{
+		name: "Fuggles (UK)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Aroma",
+			aa: "4-5%",
+			origin: "UK",
+			characteristics: "Earthy, woody, mild"
+		},
+		substitutes: ["East Kent Goldings", "Willamette"]
+	},
+	{
+		name: "East Kent Goldings (UK)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Aroma",
+			aa: "5-6%",
+			origin: "UK",
+			characteristics: "Floral, honey, earthy"
+		},
+		substitutes: ["Fuggles", "Willamette"]
+	},
+	{
+		name: "Amarillo (USA)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Aroma",
+			aa: "8-10%",
+			origin: "USA",
+			characteristics: "Orange, floral, citrus"
+		},
+		substitutes: ["Cascade", "Centennial"]
+	},
+	{
+		name: "Galaxy (Australia)",
+		category: "hop",
+		available: false,
+		specs: {
+			type: "Aroma",
+			aa: "13-15%",
+			origin: "Australia",
+			characteristics: "Passionfruit, peach, citrus"
+		},
+		substitutes: ["Citra", "Mosaic"]
+	},
+	{
+		name: "El Dorado (USA)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Aroma",
+			aa: "14-16%",
+			origin: "USA",
+			characteristics: "Tropical, watermelon, stone fruit"
+		},
+		substitutes: ["Citra", "Mosaic"]
+	},
+	{
+		name: "Strata (USA)",
+		category: "hop",
+		available: true,
+		specs: {
+			type: "Aroma",
+			aa: "11-13%",
+			origin: "USA",
+			characteristics: "Passionfruit, grapefruit, dank"
+		},
+		substitutes: ["Citra", "Mosaic"]
+	},
+	{
+		name: "SafAle US-05",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Ale",
+			form: "Dry",
+			attenuation: "78-82%",
+			temp_range: "15-24°C",
+			flocculation: "Medium"
+		},
+		substitutes: ["WLP001", "Wyeast 1056"]
+	},
+	{
+		name: "SafAle S-04",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Ale",
+			form: "Dry",
+			attenuation: "72-76%",
+			temp_range: "15-24°C",
+			flocculation: "High"
+		},
+		substitutes: ["WLP002", "Wyeast 1098"]
+	},
+	{
+		name: "SafLager W-34/70",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Lager",
+			form: "Dry",
+			attenuation: "80-84%",
+			temp_range: "9-15°C",
+			flocculation: "High"
+		},
+		substitutes: ["WLP830", "Wyeast 2124"]
+	},
+	{
+		name: "SafBrew WB-06",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Wheat",
+			form: "Dry",
+			attenuation: "86-90%",
+			temp_range: "15-24°C",
+			flocculation: "Low"
+		},
+		substitutes: ["WLP300", "Wyeast 3068"]
+	},
+	{
+		name: "SafBrew T-58",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Specialty",
+			form: "Dry",
+			attenuation: "72-78%",
+			temp_range: "15-24°C",
+			flocculation: "Medium"
+		},
+		substitutes: ["WLP500", "Wyeast 1214"]
+	},
+	{
+		name: "SafBrew BE-256",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Abbey",
+			form: "Dry",
+			attenuation: "78-82%",
+			temp_range: "15-24°C",
+			flocculation: "Medium"
+		},
+		substitutes: ["WLP530", "Wyeast 1762"]
+	},
+	{
+		name: "WLP001 California Ale",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Ale",
+			form: "Liquid",
+			attenuation: "73-80%",
+			temp_range: "18-22°C",
+			flocculation: "Medium"
+		},
+		substitutes: ["US-05", "Wyeast 1056"]
+	},
+	{
+		name: "WLP002 English Ale",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Ale",
+			form: "Liquid",
+			attenuation: "63-70%",
+			temp_range: "18-21°C",
+			flocculation: "Very High"
+		},
+		substitutes: ["S-04", "Wyeast 1098"]
+	},
+	{
+		name: "WLP004 Irish Ale",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Ale",
+			form: "Liquid",
+			attenuation: "69-74%",
+			temp_range: "18-21°C",
+			flocculation: "Medium"
+		},
+		substitutes: ["Wyeast 1084", "S-04"]
+	},
+	{
+		name: "WLP300 Hefeweizen Ale",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Wheat",
+			form: "Liquid",
+			attenuation: "73-77%",
+			temp_range: "18-24°C",
+			flocculation: "Low"
+		},
+		substitutes: ["WB-06", "WLP041"]
+	},
+	{
+		name: "WLP400 Belgian Wit Ale",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Wheat",
+			form: "Liquid",
+			attenuation: "74-78%",
+			temp_range: "18-22°C",
+			flocculation: "Low"
+		},
+		substitutes: ["WB-06", "WLP300"]
+	},
+	{
+		name: "WLP500 Trappist Ale",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Abbey",
+			form: "Liquid",
+			attenuation: "75-80%",
+			temp_range: "18-24°C",
+			flocculation: "Medium"
+		},
+		substitutes: ["BE-256", "Wyeast 1214"]
+	},
+	{
+		name: "WLP565 Belgian Saison I",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Saison",
+			form: "Liquid",
+			attenuation: "65-75%",
+			temp_range: "20-25°C",
+			flocculation: "Low"
+		},
+		substitutes: ["Wyeast 3711", "WLP566"]
+	},
+	{
+		name: "WLP800 Pilsner Lager",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Lager",
+			form: "Liquid",
+			attenuation: "72-78%",
+			temp_range: "10-14°C",
+			flocculation: "Medium-High"
+		},
+		substitutes: ["W-34/70", "WLP830"]
+	},
+	{
+		name: "WLP830 German Lager",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Lager",
+			form: "Liquid",
+			attenuation: "74-79%",
+			temp_range: "10-14°C",
+			flocculation: "Medium"
+		},
+		substitutes: ["W-34/70", "WLP800"]
+	},
+	{
+		name: "Kveik Voss",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Kveik",
+			form: "Dry",
+			attenuation: "75-82%",
+			temp_range: "20-40°C",
+			flocculation: "Medium"
+		},
+		substitutes: ["Kveik Hornindal", "Kveik Lutra"]
+	},
+	{
+		name: "Kveik Hornindal",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Kveik",
+			form: "Dry",
+			attenuation: "75-82%",
+			temp_range: "20-40°C",
+			flocculation: "High"
+		},
+		substitutes: ["Kveik Voss", "Kveik Lutra"]
+	},
+	{
+		name: "Kveik Lutra",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Kveik",
+			form: "Dry",
+			attenuation: "75-82%",
+			temp_range: "20-40°C",
+			flocculation: "Medium"
+		},
+		substitutes: ["Kveik Voss", "Kveik Hornindal"]
+	},
+	{
+		name: "Lallemand WildBrew Philly Sour",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Sour",
+			form: "Dry",
+			attenuation: "75-85%",
+			temp_range: "20-30°C",
+			flocculation: "High"
+		},
+		substitutes: ["WLP677", "Omega Lactobacillus Blend"]
+	},
+	{
+		name: "Wyeast 1056 American Ale",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Ale",
+			form: "Liquid",
+			attenuation: "73-77%",
+			temp_range: "15-22°C",
+			flocculation: "Medium"
+		},
+		substitutes: ["US-05", "WLP001"]
+	},
+	{
+		name: "Wyeast 3068 Weihenstephan Weizen",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Wheat",
+			form: "Liquid",
+			attenuation: "73-77%",
+			temp_range: "18-24°C",
+			flocculation: "Low"
+		},
+		substitutes: ["WLP300", "WB-06"]
+	},
+	{
+		name: "Wyeast 3711 French Saison",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Saison",
+			form: "Liquid",
+			attenuation: "77-83%",
+			temp_range: "18-25°C",
+			flocculation: "Low"
+		},
+		substitutes: ["WLP565", "WLP566"]
+	},
+	{
+		name: "WLP677 Lactobacillus",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Sour",
+			form: "Liquid",
+			attenuation: "N/A",
+			temp_range: "20-40°C",
+			flocculation: "N/A"
+		},
+		substitutes: ["Wyeast 5335", "Omega Lacto Blend"]
+	},
+	{
+		name: "WLP650 Brettanomyces Bruxellensis",
+		category: "yeast",
+		available: true,
+		specs: {
+			type: "Wild",
+			form: "Liquid",
+			attenuation: "N/A",
+			temp_range: "18-25°C",
+			flocculation: "N/A"
+		},
+		substitutes: ["Wyeast 5112", "Omega Brett Blend"]
+	}
+];
+var InventorySearchTool = class {
+	name = "inventory_search";
+	description = "Search a virtual inventory of brewing ingredients (malts, hops, yeasts). Filter by category, check availability, find substitutes, and get technical specifications.";
+	parameters = toInputJsonSchema(InventorySearchInputSchema);
+	resolveExecution(args) {
+		return {
+			description: `Inventory search: ${args.query}`,
+			approvalRule: this.name,
+			execute: () => this.execute(args)
+		};
+	}
+	execute(args) {
+		try {
+			const q = args.query.toLowerCase();
+			const cat = args.category ?? "all";
+			const results = INVENTORY.filter((item) => {
+				if (cat !== "all" && item.category !== cat) return false;
+				if (!args.include_unavailable && !item.available) return false;
+				return item.name.toLowerCase().includes(q) || Object.values(item.specs).some((v) => v.toLowerCase().includes(q)) || item.substitutes?.some((s) => s.toLowerCase().includes(q));
+			});
+			if (results.length === 0) return Promise.resolve({ output: `Nessun risultato per "${args.query}".` });
+			const lines = [`**${results.length} risultato/i per "${args.query}"**`, ""];
+			for (const item of results.slice(0, 20)) {
+				const status = item.available ? "✅ Disponibile" : "❌ Non disponibile";
+				lines.push(`**${item.name}** (${item.category}) — ${status}`);
+				for (const [k, v] of Object.entries(item.specs)) lines.push(`  ${k}: ${v}`);
+				if (item.substitutes?.length) lines.push(`  Sostituti: ${item.substitutes.join(", ")}`);
+				lines.push("");
+			}
+			if (results.length > 20) lines.push(`... e altri ${results.length - 20} risultati.`);
+			return Promise.resolve({ output: lines.join("\n") });
+		} catch (e) {
+			return Promise.resolve({
+				isError: true,
+				output: e instanceof Error ? e.message : String(e)
+			});
+		}
+	}
+};
+registerTool(InventorySearchTool);
+
+//#endregion
+//#region src/brewing/data-root.ts
+/**
+* Shared data-root resolution for the brewmaster plugin.
+*
+* Persistent brewing data is stored below the user's sandbox:
+* `<sandbox>/users/<username>/.brewing-data`.
+*
+* Never fall back to a process-global directory. A missing user context is an
+* error because a fallback would silently merge different users' data.
+*/
+function userChroot(args) {
+	if (args === null || typeof args !== "object") return void 0;
+	const user = args["_kimi_user"];
+	if (user === null || typeof user !== "object") return void 0;
+	const chroot = user["chroot"];
+	return typeof chroot === "string" && chroot.length > 0 ? chroot : void 0;
+}
+function userSession(args) {
+	if (args === null || typeof args !== "object") return void 0;
+	const user = args["_kimi_user"];
+	if (user === null || typeof user !== "object") return void 0;
+	return user;
+}
+function safeUserName(user) {
+	const raw = user.username ?? user.userId;
+	if (typeof raw !== "string" || raw.trim() === "") return void 0;
+	const name = raw.trim().replace(/[^a-zA-Z0-9._-]+/g, "_");
+	return name && name !== "." && name !== ".." ? name : void 0;
+}
+/** Stable key used for other per-user in-memory state. */
+function userScopeKey(args) {
+	const user = userSession(args);
+	const chroot = userChroot(args);
+	const name = user ? safeUserName(user) : void 0;
+	if (!chroot || !name) throw new Error("Contesto utente mancante: impossibile determinare la sandbox users/<nome-utente>.");
+	return `${chroot}:${name}`;
+}
+function dataRoot(args) {
+	const user = userSession(args);
+	const chroot = userChroot(args);
+	const name = user ? safeUserName(user) : void 0;
+	if (!chroot || !name) throw new Error("Contesto utente mancante: i dati devono essere salvati in users/<nome-utente>.");
+	const userDir = basename(dirname(resolve(chroot))) === "users" && basename(resolve(chroot)) === name ? resolve(chroot) : join(resolve(chroot), "users", name);
+	return join(userDir, ".brewing-data");
+}
+
+//#endregion
+//#region src/brewing/inventory-manager.ts
+/**
+* Inventory manager tool — persistent stock management for brewing raw materials.
+*
+* Manages a persistent inventory of brewing ingredients (malts, hops, yeasts,
+* spices, adjuncts, water salts, etc.) stored per-user under the data root
+* (`.brewing-data` inside the user's chroot, else `~/.kimi-code/brewing`).
+*
+* Each item tracks: name, category, quantity (with unit), purchase date, cost,
+* supplier, best-before / expiry date, lot, storage notes, and free notes.
+*
+* Supported operations:
+*   - add      : add a new item (or restock an existing one)
+*   - remove   : remove an item entirely
+*   - adjust   : add/subtract quantity to/from an existing item
+*   - list     : list items, optionally filtered by category / expiring / low stock
+*   - search   : search by name or notes
+*   - stats    : summary of stock value, expiring items, low stock
+*
+* This helps when elaborating a recipe: the agent can see what is already on
+* hand, what needs to be bought, and what is about to expire.
+*/
+const INVENTORY_CATEGORIES = [
+	"malt",
+	"hop",
+	"yeast",
+	"spice",
+	"adjunct",
+	"water_salt",
+	"sugar",
+	"other"
+];
+function inventoryPath(root) {
+	return join(root, "inventory.json");
+}
+function ensureDir$1(root) {
+	const dir = dirname(inventoryPath(root));
+	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+}
+function loadItems(root) {
+	const path = inventoryPath(root);
+	if (!existsSync(path)) return [];
+	try {
+		const raw = readFileSync(path, "utf-8");
+		const parsed = JSON.parse(raw);
+		if (parsed.version === 1 && Array.isArray(parsed.items)) return parsed.items;
+		return [];
+	} catch {
+		return [];
+	}
+}
+function saveItems(root, items) {
+	ensureDir$1(root);
+	const file = {
+		version: 1,
+		items
+	};
+	writeFileSync(inventoryPath(root), JSON.stringify(file, null, 2), "utf-8");
+}
+function makeId() {
+	return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+function normalizeName$2(name) {
+	return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+function findItem(items, name) {
+	const target = normalizeName$2(name);
+	return items.find((i) => normalizeName$2(i.name) === target);
+}
+function todayIso() {
+	return (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+}
+function daysUntil(dateIso) {
+	const target = (/* @__PURE__ */ new Date(`${dateIso}T00:00:00`)).getTime();
+	const now = (/* @__PURE__ */ new Date(`${todayIso()}T00:00:00`)).getTime();
+	return Math.round((target - now) / 864e5);
+}
+function formatQty(item) {
+	return `${item.quantity} ${item.unit}`;
+}
+function formatCost(item) {
+	if (item.cost === void 0) return "—";
+	return `€${item.cost.toFixed(2)}/${item.unit}`;
+}
+function expiryLabel(item) {
+	if (!item.bestBefore) return "";
+	const d = daysUntil(item.bestBefore);
+	if (d < 0) return ` ⚠️ SCADUTO da ${-d}g`;
+	if (d === 0) return " ⚠️ SCADE OGGI";
+	if (d <= 30) return ` ⏳ scade tra ${d}g`;
+	return "";
+}
+function itemToLine(item) {
+	const parts = [`**${item.name}** [${item.category}] — ${formatQty(item)}`];
+	if (item.cost !== void 0) parts.push(`Costo: ${formatCost(item)}`);
+	if (item.purchaseDate) parts.push(`Acquisto: ${item.purchaseDate}`);
+	if (item.supplier) parts.push(`Fornitore: ${item.supplier}`);
+	if (item.bestBefore) parts.push(`Scadenza: ${item.bestBefore}${expiryLabel(item)}`);
+	if (item.lot) parts.push(`Lotto: ${item.lot}`);
+	if (item.storage) parts.push(`Conservazione: ${item.storage}`);
+	if (item.notes) parts.push(`Note: ${item.notes}`);
+	return parts.join(" | ");
+}
+const InventoryManagerInputSchema = object({
+	operation: _enum([
+		"add",
+		"remove",
+		"adjust",
+		"list",
+		"search",
+		"stats"
+	]).describe("Operazione da eseguire: add (aggiungi/riapprovvigiona), remove (elimina), adjust (aggiungi/sottrai quantità), list (elenca), search (cerca), stats (riepilogo)."),
+	name: string().optional().describe("Nome dell'ingrediente (es. \"Pilsner Malt Weyermann\", \"Citra\"). Obbligatorio per add/remove/adjust/search."),
+	category: _enum(INVENTORY_CATEGORIES).optional().describe("Tipologia merce: malt, hop, yeast, spice, adjunct, water_salt, sugar, other."),
+	quantity: number().optional().describe("Quantità. Per add: quantità iniziale o da aggiungere. Per adjust: delta (positivo aggiunge, negativo sottrae)."),
+	unit: string().optional().describe("Unità di misura (kg, g, pcs, packets, L, ml...). Default \"kg\" per malti/adjunct, \"g\" per luppoli/spezie, \"pcs\" per lieviti."),
+	purchaseDate: string().optional().describe("Data di acquisto in formato YYYY-MM-DD."),
+	cost: number().optional().describe("Costo unitario in EUR (per unità)."),
+	supplier: string().optional().describe("Fornitore / negozio."),
+	bestBefore: string().optional().describe("Data di scadenza in formato YYYY-MM-DD."),
+	lot: string().optional().describe("Numero di lotto / partita."),
+	storage: string().optional().describe("Note di conservazione (frigo, buio, freezer...)."),
+	notes: string().optional().describe("Note libere."),
+	expiringWithinDays: number().optional().describe("Per list: mostra solo gli articoli che scadono entro questo numero di giorni."),
+	lowStockBelow: number().optional().describe("Per list: mostra solo gli articoli con quantità inferiore a questo valore."),
+	includeExpired: boolean().default(false).describe("Per list: include anche gli articoli scaduti. Default false.")
+});
+var InventoryManagerTool = class {
+	name = "inventory_manager";
+	description = "Gestisci l'inventario persistente delle materie prime brassicole (malti, luppoli, lieviti, spezie, adjunct, sali acqua, zuccheri). Aggiungi/rimuovi/regola quantità, elenca, cerca e ottieni riepiloghi di scorte, valore e scadenze. I dati sono salvati per utente in .brewing-data dentro la chroot dell'utente (fallback ~/.kimi-code/brewing).";
+	parameters = toInputJsonSchema(InventoryManagerInputSchema);
+	resolveExecution(args) {
+		const root = dataRoot(args);
+		return {
+			description: `Inventory ${args.operation}${args.name ? `: ${args.name}` : ""}`,
+			approvalRule: this.name,
+			execute: () => this.execute(args, root)
+		};
+	}
+	execute(args, root) {
+		try {
+			switch (args.operation) {
+				case "add": return Promise.resolve(this.add(args, root));
+				case "remove": return Promise.resolve(this.remove(args, root));
+				case "adjust": return Promise.resolve(this.adjust(args, root));
+				case "list": return Promise.resolve(this.list(args, root));
+				case "search": return Promise.resolve(this.search(args, root));
+				case "stats": return Promise.resolve(this.stats(root));
+			}
+		} catch (e) {
+			return Promise.resolve({
+				isError: true,
+				output: e instanceof Error ? e.message : String(e)
+			});
+		}
+	}
+	add(args, root) {
+		const name = args.name?.trim();
+		if (!name) return {
+			isError: true,
+			output: "Specifica un nome per l'articolo (campo \"name\")."
+		};
+		const items = loadItems(root);
+		const existing = findItem(items, name);
+		if (existing) {
+			const delta = args.quantity ?? 0;
+			existing.quantity += delta;
+			if (args.category) existing.category = args.category;
+			if (args.unit) existing.unit = args.unit;
+			if (args.purchaseDate) existing.purchaseDate = args.purchaseDate;
+			if (args.cost !== void 0) existing.cost = args.cost;
+			if (args.supplier) existing.supplier = args.supplier;
+			if (args.bestBefore) existing.bestBefore = args.bestBefore;
+			if (args.lot) existing.lot = args.lot;
+			if (args.storage) existing.storage = args.storage;
+			if (args.notes) existing.notes = args.notes;
+			existing.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+			saveItems(root, items);
+			return { output: `Riapprovvigionato **${existing.name}**: ora ${formatQty(existing)} (aggiunti ${delta} ${existing.unit}).\n${itemToLine(existing)}` };
+		}
+		const category = args.category ?? inferCategory(name);
+		const unit = args.unit ?? defaultUnit(category);
+		const now = (/* @__PURE__ */ new Date()).toISOString();
+		const item = {
+			id: makeId(),
+			name,
+			category,
+			quantity: args.quantity ?? 0,
+			unit,
+			purchaseDate: args.purchaseDate,
+			cost: args.cost,
+			supplier: args.supplier,
+			bestBefore: args.bestBefore,
+			lot: args.lot,
+			storage: args.storage,
+			notes: args.notes,
+			createdAt: now,
+			updatedAt: now
+		};
+		items.push(item);
+		saveItems(root, items);
+		return { output: `Aggiunto **${item.name}** [${item.category}] — ${formatQty(item)}.\n${itemToLine(item)}` };
+	}
+	remove(args, root) {
+		const name = args.name?.trim();
+		if (!name) return {
+			isError: true,
+			output: "Specifica il nome dell'articolo da rimuovere (campo \"name\")."
+		};
+		const items = loadItems(root);
+		const idx = items.findIndex((i) => normalizeName$2(i.name) === normalizeName$2(name));
+		if (idx < 0) return {
+			isError: true,
+			output: `Nessun articolo trovato con nome "${name}".`
+		};
+		const [removed] = items.splice(idx, 1);
+		saveItems(root, items);
+		return { output: `Rimosso **${removed.name}** [${removed.category}] dall'inventario.` };
+	}
+	adjust(args, root) {
+		const name = args.name?.trim();
+		if (!name) return {
+			isError: true,
+			output: "Specifica il nome dell'articolo da regolare (campo \"name\")."
+		};
+		if (args.quantity === void 0) return {
+			isError: true,
+			output: "Specifica il delta di quantità (campo \"quantity\", positivo per aggiungere, negativo per sottrarre)."
+		};
+		const items = loadItems(root);
+		const item = findItem(items, name);
+		if (!item) return {
+			isError: true,
+			output: `Nessun articolo trovato con nome "${name}".`
+		};
+		item.quantity += args.quantity;
+		if (item.quantity < 0) item.quantity = 0;
+		item.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+		saveItems(root, items);
+		const direction = args.quantity >= 0 ? "aggiunti" : "sottratti";
+		const status = item.quantity === 0 ? " ⚠️ ESAURITO" : "";
+		return { output: `Regolato **${item.name}**: ${direction} ${Math.abs(args.quantity)} ${item.unit} → ora ${formatQty(item)}${status}.\n${itemToLine(item)}` };
+	}
+	list(args, root) {
+		let items = loadItems(root);
+		if (items.length === 0) return { output: "Inventario vuoto. Usa l'operazione \"add\" per aggiungere materie prime." };
+		if (args.category) items = items.filter((i) => i.category === args.category);
+		if (args.expiringWithinDays !== void 0) items = items.filter((i) => i.bestBefore && daysUntil(i.bestBefore) <= args.expiringWithinDays);
+		if (args.lowStockBelow !== void 0) items = items.filter((i) => i.quantity < args.lowStockBelow);
+		if (!args.includeExpired) items = items.filter((i) => !i.bestBefore || daysUntil(i.bestBefore) >= 0);
+		if (items.length === 0) return { output: "Nessun articolo corrisponde ai filtri specificati." };
+		const sorted = [...items].sort((a, b) => {
+			const cat = a.category.localeCompare(b.category);
+			return cat !== 0 ? cat : a.name.localeCompare(b.name);
+		});
+		const lines = [`**${sorted.length} articolo/i in inventario**`, ""];
+		let currentCat = "";
+		for (const item of sorted) {
+			if (item.category !== currentCat) {
+				currentCat = item.category;
+				lines.push(`### ${currentCat}`);
+			}
+			lines.push(`- ${itemToLine(item)}`);
+		}
+		return { output: lines.join("\n") };
+	}
+	search(args, root) {
+		const q = (args.name ?? "").trim().toLowerCase();
+		if (!q) return {
+			isError: true,
+			output: "Specifica un termine di ricerca (campo \"name\")."
+		};
+		const items = loadItems(root).filter((i) => i.name.toLowerCase().includes(q) || (i.notes ?? "").toLowerCase().includes(q) || (i.supplier ?? "").toLowerCase().includes(q) || (i.lot ?? "").toLowerCase().includes(q));
+		if (items.length === 0) return { output: `Nessun articolo trovato per "${q}".` };
+		const lines = [`**${items.length} risultato/i per "${q}"**`, ""];
+		for (const item of items) lines.push(`- ${itemToLine(item)}`);
+		return { output: lines.join("\n") };
+	}
+	stats(root) {
+		const items = loadItems(root);
+		if (items.length === 0) return { output: "Inventario vuoto. Usa l'operazione \"add\" per aggiungere materie prime." };
+		const totalValue = items.reduce((sum, i) => sum + (i.cost !== void 0 ? i.cost * i.quantity : 0), 0);
+		const expiring = items.filter((i) => i.bestBefore && daysUntil(i.bestBefore) <= 30).sort((a, b) => a.bestBefore < b.bestBefore ? -1 : 1);
+		const expired = items.filter((i) => i.bestBefore && daysUntil(i.bestBefore) < 0);
+		items.filter((i) => i.quantity === 0);
+		const outOfStock = items.filter((i) => i.quantity <= 0);
+		const byCategory = {};
+		for (const i of items) byCategory[i.category] = (byCategory[i.category] ?? 0) + 1;
+		const lines = [
+			`**Riepilogo inventario**`,
+			"",
+			`- Articoli totali: ${items.length}`,
+			`- Valore stimato: €${totalValue.toFixed(2)}`,
+			`- Esauriti (qty 0): ${outOfStock.length}`,
+			"",
+			"Per categoria:",
+			...Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([cat, n]) => `  - ${cat}: ${n}`)
+		];
+		if (expired.length > 0) {
+			lines.push("", `**Scaduti (${expired.length}):**`);
+			for (const i of expired) lines.push(`  - ${i.name} — scaduto da ${-daysUntil(i.bestBefore)}g`);
+		}
+		if (expiring.length > 0) {
+			lines.push("", `**In scadenza entro 30 giorni (${expiring.length}):**`);
+			for (const i of expiring) lines.push(`  - ${i.name} — ${i.bestBefore}${expiryLabel(i)}`);
+		}
+		if (outOfStock.length > 0) {
+			lines.push("", `**Da riacquistare (${outOfStock.length}):**`);
+			for (const i of outOfStock) lines.push(`  - ${i.name} [${i.category}]`);
+		}
+		return { output: lines.join("\n") };
+	}
+};
+function inferCategory(name) {
+	const n = name.toLowerCase();
+	if (/\b(hop|luppolo|luppoli)\b/.test(n) || /(citra|mosaic|simcoe|cascade|saaz|hallertau|chinook|centennial|amarillo|galaxy|magnum|fuggles|goldings|willamette|columbus|warrior|strata|el dorado|tettnang|hersbrucker|nelson|motueka|azacca|idaho|bru-1|talus|sabro|vic secret|enigma|phoenix|northdown|target|challenger|brewers gold|perle|spalt|tradition|liberty|crystal|mt hood|sterling|santiam|glacier|summit|bravo|zeus|apollo|equinox|jarrylo|cashmere|lemon drop|mandarina|huell melon|polaris|comet|cluster|nugget|willamette)\b/.test(n)) return "hop";
+	if (/\b(yeast|lievito|lieviti|safale|safbrew|saflager|wlp|wyeast|omega|lallemand|fermentis|mangrove|kveik|us-05|s-04|w-34)\b/.test(n)) return "yeast";
+	if (/\b(spice|spezia|spezie|corriandolo|buccia|arancia|vaniglia|cannella|noce moscata|zenzero|pepe|chiodi|cardamomo|anice|finocchio|lavanda|rosmarino|timo|salvia|hibiscus|ibisco|ciliegia|frutto|frutta)\b/.test(n)) return "spice";
+	if (/\b(salt|sale|calcio|magnesio|sodio|cloruro|solfato|bicarbonato|gypsum|epsom|calcium|magnesium|acqua|water)\b/.test(n)) return "water_salt";
+	if (/\b(sugar|zucchero|destrosio|saccarosio|miele|melassa|sciroppo|glucosio|fruttosio|lattosio|brown sugar|turbinado|demerara|belgian candi|candi)\b/.test(n)) return "sugar";
+	if (/\b(adjunct|fiocchi|flaked|riso|mais|avena|orzo|grano|farro|segale|rye|wheat|oats|rice|corn|barley|triticale|sorgo|miglio|quinoa)\b/.test(n)) return "adjunct";
+	return "malt";
+}
+function defaultUnit(category) {
+	switch (category) {
+		case "hop":
+		case "spice":
+		case "water_salt": return "g";
+		case "yeast": return "pcs";
+		case "sugar": return "kg";
+		default: return "kg";
+	}
+}
+registerTool(InventoryManagerTool);
 
 //#endregion
 //#region src/brewing/yaml-to-docx.ts
@@ -22004,2259 +22757,6 @@ var TinctureCalculatorTool = class {
 	}
 };
 registerTool(TinctureCalculatorTool);
-
-//#endregion
-//#region src/brewing/yaml-validator.ts
-/**
-* YAML recipe validator — reads a beer recipe YAML, validates it against
-* BJCP style guidelines with deterministic checks, then produces an LLM
-* review prompt with full context for deep qualitative analysis.
-*/
-const YamlValidatorInputSchema = object({ input_file: string().describe("Path to the recipe YAML file.") });
-const BJCP = {
-	"1A": {
-		code: "1A",
-		category: "1",
-		name: "American Light Lager",
-		og_min: 1.028,
-		og_max: 1.04,
-		fg_min: .998,
-		fg_max: 1.008,
-		abv_min: 2.8,
-		abv_max: 4.2,
-		ibu_min: 8,
-		ibu_max: 12,
-		ebc_min: 4,
-		ebc_max: 6
-	},
-	"1B": {
-		code: "1B",
-		category: "1",
-		name: "American Lager",
-		og_min: 1.04,
-		og_max: 1.05,
-		fg_min: 1.004,
-		fg_max: 1.01,
-		abv_min: 4.2,
-		abv_max: 5.3,
-		ibu_min: 8,
-		ibu_max: 18,
-		ebc_min: 4,
-		ebc_max: 8
-	},
-	"1C": {
-		code: "1C",
-		category: "1",
-		name: "Cream Ale",
-		og_min: 1.042,
-		og_max: 1.055,
-		fg_min: 1.006,
-		fg_max: 1.012,
-		abv_min: 4.2,
-		abv_max: 5.6,
-		ibu_min: 8,
-		ibu_max: 20,
-		ebc_min: 4,
-		ebc_max: 10
-	},
-	"1D": {
-		code: "1D",
-		category: "1",
-		name: "American Wheat Beer",
-		og_min: 1.04,
-		og_max: 1.055,
-		fg_min: 1.008,
-		fg_max: 1.013,
-		abv_min: 4,
-		abv_max: 5.5,
-		ibu_min: 15,
-		ibu_max: 30,
-		ebc_min: 6,
-		ebc_max: 12
-	},
-	"2A": {
-		code: "2A",
-		category: "2",
-		name: "International Pale Lager",
-		og_min: 1.042,
-		og_max: 1.05,
-		fg_min: 1.008,
-		fg_max: 1.012,
-		abv_min: 4.6,
-		abv_max: 6,
-		ibu_min: 18,
-		ibu_max: 25,
-		ebc_min: 4,
-		ebc_max: 10
-	},
-	"2B": {
-		code: "2B",
-		category: "2",
-		name: "International Amber Lager",
-		og_min: 1.042,
-		og_max: 1.055,
-		fg_min: 1.008,
-		fg_max: 1.014,
-		abv_min: 4.6,
-		abv_max: 6,
-		ibu_min: 8,
-		ibu_max: 25,
-		ebc_min: 14,
-		ebc_max: 34
-	},
-	"2C": {
-		code: "2C",
-		category: "2",
-		name: "International Dark Lager",
-		og_min: 1.044,
-		og_max: 1.056,
-		fg_min: 1.008,
-		fg_max: 1.012,
-		abv_min: 4.5,
-		abv_max: 6,
-		ibu_min: 8,
-		ibu_max: 20,
-		ebc_min: 28,
-		ebc_max: 50
-	},
-	"3A": {
-		code: "3A",
-		category: "3",
-		name: "Czech Pale Lager",
-		og_min: 1.028,
-		og_max: 1.044,
-		fg_min: 1.008,
-		fg_max: 1.014,
-		abv_min: 3,
-		abv_max: 4,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 6,
-		ebc_max: 14
-	},
-	"3B": {
-		code: "3B",
-		category: "3",
-		name: "Czech Premium Pale Lager",
-		og_min: 1.044,
-		og_max: 1.06,
-		fg_min: 1.013,
-		fg_max: 1.017,
-		abv_min: 4.2,
-		abv_max: 5.8,
-		ibu_min: 30,
-		ibu_max: 45,
-		ebc_min: 6,
-		ebc_max: 14
-	},
-	"3C": {
-		code: "3C",
-		category: "3",
-		name: "Czech Amber Lager",
-		og_min: 1.044,
-		og_max: 1.06,
-		fg_min: 1.013,
-		fg_max: 1.017,
-		abv_min: 4.4,
-		abv_max: 5.8,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 20,
-		ebc_max: 40
-	},
-	"3D": {
-		code: "3D",
-		category: "3",
-		name: "Czech Dark Lager",
-		og_min: 1.044,
-		og_max: 1.056,
-		fg_min: 1.013,
-		fg_max: 1.017,
-		abv_min: 4.4,
-		abv_max: 5.8,
-		ibu_min: 18,
-		ibu_max: 34,
-		ebc_min: 34,
-		ebc_max: 70
-	},
-	"4A": {
-		code: "4A",
-		category: "4",
-		name: "Munich Helles",
-		og_min: 1.044,
-		og_max: 1.048,
-		fg_min: 1.006,
-		fg_max: 1.012,
-		abv_min: 4.7,
-		abv_max: 5.4,
-		ibu_min: 16,
-		ibu_max: 22,
-		ebc_min: 6,
-		ebc_max: 10
-	},
-	"4B": {
-		code: "4B",
-		category: "4",
-		name: "Festbier",
-		og_min: 1.054,
-		og_max: 1.058,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 5.8,
-		abv_max: 6.3,
-		ibu_min: 18,
-		ibu_max: 25,
-		ebc_min: 8,
-		ebc_max: 14
-	},
-	"4C": {
-		code: "4C",
-		category: "4",
-		name: "Helles Bock",
-		og_min: 1.064,
-		og_max: 1.072,
-		fg_min: 1.011,
-		fg_max: 1.018,
-		abv_min: 6.3,
-		abv_max: 7.4,
-		ibu_min: 23,
-		ibu_max: 35,
-		ebc_min: 12,
-		ebc_max: 20
-	},
-	"5A": {
-		code: "5A",
-		category: "5",
-		name: "German Leichtbier",
-		og_min: 1.026,
-		og_max: 1.034,
-		fg_min: 1.006,
-		fg_max: 1.01,
-		abv_min: 2.4,
-		abv_max: 3.6,
-		ibu_min: 15,
-		ibu_max: 28,
-		ebc_min: 4,
-		ebc_max: 8
-	},
-	"5B": {
-		code: "5B",
-		category: "5",
-		name: "Kölsch",
-		og_min: 1.044,
-		og_max: 1.05,
-		fg_min: 1.007,
-		fg_max: 1.011,
-		abv_min: 4.4,
-		abv_max: 5.2,
-		ibu_min: 18,
-		ibu_max: 30,
-		ebc_min: 7,
-		ebc_max: 10
-	},
-	"5C": {
-		code: "5C",
-		category: "5",
-		name: "German Helles Exportbier",
-		og_min: 1.048,
-		og_max: 1.056,
-		fg_min: 1.01,
-		fg_max: 1.015,
-		abv_min: 4.8,
-		abv_max: 6,
-		ibu_min: 20,
-		ibu_max: 30,
-		ebc_min: 8,
-		ebc_max: 12
-	},
-	"5D": {
-		code: "5D",
-		category: "5",
-		name: "German Pils",
-		og_min: 1.044,
-		og_max: 1.05,
-		fg_min: 1.008,
-		fg_max: 1.013,
-		abv_min: 4.4,
-		abv_max: 5.2,
-		ibu_min: 22,
-		ibu_max: 40,
-		ebc_min: 4,
-		ebc_max: 8
-	},
-	"6A": {
-		code: "6A",
-		category: "6",
-		name: "Märzen",
-		og_min: 1.054,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 5.8,
-		abv_max: 6.3,
-		ibu_min: 18,
-		ibu_max: 24,
-		ebc_min: 16,
-		ebc_max: 30
-	},
-	"6B": {
-		code: "6B",
-		category: "6",
-		name: "Rauchbier",
-		og_min: 1.05,
-		og_max: 1.057,
-		fg_min: 1.012,
-		fg_max: 1.016,
-		abv_min: 4.8,
-		abv_max: 6,
-		ibu_min: 20,
-		ibu_max: 30,
-		ebc_min: 24,
-		ebc_max: 44
-	},
-	"6C": {
-		code: "6C",
-		category: "6",
-		name: "Dunkels Bock",
-		og_min: 1.064,
-		og_max: 1.072,
-		fg_min: 1.013,
-		fg_max: 1.019,
-		abv_min: 6.3,
-		abv_max: 7.2,
-		ibu_min: 20,
-		ibu_max: 27,
-		ebc_min: 28,
-		ebc_max: 44
-	},
-	"7A": {
-		code: "7A",
-		category: "7",
-		name: "Vienna Lager",
-		og_min: 1.048,
-		og_max: 1.055,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 4.7,
-		abv_max: 5.5,
-		ibu_min: 18,
-		ibu_max: 30,
-		ebc_min: 18,
-		ebc_max: 30
-	},
-	"7B": {
-		code: "7B",
-		category: "7",
-		name: "Altbier",
-		og_min: 1.044,
-		og_max: 1.052,
-		fg_min: 1.008,
-		fg_max: 1.014,
-		abv_min: 4.3,
-		abv_max: 5.5,
-		ibu_min: 25,
-		ibu_max: 50,
-		ebc_min: 22,
-		ebc_max: 34
-	},
-	"7C": {
-		code: "7C",
-		category: "7",
-		name: "Kellerbier",
-		og_min: 1.045,
-		og_max: 1.051,
-		fg_min: 1.008,
-		fg_max: 1.013,
-		abv_min: 4.7,
-		abv_max: 5.4,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 6,
-		ebc_max: 20
-	},
-	"8A": {
-		code: "8A",
-		category: "8",
-		name: "Munich Dunkel",
-		og_min: 1.048,
-		og_max: 1.056,
-		fg_min: 1.01,
-		fg_max: 1.016,
-		abv_min: 4.5,
-		abv_max: 5.6,
-		ibu_min: 18,
-		ibu_max: 28,
-		ebc_min: 28,
-		ebc_max: 46
-	},
-	"8B": {
-		code: "8B",
-		category: "8",
-		name: "Schwarzbier",
-		og_min: 1.046,
-		og_max: 1.052,
-		fg_min: 1.01,
-		fg_max: 1.016,
-		abv_min: 4.4,
-		abv_max: 5.4,
-		ibu_min: 22,
-		ibu_max: 30,
-		ebc_min: 34,
-		ebc_max: 62
-	},
-	"9A": {
-		code: "9A",
-		category: "9",
-		name: "Doppelbock",
-		og_min: 1.072,
-		og_max: 1.112,
-		fg_min: 1.016,
-		fg_max: 1.024,
-		abv_min: 7,
-		abv_max: 10,
-		ibu_min: 16,
-		ibu_max: 26,
-		ebc_min: 24,
-		ebc_max: 45
-	},
-	"9B": {
-		code: "9B",
-		category: "9",
-		name: "Eisbock",
-		og_min: 1.078,
-		og_max: 1.12,
-		fg_min: 1.02,
-		fg_max: 1.035,
-		abv_min: 9,
-		abv_max: 14,
-		ibu_min: 25,
-		ibu_max: 35,
-		ebc_min: 36,
-		ebc_max: 68
-	},
-	"9C": {
-		code: "9C",
-		category: "9",
-		name: "Baltic Porter",
-		og_min: 1.06,
-		og_max: 1.09,
-		fg_min: 1.016,
-		fg_max: 1.024,
-		abv_min: 6.5,
-		abv_max: 9.5,
-		ibu_min: 20,
-		ibu_max: 40,
-		ebc_min: 34,
-		ebc_max: 60
-	},
-	"10A": {
-		code: "10A",
-		category: "10",
-		name: "Weissbier",
-		og_min: 1.044,
-		og_max: 1.052,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 4.3,
-		abv_max: 5.6,
-		ibu_min: 8,
-		ibu_max: 15,
-		ebc_min: 4,
-		ebc_max: 14
-	},
-	"10B": {
-		code: "10B",
-		category: "10",
-		name: "Dunkles Weissbier",
-		og_min: 1.044,
-		og_max: 1.056,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 4.3,
-		abv_max: 5.6,
-		ibu_min: 10,
-		ibu_max: 18,
-		ebc_min: 28,
-		ebc_max: 46
-	},
-	"10C": {
-		code: "10C",
-		category: "10",
-		name: "Weizenbock",
-		og_min: 1.064,
-		og_max: 1.09,
-		fg_min: 1.015,
-		fg_max: 1.022,
-		abv_min: 6.5,
-		abv_max: 9,
-		ibu_min: 15,
-		ibu_max: 30,
-		ebc_min: 12,
-		ebc_max: 44
-	},
-	"11A": {
-		code: "11A",
-		category: "11",
-		name: "Ordinary Bitter",
-		og_min: 1.03,
-		og_max: 1.039,
-		fg_min: 1.007,
-		fg_max: 1.011,
-		abv_min: 3.2,
-		abv_max: 3.8,
-		ibu_min: 25,
-		ibu_max: 35,
-		ebc_min: 16,
-		ebc_max: 28
-	},
-	"11B": {
-		code: "11B",
-		category: "11",
-		name: "Best Bitter",
-		og_min: 1.04,
-		og_max: 1.048,
-		fg_min: 1.008,
-		fg_max: 1.012,
-		abv_min: 3.8,
-		abv_max: 4.6,
-		ibu_min: 25,
-		ibu_max: 40,
-		ebc_min: 16,
-		ebc_max: 28
-	},
-	"11C": {
-		code: "11C",
-		category: "11",
-		name: "Strong Bitter",
-		og_min: 1.048,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.016,
-		abv_min: 4.6,
-		abv_max: 6.2,
-		ibu_min: 30,
-		ibu_max: 50,
-		ebc_min: 18,
-		ebc_max: 40
-	},
-	"12A": {
-		code: "12A",
-		category: "12",
-		name: "British Golden Ale",
-		og_min: 1.038,
-		og_max: 1.053,
-		fg_min: 1.006,
-		fg_max: 1.012,
-		abv_min: 3.8,
-		abv_max: 5,
-		ibu_min: 20,
-		ibu_max: 45,
-		ebc_min: 4,
-		ebc_max: 12
-	},
-	"12B": {
-		code: "12B",
-		category: "12",
-		name: "Australian Sparkling Ale",
-		og_min: 1.038,
-		og_max: 1.05,
-		fg_min: 1.004,
-		fg_max: 1.006,
-		abv_min: 4.5,
-		abv_max: 6,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 4,
-		ebc_max: 14
-	},
-	"12C": {
-		code: "12C",
-		category: "12",
-		name: "English IPA",
-		og_min: 1.05,
-		og_max: 1.075,
-		fg_min: 1.01,
-		fg_max: 1.018,
-		abv_min: 5,
-		abv_max: 7.5,
-		ibu_min: 40,
-		ibu_max: 60,
-		ebc_min: 12,
-		ebc_max: 30
-	},
-	"13A": {
-		code: "13A",
-		category: "13",
-		name: "Dark Mild",
-		og_min: 1.03,
-		og_max: 1.038,
-		fg_min: 1.008,
-		fg_max: 1.013,
-		abv_min: 3,
-		abv_max: 3.8,
-		ibu_min: 10,
-		ibu_max: 25,
-		ebc_min: 24,
-		ebc_max: 44
-	},
-	"13B": {
-		code: "13B",
-		category: "13",
-		name: "British Brown Ale",
-		og_min: 1.04,
-		og_max: 1.052,
-		fg_min: 1.008,
-		fg_max: 1.013,
-		abv_min: 4.2,
-		abv_max: 5.9,
-		ibu_min: 20,
-		ibu_max: 30,
-		ebc_min: 24,
-		ebc_max: 44
-	},
-	"13C": {
-		code: "13C",
-		category: "13",
-		name: "English Porter",
-		og_min: 1.04,
-		og_max: 1.052,
-		fg_min: 1.008,
-		fg_max: 1.014,
-		abv_min: 4,
-		abv_max: 5.4,
-		ibu_min: 18,
-		ibu_max: 35,
-		ebc_min: 40,
-		ebc_max: 60
-	},
-	"14A": {
-		code: "14A",
-		category: "14",
-		name: "Scottish Light",
-		og_min: 1.03,
-		og_max: 1.035,
-		fg_min: 1.01,
-		fg_max: 1.013,
-		abv_min: 2.5,
-		abv_max: 3.2,
-		ibu_min: 10,
-		ibu_max: 20,
-		ebc_min: 30,
-		ebc_max: 50
-	},
-	"14B": {
-		code: "14B",
-		category: "14",
-		name: "Scottish Heavy",
-		og_min: 1.035,
-		og_max: 1.04,
-		fg_min: 1.01,
-		fg_max: 1.015,
-		abv_min: 3.2,
-		abv_max: 3.9,
-		ibu_min: 10,
-		ibu_max: 20,
-		ebc_min: 24,
-		ebc_max: 40
-	},
-	"14C": {
-		code: "14C",
-		category: "14",
-		name: "Scottish Export",
-		og_min: 1.04,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.016,
-		abv_min: 3.9,
-		abv_max: 6,
-		ibu_min: 15,
-		ibu_max: 30,
-		ebc_min: 24,
-		ebc_max: 40
-	},
-	"15A": {
-		code: "15A",
-		category: "15",
-		name: "Irish Red Ale",
-		og_min: 1.036,
-		og_max: 1.046,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 3.8,
-		abv_max: 5,
-		ibu_min: 18,
-		ibu_max: 28,
-		ebc_min: 18,
-		ebc_max: 36
-	},
-	"15B": {
-		code: "15B",
-		category: "15",
-		name: "Irish Stout",
-		og_min: 1.036,
-		og_max: 1.044,
-		fg_min: 1.007,
-		fg_max: 1.011,
-		abv_min: 4,
-		abv_max: 4.5,
-		ibu_min: 25,
-		ibu_max: 45,
-		ebc_min: 50,
-		ebc_max: 80
-	},
-	"15C": {
-		code: "15C",
-		category: "15",
-		name: "Irish Extra Stout",
-		og_min: 1.052,
-		og_max: 1.062,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 5.5,
-		abv_max: 6.5,
-		ibu_min: 35,
-		ibu_max: 50,
-		ebc_min: 60,
-		ebc_max: 80
-	},
-	"16A": {
-		code: "16A",
-		category: "16",
-		name: "Sweet Stout",
-		og_min: 1.044,
-		og_max: 1.06,
-		fg_min: 1.012,
-		fg_max: 1.024,
-		abv_min: 4,
-		abv_max: 6,
-		ibu_min: 20,
-		ibu_max: 40,
-		ebc_min: 60,
-		ebc_max: 100
-	},
-	"16B": {
-		code: "16B",
-		category: "16",
-		name: "Oatmeal Stout",
-		og_min: 1.045,
-		og_max: 1.065,
-		fg_min: 1.01,
-		fg_max: 1.018,
-		abv_min: 4.2,
-		abv_max: 5.9,
-		ibu_min: 25,
-		ibu_max: 40,
-		ebc_min: 40,
-		ebc_max: 80
-	},
-	"16C": {
-		code: "16C",
-		category: "16",
-		name: "Tropical Stout",
-		og_min: 1.056,
-		og_max: 1.075,
-		fg_min: 1.01,
-		fg_max: 1.018,
-		abv_min: 5.5,
-		abv_max: 8,
-		ibu_min: 30,
-		ibu_max: 50,
-		ebc_min: 60,
-		ebc_max: 100
-	},
-	"16D": {
-		code: "16D",
-		category: "16",
-		name: "Foreign Extra Stout",
-		og_min: 1.056,
-		og_max: 1.075,
-		fg_min: 1.01,
-		fg_max: 1.018,
-		abv_min: 6.3,
-		abv_max: 8,
-		ibu_min: 50,
-		ibu_max: 70,
-		ebc_min: 60,
-		ebc_max: 100
-	},
-	"17A": {
-		code: "17A",
-		category: "17",
-		name: "British Strong Ale",
-		og_min: 1.055,
-		og_max: 1.08,
-		fg_min: 1.015,
-		fg_max: 1.022,
-		abv_min: 5.5,
-		abv_max: 8,
-		ibu_min: 30,
-		ibu_max: 60,
-		ebc_min: 16,
-		ebc_max: 44
-	},
-	"17B": {
-		code: "17B",
-		category: "17",
-		name: "Old Ale",
-		og_min: 1.055,
-		og_max: 1.088,
-		fg_min: 1.015,
-		fg_max: 1.022,
-		abv_min: 5.5,
-		abv_max: 9,
-		ibu_min: 30,
-		ibu_max: 60,
-		ebc_min: 24,
-		ebc_max: 44
-	},
-	"17C": {
-		code: "17C",
-		category: "17",
-		name: "Wee Heavy",
-		og_min: 1.07,
-		og_max: 1.13,
-		fg_min: 1.018,
-		fg_max: 1.04,
-		abv_min: 6.5,
-		abv_max: 10,
-		ibu_min: 17,
-		ibu_max: 35,
-		ebc_min: 28,
-		ebc_max: 60
-	},
-	"17D": {
-		code: "17D",
-		category: "17",
-		name: "English Barley Wine",
-		og_min: 1.08,
-		og_max: 1.12,
-		fg_min: 1.018,
-		fg_max: 1.03,
-		abv_min: 8,
-		abv_max: 12,
-		ibu_min: 35,
-		ibu_max: 70,
-		ebc_min: 20,
-		ebc_max: 44
-	},
-	"18A": {
-		code: "18A",
-		category: "18",
-		name: "Blonde Ale",
-		og_min: 1.038,
-		og_max: 1.054,
-		fg_min: 1.008,
-		fg_max: 1.013,
-		abv_min: 3.8,
-		abv_max: 5.5,
-		ibu_min: 15,
-		ibu_max: 28,
-		ebc_min: 6,
-		ebc_max: 14
-	},
-	"18B": {
-		code: "18B",
-		category: "18",
-		name: "American Pale Ale",
-		og_min: 1.045,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.015,
-		abv_min: 4.5,
-		abv_max: 6.2,
-		ibu_min: 30,
-		ibu_max: 50,
-		ebc_min: 10,
-		ebc_max: 20
-	},
-	"19A": {
-		code: "19A",
-		category: "19",
-		name: "American Amber Ale",
-		og_min: 1.045,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.015,
-		abv_min: 4.5,
-		abv_max: 6.2,
-		ibu_min: 25,
-		ibu_max: 40,
-		ebc_min: 20,
-		ebc_max: 34
-	},
-	"19B": {
-		code: "19B",
-		category: "19",
-		name: "California Common",
-		og_min: 1.048,
-		og_max: 1.054,
-		fg_min: 1.011,
-		fg_max: 1.014,
-		abv_min: 4.5,
-		abv_max: 5.5,
-		ibu_min: 30,
-		ibu_max: 45,
-		ebc_min: 20,
-		ebc_max: 28
-	},
-	"19C": {
-		code: "19C",
-		category: "19",
-		name: "American Brown Ale",
-		og_min: 1.045,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.016,
-		abv_min: 4.3,
-		abv_max: 6.2,
-		ibu_min: 20,
-		ibu_max: 30,
-		ebc_min: 36,
-		ebc_max: 60
-	},
-	"20A": {
-		code: "20A",
-		category: "20",
-		name: "American Porter",
-		og_min: 1.05,
-		og_max: 1.07,
-		fg_min: 1.012,
-		fg_max: 1.018,
-		abv_min: 4.8,
-		abv_max: 6.5,
-		ibu_min: 25,
-		ibu_max: 50,
-		ebc_min: 40,
-		ebc_max: 80
-	},
-	"20B": {
-		code: "20B",
-		category: "20",
-		name: "American Stout",
-		og_min: 1.05,
-		og_max: 1.075,
-		fg_min: 1.01,
-		fg_max: 1.022,
-		abv_min: 5,
-		abv_max: 7,
-		ibu_min: 35,
-		ibu_max: 75,
-		ebc_min: 60,
-		ebc_max: 100
-	},
-	"20C": {
-		code: "20C",
-		category: "20",
-		name: "Imperial Stout",
-		og_min: 1.075,
-		og_max: 1.115,
-		fg_min: 1.018,
-		fg_max: 1.03,
-		abv_min: 8,
-		abv_max: 12,
-		ibu_min: 50,
-		ibu_max: 90,
-		ebc_min: 60,
-		ebc_max: 100
-	},
-	"21A": {
-		code: "21A",
-		category: "21",
-		name: "American IPA",
-		og_min: 1.056,
-		og_max: 1.07,
-		fg_min: 1.008,
-		fg_max: 1.014,
-		abv_min: 5.5,
-		abv_max: 7.5,
-		ibu_min: 40,
-		ibu_max: 70,
-		ebc_min: 12,
-		ebc_max: 28
-	},
-	"21B": {
-		code: "21B",
-		category: "21",
-		name: "Specialty IPA",
-		og_min: 1.05,
-		og_max: 1.085,
-		fg_min: 1.008,
-		fg_max: 1.02,
-		abv_min: 5,
-		abv_max: 9,
-		ibu_min: 25,
-		ibu_max: 100,
-		ebc_min: 6,
-		ebc_max: 80
-	},
-	"21B1": {
-		code: "21B1",
-		category: "21",
-		name: "New England IPA",
-		og_min: 1.06,
-		og_max: 1.085,
-		fg_min: 1.01,
-		fg_max: 1.02,
-		abv_min: 6,
-		abv_max: 9,
-		ibu_min: 25,
-		ibu_max: 60,
-		ebc_min: 6,
-		ebc_max: 16
-	},
-	"21C": {
-		code: "21C",
-		category: "21",
-		name: "Hazy IPA",
-		og_min: 1.06,
-		og_max: 1.085,
-		fg_min: 1.01,
-		fg_max: 1.02,
-		abv_min: 6,
-		abv_max: 9,
-		ibu_min: 25,
-		ibu_max: 60,
-		ebc_min: 6,
-		ebc_max: 16
-	},
-	"22A": {
-		code: "22A",
-		category: "22",
-		name: "Double IPA",
-		og_min: 1.065,
-		og_max: 1.085,
-		fg_min: 1.01,
-		fg_max: 1.02,
-		abv_min: 7.5,
-		abv_max: 10,
-		ibu_min: 60,
-		ibu_max: 120,
-		ebc_min: 12,
-		ebc_max: 30
-	},
-	"22B": {
-		code: "22B",
-		category: "22",
-		name: "American Strong Ale",
-		og_min: 1.062,
-		og_max: 1.09,
-		fg_min: 1.014,
-		fg_max: 1.024,
-		abv_min: 6.3,
-		abv_max: 10,
-		ibu_min: 50,
-		ibu_max: 100,
-		ebc_min: 14,
-		ebc_max: 44
-	},
-	"22C": {
-		code: "22C",
-		category: "22",
-		name: "American Barleywine",
-		og_min: 1.08,
-		og_max: 1.12,
-		fg_min: 1.016,
-		fg_max: 1.03,
-		abv_min: 8,
-		abv_max: 12,
-		ibu_min: 50,
-		ibu_max: 100,
-		ebc_min: 20,
-		ebc_max: 40
-	},
-	"22D": {
-		code: "22D",
-		category: "22",
-		name: "Wheatwine",
-		og_min: 1.08,
-		og_max: 1.12,
-		fg_min: 1.016,
-		fg_max: 1.03,
-		abv_min: 8,
-		abv_max: 12,
-		ibu_min: 30,
-		ibu_max: 60,
-		ebc_min: 16,
-		ebc_max: 30
-	},
-	"23A": {
-		code: "23A",
-		category: "23",
-		name: "Berliner Weisse",
-		og_min: 1.028,
-		og_max: 1.032,
-		fg_min: 1.003,
-		fg_max: 1.006,
-		abv_min: 2.8,
-		abv_max: 3.8,
-		ibu_min: 3,
-		ibu_max: 8,
-		ebc_min: 4,
-		ebc_max: 6
-	},
-	"23B": {
-		code: "23B",
-		category: "23",
-		name: "Flanders Red Ale",
-		og_min: 1.048,
-		og_max: 1.057,
-		fg_min: 1.002,
-		fg_max: 1.012,
-		abv_min: 4.6,
-		abv_max: 6.5,
-		ibu_min: 10,
-		ibu_max: 25,
-		ebc_min: 20,
-		ebc_max: 34
-	},
-	"23C": {
-		code: "23C",
-		category: "23",
-		name: "Oud Bruin",
-		og_min: 1.04,
-		og_max: 1.074,
-		fg_min: 1.008,
-		fg_max: 1.012,
-		abv_min: 4,
-		abv_max: 8,
-		ibu_min: 20,
-		ibu_max: 25,
-		ebc_min: 30,
-		ebc_max: 44
-	},
-	"23D": {
-		code: "23D",
-		category: "23",
-		name: "Lambic",
-		og_min: 1.04,
-		og_max: 1.054,
-		fg_min: 1.001,
-		fg_max: 1.01,
-		abv_min: 5,
-		abv_max: 6.5,
-		ibu_min: 0,
-		ibu_max: 10,
-		ebc_min: 6,
-		ebc_max: 26
-	},
-	"23E": {
-		code: "23E",
-		category: "23",
-		name: "Gueuze",
-		og_min: 1.04,
-		og_max: 1.06,
-		fg_min: 1,
-		fg_max: 1.006,
-		abv_min: 5,
-		abv_max: 8,
-		ibu_min: 0,
-		ibu_max: 10,
-		ebc_min: 6,
-		ebc_max: 26
-	},
-	"23F": {
-		code: "23F",
-		category: "23",
-		name: "Fruit Lambic",
-		og_min: 1.04,
-		og_max: 1.06,
-		fg_min: 1,
-		fg_max: 1.01,
-		abv_min: 5,
-		abv_max: 7,
-		ibu_min: 0,
-		ibu_max: 10,
-		ebc_min: 6,
-		ebc_max: 26
-	},
-	"23G": {
-		code: "23G",
-		category: "23",
-		name: "Gose",
-		og_min: 1.036,
-		og_max: 1.056,
-		fg_min: 1.006,
-		fg_max: 1.01,
-		abv_min: 4.2,
-		abv_max: 4.8,
-		ibu_min: 5,
-		ibu_max: 12,
-		ebc_min: 6,
-		ebc_max: 12
-	},
-	"24A": {
-		code: "24A",
-		category: "24",
-		name: "Witbier",
-		og_min: 1.044,
-		og_max: 1.052,
-		fg_min: 1.008,
-		fg_max: 1.012,
-		abv_min: 4.5,
-		abv_max: 5.5,
-		ibu_min: 10,
-		ibu_max: 20,
-		ebc_min: 4,
-		ebc_max: 8
-	},
-	"24B": {
-		code: "24B",
-		category: "24",
-		name: "Belgian Pale Ale",
-		og_min: 1.048,
-		og_max: 1.054,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 4.8,
-		abv_max: 5.5,
-		ibu_min: 20,
-		ibu_max: 30,
-		ebc_min: 16,
-		ebc_max: 28
-	},
-	"24C": {
-		code: "24C",
-		category: "24",
-		name: "Bière de Garde",
-		og_min: 1.06,
-		og_max: 1.08,
-		fg_min: 1.008,
-		fg_max: 1.016,
-		abv_min: 6,
-		abv_max: 8.5,
-		ibu_min: 18,
-		ibu_max: 28,
-		ebc_min: 12,
-		ebc_max: 38
-	},
-	"25A": {
-		code: "25A",
-		category: "25",
-		name: "Belgian Blond Ale",
-		og_min: 1.062,
-		og_max: 1.075,
-		fg_min: 1.008,
-		fg_max: 1.018,
-		abv_min: 6,
-		abv_max: 7.5,
-		ibu_min: 15,
-		ibu_max: 30,
-		ebc_min: 8,
-		ebc_max: 14
-	},
-	"25B": {
-		code: "25B",
-		category: "25",
-		name: "Saison",
-		og_min: 1.048,
-		og_max: 1.065,
-		fg_min: 1.002,
-		fg_max: 1.008,
-		abv_min: 5,
-		abv_max: 7,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 10,
-		ebc_max: 20
-	},
-	"25C": {
-		code: "25C",
-		category: "25",
-		name: "Belgian Golden Strong Ale",
-		og_min: 1.07,
-		og_max: 1.095,
-		fg_min: 1.005,
-		fg_max: 1.016,
-		abv_min: 7.5,
-		abv_max: 10.5,
-		ibu_min: 22,
-		ibu_max: 35,
-		ebc_min: 6,
-		ebc_max: 10
-	},
-	"26A": {
-		code: "26A",
-		category: "26",
-		name: "Trappist Single",
-		og_min: 1.044,
-		og_max: 1.054,
-		fg_min: 1.004,
-		fg_max: 1.01,
-		abv_min: 4.8,
-		abv_max: 6,
-		ibu_min: 25,
-		ibu_max: 45,
-		ebc_min: 6,
-		ebc_max: 10
-	},
-	"26B": {
-		code: "26B",
-		category: "26",
-		name: "Belgian Dubbel",
-		og_min: 1.062,
-		og_max: 1.075,
-		fg_min: 1.008,
-		fg_max: 1.018,
-		abv_min: 6,
-		abv_max: 7.6,
-		ibu_min: 15,
-		ibu_max: 25,
-		ebc_min: 20,
-		ebc_max: 34
-	},
-	"26C": {
-		code: "26C",
-		category: "26",
-		name: "Belgian Tripel",
-		og_min: 1.075,
-		og_max: 1.085,
-		fg_min: 1.008,
-		fg_max: 1.014,
-		abv_min: 7.5,
-		abv_max: 9.5,
-		ibu_min: 20,
-		ibu_max: 40,
-		ebc_min: 8,
-		ebc_max: 14
-	},
-	"26D": {
-		code: "26D",
-		category: "26",
-		name: "Belgian Dark Strong Ale",
-		og_min: 1.075,
-		og_max: 1.11,
-		fg_min: 1.01,
-		fg_max: 1.024,
-		abv_min: 8,
-		abv_max: 12,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 24,
-		ebc_max: 45
-	},
-	"27A": {
-		code: "27A",
-		category: "27",
-		name: "Grodziskie",
-		og_min: 1.028,
-		og_max: 1.032,
-		fg_min: 1.006,
-		fg_max: 1.012,
-		abv_min: 2.5,
-		abv_max: 3.3,
-		ibu_min: 20,
-		ibu_max: 35,
-		ebc_min: 6,
-		ebc_max: 12
-	},
-	"27B": {
-		code: "27B",
-		category: "27",
-		name: "Lichtenhainer",
-		og_min: 1.032,
-		og_max: 1.04,
-		fg_min: 1.004,
-		fg_max: 1.008,
-		abv_min: 3.5,
-		abv_max: 4.7,
-		ibu_min: 5,
-		ibu_max: 12,
-		ebc_min: 6,
-		ebc_max: 12
-	},
-	"27C": {
-		code: "27C",
-		category: "27",
-		name: "Roggenbier",
-		og_min: 1.046,
-		og_max: 1.056,
-		fg_min: 1.01,
-		fg_max: 1.014,
-		abv_min: 4.5,
-		abv_max: 6,
-		ibu_min: 10,
-		ibu_max: 20,
-		ebc_min: 24,
-		ebc_max: 40
-	},
-	"27D": {
-		code: "27D",
-		category: "27",
-		name: "Sahti",
-		og_min: 1.076,
-		og_max: 1.12,
-		fg_min: 1.016,
-		fg_max: 1.04,
-		abv_min: 7,
-		abv_max: 11,
-		ibu_min: 0,
-		ibu_max: 15,
-		ebc_min: 8,
-		ebc_max: 44
-	},
-	"27E": {
-		code: "27E",
-		category: "27",
-		name: "Kentucky Common",
-		og_min: 1.044,
-		og_max: 1.055,
-		fg_min: 1.01,
-		fg_max: 1.018,
-		abv_min: 4,
-		abv_max: 5.5,
-		ibu_min: 15,
-		ibu_max: 30,
-		ebc_min: 22,
-		ebc_max: 50
-	},
-	"27F": {
-		code: "27F",
-		category: "27",
-		name: "Pre-Prohibition Lager",
-		og_min: 1.044,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.015,
-		abv_min: 4.5,
-		abv_max: 6,
-		ibu_min: 25,
-		ibu_max: 40,
-		ebc_min: 6,
-		ebc_max: 12
-	},
-	"27G": {
-		code: "27G",
-		category: "27",
-		name: "Pre-Prohibition Porter",
-		og_min: 1.046,
-		og_max: 1.06,
-		fg_min: 1.01,
-		fg_max: 1.016,
-		abv_min: 4.5,
-		abv_max: 6,
-		ibu_min: 20,
-		ibu_max: 30,
-		ebc_min: 40,
-		ebc_max: 80
-	},
-	"27H": {
-		code: "27H",
-		category: "27",
-		name: "London Brown Ale",
-		og_min: 1.033,
-		og_max: 1.038,
-		fg_min: 1.012,
-		fg_max: 1.015,
-		abv_min: 2.8,
-		abv_max: 3.6,
-		ibu_min: 15,
-		ibu_max: 20,
-		ebc_min: 44,
-		ebc_max: 70
-	},
-	"28A": {
-		code: "28A",
-		category: "28",
-		name: "Brett Beer",
-		og_min: 1.03,
-		og_max: 1.08,
-		fg_min: 1,
-		fg_max: 1.012,
-		abv_min: 3,
-		abv_max: 9,
-		ibu_min: 0,
-		ibu_max: 50,
-		ebc_min: 4,
-		ebc_max: 40
-	},
-	"28B": {
-		code: "28B",
-		category: "28",
-		name: "Mixed Fermentation Sour Beer",
-		og_min: 1.03,
-		og_max: 1.08,
-		fg_min: 1,
-		fg_max: 1.012,
-		abv_min: 3,
-		abv_max: 9,
-		ibu_min: 0,
-		ibu_max: 30,
-		ebc_min: 4,
-		ebc_max: 40
-	},
-	"28C": {
-		code: "28C",
-		category: "28",
-		name: "Wild Specialty Beer",
-		og_min: 1.03,
-		og_max: 1.08,
-		fg_min: 1,
-		fg_max: 1.012,
-		abv_min: 3,
-		abv_max: 9,
-		ibu_min: 0,
-		ibu_max: 30,
-		ebc_min: 4,
-		ebc_max: 40
-	},
-	"28D": {
-		code: "28D",
-		category: "28",
-		name: "Straight Sour Beer",
-		og_min: 1.03,
-		og_max: 1.05,
-		fg_min: 1,
-		fg_max: 1.012,
-		abv_min: 3,
-		abv_max: 5,
-		ibu_min: 0,
-		ibu_max: 15,
-		ebc_min: 4,
-		ebc_max: 16
-	},
-	"29A": {
-		code: "29A",
-		category: "29",
-		name: "Fruit Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"29B": {
-		code: "29B",
-		category: "29",
-		name: "Fruit and Spice Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"29C": {
-		code: "29C",
-		category: "29",
-		name: "Specialty Fruit Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"29D": {
-		code: "29D",
-		category: "29",
-		name: "Grape Ale",
-		og_min: 1.04,
-		og_max: 1.11,
-		fg_min: 1.004,
-		fg_max: 1.03,
-		abv_min: 4.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 50,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"30A": {
-		code: "30A",
-		category: "30",
-		name: "Spice, Herb or Vegetable Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"30B": {
-		code: "30B",
-		category: "30",
-		name: "Autumn Seasonal Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"30C": {
-		code: "30C",
-		category: "30",
-		name: "Winter Seasonal Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"31A": {
-		code: "31A",
-		category: "31",
-		name: "Alternative Grain Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"31B": {
-		code: "31B",
-		category: "31",
-		name: "Alternative Sugar Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"32A": {
-		code: "32A",
-		category: "32",
-		name: "Classic Style Smoked Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.004,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"32B": {
-		code: "32B",
-		category: "32",
-		name: "Specialty Smoked Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.004,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"33A": {
-		code: "33A",
-		category: "33",
-		name: "Wood-Aged Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.004,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"33B": {
-		code: "33B",
-		category: "33",
-		name: "Specialty Wood-Aged Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.004,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"34A": {
-		code: "34A",
-		category: "34",
-		name: "Commercial Specialty Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"34B": {
-		code: "34B",
-		category: "34",
-		name: "Mixed-Style Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 5,
-		ibu_max: 70,
-		ebc_min: 4,
-		ebc_max: 100
-	},
-	"34C": {
-		code: "34C",
-		category: "34",
-		name: "Experimental Beer",
-		og_min: 1.03,
-		og_max: 1.11,
-		fg_min: 1.001,
-		fg_max: 1.024,
-		abv_min: 2.5,
-		abv_max: 12,
-		ibu_min: 0,
-		ibu_max: 100,
-		ebc_min: 0,
-		ebc_max: 100
-	}
-};
-function findStyle(q) {
-	if (BJCP[q]) return BJCP[q];
-	const lq = q.toLowerCase();
-	for (const s of Object.values(BJCP)) {
-		if (s.name.toLowerCase().includes(lq)) return s;
-		if (s.code.toLowerCase() === lq) return s;
-	}
-	const codeMatch = q.match(/\bBJCP\s+([0-9]+[A-Za-z]?)\b/i);
-	if (codeMatch) {
-		const code = codeMatch[1].toUpperCase();
-		if (BJCP[code]) return BJCP[code];
-	}
-	const bareCode = q.match(/\b([0-9]{1,2}[A-Z][0-9]?)\b/i);
-	if (bareCode) {
-		const code = bareCode[1].toUpperCase();
-		if (BJCP[code]) return BJCP[code];
-	}
-}
-function findAllStyles(query) {
-	const lq = query.toLowerCase();
-	const matches = Object.values(BJCP).filter((s) => s.name.toLowerCase().includes(lq) || s.code.toLowerCase().includes(lq));
-	if (matches.length > 0) return matches;
-	const m = query.match(/\bBJ\s+([0-9A-Z]+)\b/i) ?? query.match(/\b([0-9]{1,2}[A-Z][0-9]?)\b/i);
-	if (m) {
-		const code = m[1].toUpperCase();
-		const s = BJCP[code];
-		if (s) return [s];
-	}
-	return [];
-}
-const VALID_HOP_USES = /* @__PURE__ */ new Set([
-	"boil",
-	"whirlpool",
-	"dry_hop",
-	"first_wort",
-	"mash",
-	"hopback",
-	"dip_hop",
-	"hop_stand"
-]);
-function pickNum(obj, keys) {
-	if (!obj) return void 0;
-	for (const k of keys) {
-		const v = obj[k];
-		if (v != null && !Number.isNaN(Number(v))) return Number(v);
-	}
-}
-function pickStr(obj, keys) {
-	if (!obj) return void 0;
-	for (const k of keys) {
-		const v = obj[k];
-		if (typeof v === "string" && v.trim() !== "") return v;
-	}
-}
-function parseYamlRecipe(filePath) {
-	if (!existsSync(filePath)) throw new Error(`File non trovato: ${filePath}`);
-	const raw = readFileSync(filePath, "utf-8");
-	const data = load(raw);
-	if (typeof data !== "object" || data === null) throw new Error("Il file YAML non contiene un oggetto valido.");
-	const d = data;
-	const params = d["parametri"] ?? {};
-	const recipe_name = String(d["nome"] ?? "");
-	const beer_style = String(d["stile"] ?? "");
-	const batch_size_liters = Number(params["batch_size_litri"]);
-	const og = Number(params["og"]);
-	const fg = Number(params["fg"]);
-	const ibu = Number(params["ibu"]);
-	const ebc = params["ebc"] != null ? Number(params["ebc"]) : void 0;
-	const abv_percent = params["abv_percent"] != null ? Number(params["abv_percent"]) : void 0;
-	const efficiency_percent = params["efficienza_percent"] != null ? Number(params["efficienza_percent"]) : void 0;
-	const bollitura = d["bollitura"] ?? d["bolliura"];
-	const boil_time_minutes = pickNum(params, ["bollitura_min", "duracion_bollitura_min"]) ?? pickNum(bollitura, [
-		"durata_min",
-		"duration_min",
-		"duracion_min"
-	]);
-	const pre_boil_volume_liters = pickNum(params, ["pre_boil_litri", "pre_boil_volumen_litri"]) ?? pickNum(bollitura, [
-		"volume_pre_boil_litri",
-		"pre_boil_litri",
-		"volumen_pre_boil_litri"
-	]);
-	const post_boil_volume_liters = pickNum(params, ["post_boil_litri", "post_boil_volumen_litri"]) ?? pickNum(bollitura, [
-		"volume_post_boil_litri",
-		"post_boil_litri",
-		"volumen_post_boil_litri"
-	]);
-	const fermentation_volume_liters = pickNum(params, [
-		"fermentatore_litri",
-		"volume_fermentatore",
-		"fermentador_litri"
-	]);
-	const packaging_volume_liters = pickNum(params, [
-		"confezionamento_litri",
-		"confezionamiento_litri",
-		"envasado_litri",
-		"embotellado_litri"
-	]);
-	const impianto = typeof params["impianto"] === "string" ? params["impianto"] : void 0;
-	const carbonazione = d["carbonazione"] ?? d["carbonatacion"];
-	const carbonation_volumes = pickNum(params, ["carbonazione_vol", "co2_volumi"]) ?? pickNum(carbonazione, [
-		"co2_volumi",
-		"co2_vol",
-		"volumen_co2",
-		"vol_co2"
-	]);
-	const carbonation_method = pickStr(params, ["carbonazione_metodo", "metodo_carbonatacion"]) ?? pickStr(carbonazione, ["metodo", "metodo_carbonatacion"]);
-	const priming_sugar_gl = pickNum(params, ["priming_gl", "priming_g_l"]) ?? pickNum(carbonazione, [
-		"zucchero_g_per_litro",
-		"azucar_g_por_litro",
-		"priming_gl"
-	]);
-	const grain_bill = (Array.isArray(d["grist"]) ? d["grist"] : []).map((g) => ({
-		malt: String(g["malto"] ?? ""),
-		kg: Number(g["kg"] ?? 0),
-		percent: g["percent"] != null ? Number(g["percent"]) : void 0,
-		ebc: g["ebc"] != null ? Number(g["ebc"]) : void 0,
-		note: typeof g["note"] === "string" ? g["note"] : void 0
-	}));
-	const hop_schedule = (Array.isArray(d["luppolatura"]) ? d["luppolatura"] : []).map((h) => ({
-		variety: String(h["varieta"] ?? ""),
-		grams: Number(h["grammi"] ?? 0),
-		time_minutes: Number(h["tempo_min"] ?? 0),
-		use: String(h["uso"] ?? "boil"),
-		aa_percent: h["aa_percent"] != null ? Number(h["aa_percent"]) : void 0,
-		ibu_contrib: h["ibu_stimati"] != null ? Number(h["ibu_stimati"]) : void 0,
-		note: typeof h["note"] === "string" ? h["note"] : void 0
-	}));
-	const lievito = d["lievito"] ?? {};
-	const yeast = {
-		strain: String(lievito["ceppo"] ?? ""),
-		attenuation_percent: lievito["attenuazione_percent"] != null ? Number(lievito["attenuazione_percent"]) : void 0,
-		lab: typeof lievito["laboratorio"] === "string" ? lievito["laboratorio"] : void 0,
-		temperature_c_min: lievito["temp_min_c"] != null ? Number(lievito["temp_min_c"]) : void 0,
-		temperature_c_max: lievito["temp_max_c"] != null ? Number(lievito["temp_max_c"]) : void 0
-	};
-	const mash = d["mash"] ?? {};
-	const mash_temp_c = mash["temperatura_c"] != null ? Number(mash["temperatura_c"]) : void 0;
-	const mash_steps = Array.isArray(mash["steps"]) ? mash["steps"].map((s) => ({
-		temperature_c: Number(s["temperatura_c"] ?? 0),
-		time_minutes: Number(s["tempo_min"] ?? 0),
-		note: typeof s["note"] === "string" ? s["note"] : void 0
-	})) : void 0;
-	const ferm = d["fermentazione"] ?? {};
-	const fermentation_temp_c = ferm["temperatura_c"] != null ? Number(ferm["temperatura_c"]) : void 0;
-	const acqua = d["acqua"];
-	const water_profile = acqua ? {
-		ca: Number(pickNum(acqua, ["ca", "ca_mg_l"]) ?? 0),
-		mg: Number(pickNum(acqua, ["mg", "mg_mg_l"]) ?? 0),
-		na: Number(pickNum(acqua, ["na", "na_mg_l"]) ?? 0),
-		cl: Number(pickNum(acqua, ["cl", "cl_mg_l"]) ?? 0),
-		so4: Number(pickNum(acqua, ["so4", "so4_mg_l"]) ?? 0),
-		hco3: Number(pickNum(acqua, ["hco3", "hco3_mg_l"]) ?? 0)
-	} : void 0;
-	const descrizione = typeof d["descrizione"] === "string" ? d["descrizione"] : void 0;
-	const note = typeof d["note"] === "string" ? d["note"] : void 0;
-	const spezie = Array.isArray(d["spezie"]) ? d["spezie"].map((s) => ({
-		nome: String(s["nome"] ?? ""),
-		grammi: Number(s["grammi"] ?? 0),
-		uso: String(s["uso"] ?? "boil"),
-		tempo_min: s["tempo_min"] != null ? Number(s["tempo_min"]) : void 0,
-		note: typeof s["note"] === "string" ? s["note"] : void 0
-	})) : void 0;
-	const zuccheri = Array.isArray(d["zuccheri"]) ? d["zuccheri"].map((z) => ({
-		tipo: String(z["tipo"] ?? ""),
-		grammi: Number(z["grammi"] ?? 0),
-		note: typeof z["note"] === "string" ? z["note"] : void 0
-	})) : void 0;
-	const agua = d["agua"] ?? d["acqua"];
-	const mash_water_liters = pickNum(agua, [
-		"mash_litri",
-		"mash_agua_litri",
-		"strike_litri"
-	]) ?? pickNum(mash, [
-		"acqua_strike_litri",
-		"strike_litri",
-		"agua_strike_litri"
-	]);
-	const sparge_water_liters = pickNum(agua, ["sparge_litri", "sparge_agua_litri"]) ?? pickNum(d["sparge"], [
-		"sparge_litri",
-		"volumen_litri",
-		"litri"
-	]);
-	const total_water_liters = pickNum(agua, [
-		"total_litri",
-		"total_agua_litri",
-		"agua_total_litri"
-	]);
-	const sales = d["sales"] ?? d["mash_salts"];
-	const mash_salts = sales ? {
-		gypsum_g: pickNum(sales, [
-			"gesso_g",
-			"gypsum_g",
-			"gesso"
-		]),
-		cacl2_g: pickNum(sales, ["cacl2_g", "cacl2"]),
-		epsom_g: pickNum(sales, ["epsom_g", "epsom"]),
-		nahco3_g: pickNum(sales, ["nahco3_g", "nahco3"]),
-		lactic_acid_ml: pickNum(sales, [
-			"acido_lactico_ml",
-			"lactic_acid_ml",
-			"acido_lactico"
-		])
-	} : void 0;
-	const mashInTemp = pickNum(mash, [
-		"temperatura_in_c",
-		"mash_in_c",
-		"temperatura_strike_c",
-		"strike_c"
-	]);
-	const pre_boil_og = pickNum(bollitura, [
-		"og_pre_boil",
-		"gravedad_pre_boil",
-		"pre_boil_og"
-	]) ?? pickNum(params, ["og_pre_boil", "pre_boil_og"]);
-	const post_boil_og = pickNum(bollitura, [
-		"og_post_boil",
-		"gravedad_post_boil",
-		"post_boil_og"
-	]) ?? pickNum(params, ["og_post_boil", "post_boil_og"]);
-	const primary_days = pickNum(ferm, [
-		"primaria_giorni",
-		"primaria_dias",
-		"dias_primaria"
-	]);
-	const conditioning_days = pickNum(ferm, [
-		"madurazione_giorni",
-		"maduracion_dias",
-		"dias_maduracion"
-	]);
-	const serving_temp_c = pickNum(carbonazione, [
-		"temperatura_servizio_c",
-		"temperatura_servicio_c",
-		"servicio_c"
-	]);
-	const bottle_type = pickStr(carbonazione, [
-		"tipo_botella",
-		"tipo_botella",
-		"botella"
-	]);
-	const missing = [];
-	if (!recipe_name) missing.push("nome");
-	if (!beer_style) missing.push("stile");
-	if (isNaN(batch_size_liters) || batch_size_liters <= 0) missing.push("parametri.batch_size_litri");
-	if (isNaN(og) || og <= 0) missing.push("parametri.og");
-	if (isNaN(fg) || fg <= 0) missing.push("parametri.fg");
-	if (isNaN(ibu) || ibu < 0) missing.push("parametri.ibu");
-	if (missing.length > 0) throw new Error(`Campi obbligatori mancanti o non validi: ${missing.join(", ")}`);
-	return {
-		recipe_name,
-		beer_style,
-		batch_size_liters,
-		og,
-		fg,
-		ibu,
-		ebc: isNaN(ebc) ? void 0 : ebc,
-		abv_percent: isNaN(abv_percent) ? void 0 : abv_percent,
-		efficiency_percent: isNaN(efficiency_percent) ? void 0 : efficiency_percent,
-		grain_bill,
-		hop_schedule,
-		yeast,
-		mash_temp_c: isNaN(mash_temp_c) ? void 0 : mash_temp_c,
-		mash_steps,
-		fermentation_temp_c: isNaN(fermentation_temp_c) ? void 0 : fermentation_temp_c,
-		water_profile,
-		boil_time_minutes: isNaN(boil_time_minutes) ? void 0 : boil_time_minutes,
-		pre_boil_volume_liters: isNaN(pre_boil_volume_liters) ? void 0 : pre_boil_volume_liters,
-		post_boil_volume_liters: isNaN(post_boil_volume_liters) ? void 0 : post_boil_volume_liters,
-		fermentation_volume_liters: isNaN(fermentation_volume_liters) ? void 0 : fermentation_volume_liters,
-		packaging_volume_liters: isNaN(packaging_volume_liters) ? void 0 : packaging_volume_liters,
-		carbonation_volumes: isNaN(carbonation_volumes) ? void 0 : carbonation_volumes,
-		carbonation_method,
-		priming_sugar_gl: isNaN(priming_sugar_gl) ? void 0 : priming_sugar_gl,
-		impianto,
-		descrizione,
-		note,
-		spezie,
-		zuccheri,
-		mash_water_liters: isNaN(mash_water_liters) ? void 0 : mash_water_liters,
-		sparge_water_liters: isNaN(sparge_water_liters) ? void 0 : sparge_water_liters,
-		total_water_liters: isNaN(total_water_liters) ? void 0 : total_water_liters,
-		mash_salts,
-		mash_in_temp_c: isNaN(mashInTemp) ? void 0 : mashInTemp,
-		pre_boil_og: isNaN(pre_boil_og) ? void 0 : pre_boil_og,
-		post_boil_og: isNaN(post_boil_og) ? void 0 : post_boil_og,
-		primary_days: isNaN(primary_days) ? void 0 : primary_days,
-		conditioning_days: isNaN(conditioning_days) ? void 0 : conditioning_days,
-		serving_temp_c: isNaN(serving_temp_c) ? void 0 : serving_temp_c,
-		bottle_type,
-		rawYaml: raw
-	};
-}
-function validateRecipe(r) {
-	const style = findStyle(r.beer_style);
-	const issues = [];
-	const warnings = [];
-	const styleDeviations = [];
-	const volumeIssues = [];
-	const carbonationIssues = [];
-	const abv = (r.og - r.fg) * 131.25;
-	const totalGrainKg = r.grain_bill.reduce((s, g) => s + g.kg, 0);
-	const totalHopGrams = r.hop_schedule.reduce((s, h) => s + h.grams, 0);
-	const dryHopGrams = r.hop_schedule.filter((h) => h.use === "dry_hop").reduce((s, h) => s + h.grams, 0);
-	if (style) {
-		if (r.og < style.og_min) styleDeviations.push(`OG ${r.og.toFixed(3)} < min ${style.og_min.toFixed(3)}`);
-		if (r.og > style.og_max) styleDeviations.push(`OG ${r.og.toFixed(3)} > max ${style.og_max.toFixed(3)}`);
-		if (r.fg < style.fg_min) styleDeviations.push(`FG ${r.fg.toFixed(3)} < min ${style.fg_min.toFixed(3)}`);
-		if (r.fg > style.fg_max) styleDeviations.push(`FG ${r.fg.toFixed(3)} > max ${style.fg_max.toFixed(3)}`);
-		if (r.ibu < style.ibu_min) styleDeviations.push(`IBU ${r.ibu} < min ${style.ibu_min}`);
-		if (r.ibu > style.ibu_max) styleDeviations.push(`IBU ${r.ibu} > max ${style.ibu_max}`);
-		if (abv < style.abv_min) styleDeviations.push(`ABV ${abv.toFixed(1)}% < min ${style.abv_min}%`);
-		if (abv > style.abv_max) styleDeviations.push(`ABV ${abv.toFixed(1)}% > max ${style.abv_max}%`);
-		if (r.ebc !== void 0 && (r.ebc < style.ebc_min || r.ebc > style.ebc_max)) styleDeviations.push(`EBC ${r.ebc} fuori range (${style.ebc_min}–${style.ebc_max})`);
-	}
-	if (style) {
-		if (r.og < style.og_min || r.og > style.og_max) issues.push(`OG ${r.og.toFixed(3)} fuori range (${style.og_min.toFixed(3)}–${style.og_max.toFixed(3)})`);
-		if (r.ibu < style.ibu_min || r.ibu > style.ibu_max) issues.push(`IBU ${r.ibu} fuori range (${style.ibu_min}–${style.ibu_max})`);
-		if (abv < style.abv_min || abv > style.abv_max) issues.push(`ABV ${abv.toFixed(1)}% fuori range (${style.abv_min}–${style.abv_max}%)`);
-		if (r.fg < style.fg_min || r.fg > style.fg_max) warnings.push(`FG ${r.fg.toFixed(3)} fuori range (${style.fg_min.toFixed(3)}–${style.fg_max.toFixed(3)})`);
-		if (r.ebc !== void 0 && (r.ebc < style.ebc_min || r.ebc > style.ebc_max)) warnings.push(`EBC ${r.ebc} fuori range (${style.ebc_min}–${style.ebc_max})`);
-	}
-	const ibuRatio = r.ibu / ((r.og - 1) * 1e3);
-	const buGu = r.og > 1 ? r.ibu / ((r.og - 1) * 1e3) : 0;
-	if (ibuRatio < .2) issues.push("Rapporto IBU/OG molto basso (<0.2) — sbilanciata verso il malto.");
-	else if (ibuRatio > 1.5) issues.push("Rapporto IBU/OG molto alto (>1.5) — amaro eccessivo.");
-	else if (ibuRatio > 1) warnings.push("Rapporto IBU/OG alto — verifica lo stile.");
-	let specPct = 0, basePct = 0;
-	for (const g of r.grain_bill) {
-		const pct = g.percent ?? g.kg / totalGrainKg * 100;
-		const n = g.malt.toLowerCase();
-		if (n.includes("pilsner") || n.includes("pale") || n.includes("maris otter") || n.includes("munich") || n.includes("vienna") || n.includes("wheat") || n.includes("base") || n.includes("pils")) basePct += pct;
-		if (n.includes("crystal") || n.includes("caramel") || n.includes("chocolate") || n.includes("black") || n.includes("roast") || n.includes("special") || n.includes("cara") || n.includes("melanoidin") || n.includes("aromatic") || n.includes("biscuit")) specPct += pct;
-		if (pct > 20 && !n.includes("base") && !n.includes("pilsner") && !n.includes("pale") && !n.includes("pils")) warnings.push(`Malto "${g.malt}" al ${pct.toFixed(0)}% — percentuale alta.`);
-	}
-	if (specPct > 25) issues.push(`Malti speciali al ${specPct.toFixed(0)}% — rischio dolcezza/astringenza.`);
-	else if (specPct > 15) warnings.push(`Malti speciali al ${specPct.toFixed(0)}%.`);
-	if (basePct < 60 && totalGrainKg > 0) warnings.push(`Malto base al ${basePct.toFixed(0)}% — basso.`);
-	if (dryHopGrams > 20 * r.batch_size_liters) warnings.push(`Dry hop molto alto (${dryHopGrams}g in ${r.batch_size_liters}L) — rischio astringenza/ossidazione.`);
-	const hopUses = new Set(r.hop_schedule.map((h) => h.use));
-	for (const u of hopUses) if (!VALID_HOP_USES.has(u)) warnings.push(`Uso luppolo sconosciuto: "${u}".`);
-	const boilHops = r.hop_schedule.filter((h) => h.use === "boil");
-	const hasBittering = boilHops.some((h) => h.time_minutes >= 45);
-	if (boilHops.length > 0 && !hasBittering && r.ibu > 10) warnings.push("Nessun luppolo in boil ≥45 min — gli IBU potrebbero provenire solo da whirlpool/hop stand.");
-	const boilHopsWithoutAA = boilHops.filter((h) => h.aa_percent === void 0 && h.ibu_contrib === void 0);
-	if (boilHopsWithoutAA.length > 0 && boilHops.length > 0) warnings.push(`${boilHopsWithoutAA.length} luppoli in boil senza AA% — impossibile verificare il calcolo IBU.`);
-	if (r.mash_temp_c !== void 0) {
-		if (r.mash_temp_c < 60) issues.push("Temperatura mash <60°C — enzimi inattivi.");
-		else if (r.mash_temp_c < 63) warnings.push("Temperatura mash <63°C — corpo molto secco, possibile scarsa conversione.");
-		else if (r.mash_temp_c > 72) warnings.push("Temperatura mash >72°C — corpo pieno, possibile scarsa fermentabilità.");
-	}
-	if (r.water_profile) {
-		const w = r.water_profile;
-		const so4cl = w.cl > 0 ? w.so4 / w.cl : 0;
-		if (so4cl > 4) warnings.push(`Rapporto SO₄/Cl = ${so4cl.toFixed(1)} — profilo molto amaro (bitter).`);
-		else if (so4cl < .5 && w.ca > 0) warnings.push(`Rapporto SO₄/Cl = ${so4cl.toFixed(1)} — profilo morbido (malty).`);
-		if (w.hco3 > 250) warnings.push(`Bicarbonati alti (${w.hco3} ppm) — adatto solo a birre scure.`);
-		if (w.ca < 50) warnings.push("Calcio basso (<50 ppm) — può influire sulla salute del lievito e sulla flocculazione.");
-		if (w.ca > 150) warnings.push("Calcio alto (>150 ppm) — può causare precipitazioni di ossalato.");
-		const cationSum = w.ca / 20.04 + w.mg / 12.15 + w.na / 23;
-		const anionSum = w.cl / 35.45 + w.so4 / 48.03 + w.hco3 / 61;
-		if (Math.abs(cationSum - anionSum) > .5) warnings.push(`Bilancio ionico non neutro (diff ${Math.abs(cationSum - anionSum).toFixed(2)} meq/L) — il profilo acqua potrebbe non essere realistico.`);
-	}
-	if (r.pre_boil_volume_liters !== void 0 && r.post_boil_volume_liters !== void 0) {
-		if (r.pre_boil_volume_liters <= r.post_boil_volume_liters) volumeIssues.push(`Pre-boil (${r.pre_boil_volume_liters}L) ≤ post-boil (${r.post_boil_volume_liters}L) — l'evaporazione è negativa o assente.`);
-	}
-	if (r.post_boil_volume_liters !== void 0 && r.fermentation_volume_liters !== void 0) {
-		if (r.post_boil_volume_liters < r.fermentation_volume_liters) volumeIssues.push(`Post-boil (${r.post_boil_volume_liters}L) < fermentatore (${r.fermentation_volume_liters}L) — volume aumentato senza spiegazione.`);
-	}
-	if (r.fermentation_volume_liters !== void 0 && r.packaging_volume_liters !== void 0) {
-		if (r.packaging_volume_liters > r.fermentation_volume_liters) volumeIssues.push(`Confezionamento (${r.packaging_volume_liters}L) > fermentatore (${r.fermentation_volume_liters}L).`);
-	}
-	if (r.batch_size_liters > 0) {
-		if (r.fermentation_volume_liters !== void 0 && Math.abs(r.fermentation_volume_liters - r.batch_size_liters) > r.batch_size_liters * .3) volumeIssues.push(`Volume fermentatore (${r.fermentation_volume_liters}L) ≠ batch size (${r.batch_size_liters}L) — differenza >30%.`);
-		if (r.packaging_volume_liters !== void 0 && Math.abs(r.packaging_volume_liters - r.batch_size_liters) > r.batch_size_liters * .2) volumeIssues.push(`Volume confezionamento (${r.packaging_volume_liters}L) ≠ batch size (${r.batch_size_liters}L) — differenza >20%.`);
-	}
-	if (r.carbonation_volumes !== void 0) {
-		if (r.carbonation_volumes < 1.2) carbonationIssues.push(`Carbonazione molto bassa (${r.carbonation_volumes} vol) — birra quasi piatta.`);
-		else if (r.carbonation_volumes > 4) carbonationIssues.push(`Carbonazione molto alta (${r.carbonation_volumes} vol) — rischio bottiglia esplosiva senza bottiglie adeguate.`);
-	}
-	if (r.priming_sugar_gl !== void 0 && r.carbonation_volumes !== void 0) {
-		const expectedPriming = (r.carbonation_volumes - .85) * 4 * r.batch_size_liters;
-		if (Math.abs(r.priming_sugar_gl * r.batch_size_liters - expectedPriming) > expectedPriming * .4) carbonationIssues.push(`Dosaggio priming (${r.priming_sugar_gl} g/L) incoerente con carbonazione target (${r.carbonation_volumes} vol).`);
-	}
-	if (r.abv_percent !== void 0 && Math.abs(r.abv_percent - abv) > .5) warnings.push(`ABV dichiarato (${r.abv_percent}%) ≠ calcolato (${abv.toFixed(1)}%) — differenza >0.5%.`);
-	const brewdayMissing = [];
-	if (r.mash_water_liters === void 0) brewdayMissing.push("acqua di ammostamento (acqua.mash_litri)");
-	if (r.sparge_water_liters === void 0) brewdayMissing.push("acqua di sparge (acqua.sparge_litri)");
-	if (r.total_water_liters === void 0) brewdayMissing.push("acqua totale (acqua.total_litri)");
-	if (r.mash_salts === void 0) brewdayMissing.push("sali del mash (sales)");
-	if (r.mash_in_temp_c === void 0) brewdayMissing.push("temperatura di mash-in (mash.temperatura_in_c)");
-	if (r.pre_boil_og === void 0) brewdayMissing.push("gravità pre-boil (bollitura.og_pre_boil)");
-	if (r.post_boil_og === void 0) brewdayMissing.push("gravità post-boil (bollitura.og_post_boil)");
-	if (r.boil_time_minutes === void 0) brewdayMissing.push("durata della bollitura (parametri.bollitura_min)");
-	if (r.fermentation_temp_c === void 0) brewdayMissing.push("temperatura di fermentazione (fermentazione.temperatura_c)");
-	if (r.primary_days === void 0) brewdayMissing.push("giorni di fermentazione primaria (fermentazione.primaria_giorni)");
-	if (r.carbonation_volumes === void 0) brewdayMissing.push("carbonatazione (carbonazione.co2_volumi)");
-	if (r.packaging_volume_liters === void 0) brewdayMissing.push("volume di confezionamento (parametri.confezionamento_litri)");
-	if (r.bottle_type === void 0) brewdayMissing.push("tipo di bottiglia (carbonazione.tipo_botella)");
-	if (brewdayMissing.length > 0) issues.push(`Dati di quotazione incompleti — mancano: ${brewdayMissing.join(", ")}`);
-	if (r.mash_water_liters !== void 0 && r.sparge_water_liters !== void 0 && r.total_water_liters !== void 0) {
-		const sum = r.mash_water_liters + r.sparge_water_liters;
-		if (Math.abs(sum - r.total_water_liters) > 1) volumeIssues.push(`Acqua totale (${r.total_water_liters}L) ≠ mash (${r.mash_water_liters}L) + sparge (${r.sparge_water_liters}L) = ${sum.toFixed(1)}L`);
-	}
-	if (r.pre_boil_og !== void 0 && r.post_boil_og !== void 0 && r.post_boil_og < r.pre_boil_og) volumeIssues.push(`OG post-boil (${r.post_boil_og.toFixed(3)}) < OG pre-boil (${r.pre_boil_og.toFixed(3)}) — la bollitura non può ridurre la gravità.`);
-	if (r.efficiency_percent !== void 0) {
-		if (r.efficiency_percent > 100) warnings.push("Efficienza >100% — impossibile senza errori di misura.");
-		else if (r.efficiency_percent < 50) warnings.push("Efficienza <50% — molto bassa, verificare la macinatura e il mash.");
-		else if (r.efficiency_percent > 85) warnings.push("Efficienza >85% — molto alta per homebrewing standard.");
-	}
-	if (totalGrainKg > 0 && r.batch_size_liters > 0) {
-		const expectedMaxOG = 1 + totalGrainKg * .08 / r.batch_size_liters;
-		if (r.og > expectedMaxOG * 1.05) warnings.push(`OG (${r.og.toFixed(3)}) troppo alto per ${totalGrainKg.toFixed(1)}kg di grani in ${r.batch_size_liters}L (max stimato ~${expectedMaxOG.toFixed(3)}).`);
-	}
-	return {
-		issues,
-		warnings,
-		abv,
-		ibuRatio,
-		specPct,
-		totalGrainKg,
-		totalHopGrams,
-		dryHopGrams,
-		buGu,
-		styleName: style?.name,
-		styleCode: style?.code,
-		styleMatch: styleDeviations.length === 0,
-		styleDeviations,
-		volumeIssues,
-		carbonationIssues
-	};
-}
-var YamlValidatorTool = class {
-	name = "yaml_validator";
-	description = "Validate a beer recipe YAML file against BJCP style guidelines. Reads the YAML and runs ALL deterministic checks: OG, FG, ABV, IBU, EBC, grain bill composition, hop schedule, mash temperature, water profile, volume consistency, carbonation, efficiency sanity, and more. Use this FIRST when validating a recipe. Then use recipe_validator with the structured data for LLM qualitative review.";
-	parameters = toInputJsonSchema(YamlValidatorInputSchema);
-	resolveExecution(args) {
-		return {
-			description: `Validate YAML recipe: ${args.input_file}`,
-			approvalRule: this.name,
-			execute: () => this.execute(args)
-		};
-	}
-	execute(args) {
-		try {
-			const recipe = parseYamlRecipe(args.input_file);
-			const v = validateRecipe(recipe);
-			const style = findStyle(recipe.beer_style);
-			const allMatches = findAllStyles(recipe.beer_style);
-			const valid = v.issues.length === 0;
-			const report = [
-				`**Validazione ricetta: ${recipe.recipe_name}**`,
-				`File: ${args.input_file}`,
-				style ? `Stile: ${style.code} — ${style.name} (Cat. ${style.category})` : allMatches.length > 0 ? `Stile "${recipe.beer_style}" non trovato esattamente. Stili simili: ${allMatches.map((s) => `${s.code} ${s.name}`).join(", ")}` : `Stile "${recipe.beer_style}" non trovato nel database BJCP.`,
-				"",
-				"── Parametri calcolati ──",
-				`ABV: ${v.abv.toFixed(1)}% | IBU/OG: ${v.ibuRatio.toFixed(2)} | BU/GU: ${v.buGu.toFixed(2)}`,
-				`Malti speciali: ${v.specPct.toFixed(1)}% | Grani: ${v.totalGrainKg.toFixed(2)}kg | Luppolo: ${v.totalHopGrams}g (dry: ${v.dryHopGrams}g)`,
-				style ? `Stile BJCP: ${v.styleMatch ? "✅ IN STYLE" : "❌ FUORI STILE"}` : "",
-				"",
-				valid ? "✅ Valida — nessun errore critico." : "❌ Errori critici:",
-				...v.issues.map((i) => `  ❌ ${i}`),
-				...v.warnings.length ? [
-					"",
-					"⚠️ Avvisi:",
-					...v.warnings.map((w) => `  ⚠️ ${w}`)
-				] : [],
-				...v.volumeIssues.length ? [
-					"",
-					"📐 Problemi volumi:",
-					...v.volumeIssues.map((iv) => `  📐 ${iv}`)
-				] : [],
-				...v.carbonationIssues.length ? [
-					"",
-					"🫧 Problemi carbonazione:",
-					...v.carbonationIssues.map((ic) => `  🫧 ${ic}`)
-				] : [],
-				"",
-				"── Dati di quotazione (brewday) ──",
-				`Acqua: mash ${recipe.mash_water_liters ?? "?"}L, sparge ${recipe.sparge_water_liters ?? "?"}L, totale ${recipe.total_water_liters ?? "?"}L`,
-				recipe.mash_salts ? `Sali del mash: ${[
-					recipe.mash_salts.gypsum_g !== void 0 ? `gesso ${recipe.mash_salts.gypsum_g}g` : null,
-					recipe.mash_salts.cacl2_g !== void 0 ? `CaCl₂ ${recipe.mash_salts.cacl2_g}g` : null,
-					recipe.mash_salts.epsom_g !== void 0 ? `Epsom ${recipe.mash_salts.epsom_g}g` : null,
-					recipe.mash_salts.nahco3_g !== void 0 ? `NaHCO₃ ${recipe.mash_salts.nahco3_g}g` : null,
-					recipe.mash_salts.lactic_acid_ml !== void 0 ? `acido lattico ${recipe.mash_salts.lactic_acid_ml}ml` : null
-				].filter((x) => x !== null).join(", ") || "nessuno"}` : "Sali del mash: non specificati",
-				`Mash-in: ${recipe.mash_in_temp_c ?? "?"}°C | OG pre-boil: ${recipe.pre_boil_og?.toFixed(3) ?? "?"} | OG post-boil: ${recipe.post_boil_og?.toFixed(3) ?? "?"}`,
-				`Fermentazione: ${recipe.primary_days ?? "?"} giorni primaria${recipe.conditioning_days !== void 0 ? `, ${recipe.conditioning_days} giorni di maturazione` : ""} a ${recipe.fermentation_temp_c ?? "?"}°C`,
-				`Confezionamento: ${recipe.packaging_volume_liters ?? "?"}L${recipe.bottle_type ? ` in ${recipe.bottle_type}` : ""}${recipe.carbonation_volumes !== void 0 ? `, ${recipe.carbonation_volumes} vol CO₂` : ""}${recipe.serving_temp_c !== void 0 ? `, servizio ${recipe.serving_temp_c}°C` : ""}`,
-				"IMPORTANTE i campi dello YAML devono corrispondere allo schema, non solo semanticamente ma anche sintatticamente, altrimenti il validatore non li riconosce.",
-				"",
-				"💡 Usa recipe_validator con i dati strutturati per la revisione qualitativa LLM."
-			].join("\n");
-			return Promise.resolve({ output: report });
-		} catch (e) {
-			return Promise.resolve({
-				isError: true,
-				output: e instanceof Error ? e.message : String(e)
-			});
-		}
-	}
-};
-registerTool(YamlValidatorTool);
 
 //#endregion
 //#region src/server.ts

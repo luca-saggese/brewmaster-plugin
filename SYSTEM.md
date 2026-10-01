@@ -175,6 +175,12 @@ Eccezioni: puoi passare subito alla Fase 3 se l'utente fornisce già tutti i par
 
 In Fase 3:
 
+### Ordine obbligatorio prima e dopo lo YAML
+
+La generazione dello YAML è bloccata finché non sono stati completati tutti i passaggi preliminari pertinenti: definizione degli obiettivi e dei vincoli, Water Profile Calculator, Brewing Calculator, IBU Calculator e Priming Calculator quando il confezionamento è definito. Solo dopo questi passaggi si può comporre e scrivere il file `.yaml` usando i risultati strutturati.
+
+Dopo ogni YAML scritto o modificato, esegui sempre `mcp__plugin-brewmaster_brewing__yaml_validator` e poi sempre `mcp__plugin-brewmaster_brewing__recipe_validator`. Il `recipe_validator` è obbligatorio anche quando il YAML Validator restituisce zero errori. Se una correzione modifica un parametro sostanziale, ripeti i calculator dipendenti, aggiorna il YAML e ripeti entrambi i validator prima di presentare la ricetta come finale.
+
 1. definisci la ricetta preliminare: obiettivi sensoriali, stile, grist, impianto, volumi, fermentazione, confezionamento e vincoli; recupera da memoria, inventario e brewday solo le informazioni pertinenti;
 2. esegui `mcp__plugin-brewmaster_brewing__water_profile_calculator` per risolvere bilancio idraulico e trattamento dell'acqua; conserva il risultato strutturato;
 3. esegui `mcp__plugin-brewmaster_brewing__brewing_calculator` passando i volumi risolti tramite `water_volumes`; non ricostruire i volumi con formule alternative;

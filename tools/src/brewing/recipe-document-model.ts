@@ -261,7 +261,7 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
   if (Object.keys(waterRaw).length > 0 || recipe.mash_water_liters !== undefined || recipe.sparge_water_liters !== undefined) {
     const water = section('water', 'Preparazione dell\'acqua');
     water.targets.push(...[
-      target('Acqua mash', recipe.mash_water_liters, ' L'), target('Acqua sparge', Math.round(spargeWaterLiters * 10)/10, ' L'), target('Acqua totale', recipe.total_water_liters, ' L'),
+      target('Acqua mash', recipe.mash_water_liters, ' L'), target('Acqua sparge', Math.round(spargeWaterLiters * 10) / 10, ' L'), target('Acqua totale', recipe.total_water_liters, ' L'),
       target('pH mash target', firstNumber(mashRaw, ['ph_target', 'pH_target']), ''),
       target('Rapporto SO₄:Cl', firstNumber(waterRaw, ['rapporto_so4_cl']), ''),
     ].filter((item): item is TargetValue => item !== undefined));
@@ -415,7 +415,7 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
     if (method && /bott|bottiglia/i.test(method) && (recipe.priming_total_grams !== undefined || recipe.priming_sugar_gl !== undefined)) packaging.actions.push({ phase: 'packaging', order: 20, moment: 'Imbottigliamento', action: 'Aggiungere il fermentabile di priming', ingredient: firstText(carbonationRaw, ['zucchero_tipo']) ?? 'Zucchero', quantity: quantity(recipe.priming_total_grams ?? (recipe.priming_sugar_gl! * (recipe.packaging_volume_liters ?? 0)), 'g'), note: recipe.priming_total_grams !== undefined ? 'Quantità totale dichiarata' : `${recipe.priming_sugar_gl} g/L sul volume confezionato` });
     if (text(carbonationRaw['preparazione'])) packaging.actions.push({ phase: 'packaging', order: 15, moment: 'Preparazione priming', action: 'Preparare la soluzione di priming', ingredient: firstText(carbonationRaw, ['zucchero_tipo']), quantity: quantity(recipe.priming_total_grams, 'g'), note: text(carbonationRaw['preparazione']) });
     packaging.actions.unshift({ phase: 'packaging', order: 10, moment: 'Prima del confezionamento', action: 'Verificare stabilità della FG' });
-    packaging.measurements.push(measurement('FG stabile verificata', 'SG'), measurement('Volume reale confezionato', 'L'), measurement('Data confezionamento'), measurement('Quantità effettivamente utilizzata', 'g')); 
+    packaging.measurements.push(measurement('FG stabile verificata', 'SG'), measurement('Volume reale confezionato', 'L'), measurement('Data confezionamento'), measurement('Quantità effettivamente utilizzata', 'g'));
     sections.push(packaging);
   }
 

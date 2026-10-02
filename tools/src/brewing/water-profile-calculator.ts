@@ -186,7 +186,7 @@ export class WaterProfileCalculatorTool implements BuiltinTool<WaterProfileCalcu
 
       // ── Water volume ──────────────────────────────────────────────────
       // Defaults are retained for compatibility, but are identified in the output.
-      const MASH_RATIO = args.mash_ratio_l_per_kg ?? 3.0;
+      const MASH_RATIO = args.mash_ratio_l_per_kg ?? 4.5;
       const DEAD_SPACE = args.dead_space_l ?? 6.5;
       const ABSORPTION = args.grain_absorption_l_per_kg ?? 0.9;
       const BOIL_OFF = args.boil_off_l_per_hour ?? 3.0;

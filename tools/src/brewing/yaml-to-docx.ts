@@ -84,6 +84,7 @@ function renderModel(model: RecipeDocumentModel): string {
   body += heading('A. Riepilogo operativo', 1);
   body += table(['CAMPO', 'VALORE'], [['Data della cotta', '____________________________'], ['Impianto', model.metadata.equipment ?? ''], ...targetRows(model.summaryTargets)], [3300, 6338]);
   if (model.metadata.description) body += paragraph(model.metadata.description, { size: 19, after: 120 });
+  for (const note of model.summaryNotes) body += paragraph(`NOTA  ${note}`, { color: '52606D' });
   if (model.objectives.length) body += table(['OBIETTIVO PRODUTTIVO', 'DESCRIZIONE'], targetRows(model.objectives), [3300, 6338]);
   body += heading('Macrofasi', 2) + table(['N.', 'FASE'], model.sections.map((section, index) => [String(index + 1), section.title]), [900, 8738], ['center', 'left']);
   for (const section of model.sections) body += renderSection(section);

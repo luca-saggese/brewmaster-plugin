@@ -100,6 +100,7 @@ class BrewdayPdfRenderer {
     if (model.metadata.description) this.paragraph(model.metadata.description);
     this.title('A. Scheda iniziale');
     this.table(['Campo', 'TARGET / dato'], [['Data della cotta', '____________________________'], ['Impianto', model.metadata.equipment ?? ''], ...targetRows(model.summaryTargets), ...targetRows(model.objectives)]);
+    for (const note of model.summaryNotes) this.paragraph(`NOTA: ${note}`);
     for (const section of model.sections) this.section(section);
     if (model.notes.length) { this.title('Note informative'); for (const note of model.notes) this.paragraph(`NOTA: ${note}`); }
     if (model.alternatives.length) { this.title('Alternative non selezionate'); for (const alternative of model.alternatives) this.paragraph(alternative); }

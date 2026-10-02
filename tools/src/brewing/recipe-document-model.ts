@@ -59,6 +59,7 @@ export interface RecipeDocumentModel {
   };
   readonly objectives: TargetValue[];
   readonly summaryTargets: TargetValue[];
+  readonly summaryNotes: string[];
   readonly sections: OperationalSection[];
   readonly notes: string[];
   readonly alternatives: string[];
@@ -182,13 +183,13 @@ function displayUnmappedValue(value: unknown): string {
 
 function collectUnmappedFieldDetails(raw: RecordValue): Array<{ name: string; value: string }> {
   const allowed: Record<string, string[]> = {
-    parametri: ['batch_size_litri', 'og', 'fg', 'ibu', 'ebc', 'abv_percent', 'efficienza_percent', 'bollitura_min', 'pre_boil_litri', 'post_boil_litri', 'fermentatore_litri', 'confezionamento_litri', 'carbonazione_vol', 'priming_gl', 'priming_totale_g', 'priming_total_g', 'impianto', 'bu_gu', 'colore', 'corpo', 'volume_fermentatore'],
+    parametri: ['batch_size_litri', 'og', 'fg', 'ibu', 'ebc', 'abv_percent', 'efficienza_percent', 'bollitura_min', 'pre_boil_litri', 'post_boil_litri', 'fermentatore_litri', 'confezionamento_litri', 'carbonazione_vol', 'priming_gl', 'priming_totale_g', 'priming_total_g', 'impianto', 'bu_gu', 'colore', 'corpo', 'volume_fermentatore', 'note', 'nota'],
     mash: ['tipo', 'temperatura_c', 'temperatura_in_c', 'temperatura_strike_c', 'durata_min', 'steps', 'acqua_strike_litri', 'spessore_l_kg', 'ph_target', 'sparge', 'note', 'nota'],
-    bollitura: ['durata_min', 'volume_pre_boil_litri', 'volume_post_boil_litri', 'evaporazione_litri', 'perdita_evaporazione_litri', 'perdita_trub_litri', 'og_pre_boil', 'og_post_boil', 'irish_moss', 'whirlpool', 'whirlpool_temperatura_c', 'whirlpool_temp_c', 'whirlpool_durata_min', 'hop_stand_temperatura_c', 'aggiunte_bollitura', 'nota'],
+    bollitura: ['durata_min', 'volume_pre_boil_litri', 'volume_post_boil_litri', 'evaporazione_litri', 'perdita_evaporazione_litri', 'perdita_trub_litri', 'og_pre_boil', 'og_post_boil', 'irish_moss', 'whirlpool', 'whirlpool_temperatura_c', 'whirlpool_temp_c', 'whirlpool_durata_min', 'hop_stand_temperatura_c', 'aggiunte_bollitura', 'note', 'nota'],
     fermentazione: ['temperatura_c', 'temperatura_controllo', 'primaria_giorni', 'madurazione_giorni', 'cold_crash', 'cold_crash_giorni', 'cold_crash_temp_c', 'dry_hop_giorno', 'steps', 'note', 'nota'],
-    carbonazione: ['metodo', 'zucchero_tipo', 'zucchero_grammi', 'zucchero_g_per_litro', 'co2_volumi', 'temperatura_servizio_c', 'tipo_botella', 'priming_gl', 'priming_totale_g', 'priming_total_g', 'zucchero_totale_g', 'preparazione'],
+    carbonazione: ['metodo', 'zucchero_tipo', 'zucchero_grammi', 'zucchero_g_per_litro', 'co2_volumi', 'temperatura_servizio_c', 'tipo_botella', 'priming_gl', 'priming_totale_g', 'priming_total_g', 'zucchero_totale_g', 'preparazione', 'note', 'nota'],
     lievito: ['ceppo', 'forma', 'quantita_ml', 'quantita_g', 'quantita', 'attenuazione_percent', 'laboratorio', 'temp_min_c', 'temp_max_c', 'temperatura_inoculo_c', 'temp_inoculo_c', 'temperatura_fermentazione', 'durata_primaria_giorni', 'note'],
-    acqua: ['fonte', 'profilo_originale', 'sales', 'mash_litri', 'mash_agua_litri', 'strike_litri', 'sparge_litri', 'sparge_agua_litri', 'total_litri', 'total_agua_litri', 'ca', 'mg', 'na', 'cl', 'so4', 'hco3', 'ca_mg_l', 'mg_mg_l', 'na_mg_l', 'cl_mg_l', 'so4_mg_l', 'hco3_mg_l', 'rapporto_so4_cl', 'ph_target', 'nota'],
+    acqua: ['fonte', 'profilo_originale', 'sales', 'mash_litri', 'mash_agua_litri', 'strike_litri', 'sparge_litri', 'sparge_agua_litri', 'total_litri', 'total_agua_litri', 'ca', 'mg', 'na', 'cl', 'so4', 'hco3', 'ca_mg_l', 'mg_mg_l', 'na_mg_l', 'cl_mg_l', 'so4_mg_l', 'hco3_mg_l', 'rapporto_so4_cl', 'ph_target', 'note', 'nota'],
     sparge: ['sparge_litri', 'volumen_litri', 'litri', 'temperatura_c', 'temperature_c', 'procedura'],
     mash_salts: ['gesso_g', 'gypsum_g', 'gesso', 'cacl2_g', 'cacl2', 'epsom_g', 'epsom', 'nahco3_g', 'nahco3', 'acido_lactico_ml', 'lactic_acid_ml', 'acido_lactico'],
     sparge_salts: ['gesso_g', 'gypsum_g', 'gesso', 'cacl2_g', 'cacl2', 'epsom_g', 'epsom', 'nahco3_g', 'nahco3', 'acido_lactico_ml', 'lactic_acid_ml', 'acido_lactico'],
@@ -267,7 +268,7 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
     const originalProfile = record(waterRaw['profilo_originale']);
     water.notes.push(...[
       text(waterRaw['fonte']) ? `Fonte: ${text(waterRaw['fonte'])}` : undefined,
-      text(waterRaw['nota']),
+      text(waterRaw['note']) ?? text(waterRaw['nota']),
       numberFromText(originalProfile['ph']) !== undefined ? `pH fonte: ${numberFromText(originalProfile['ph'])}` : undefined,
     ].filter((item): item is string => Boolean(item)));
     water.actions.push(...saltActions('water', recipe.mash_salts, 'Trattamento acqua mash', 10));
@@ -319,7 +320,7 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
       target('Whirlpool', boilRaw['whirlpool'] === undefined ? undefined : boilRaw['whirlpool'] ? 'Sì' : 'No'),
       target('Temperatura whirlpool', recipe.whirlpool_temp_c, ' °C'), target('Durata whirlpool', firstNumber(boilRaw, ['whirlpool_durata_min']), ' min'),
     ].filter((item): item is TargetValue => item !== undefined));
-    if (text(boilRaw['nota'])) boil.notes.push(text(boilRaw['nota'])!);
+    if (text(boilRaw['note']) || text(boilRaw['nota'])) boil.notes.push(text(boilRaw['note']) ?? text(boilRaw['nota'])!);
     const boilMinutes = recipe.boil_time_minutes ?? 60;
     recipe.hop_schedule.filter(hop => ['first_wort', 'boil', 'flameout'].includes(hop.use)).forEach(hop => {
       const moment = hop.use === 'first_wort' ? 'First Wort' : hop.time_minutes === 0 ? 'T 0 — Flameout' : `T −${hop.time_minutes} min`;
@@ -410,6 +411,7 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
     packaging.targets.push(...[
       target('Metodo', method), target('Volume confezionamento', recipe.packaging_volume_liters, ' L'), target('Carbonazione', recipe.carbonation_volumes, ' vol CO₂'), target('Priming', recipe.priming_sugar_gl, ' g/L'),
     ].filter((item): item is TargetValue => item !== undefined));
+    if (text(carbonationRaw['note']) || text(carbonationRaw['nota'])) packaging.notes.push(text(carbonationRaw['note']) ?? text(carbonationRaw['nota'])!);
     if (method && /bott|bottiglia/i.test(method) && (recipe.priming_total_grams !== undefined || recipe.priming_sugar_gl !== undefined)) packaging.actions.push({ phase: 'packaging', order: 20, moment: 'Imbottigliamento', action: 'Aggiungere il fermentabile di priming', ingredient: firstText(carbonationRaw, ['zucchero_tipo']) ?? 'Zucchero', quantity: quantity(recipe.priming_total_grams ?? (recipe.priming_sugar_gl! * (recipe.packaging_volume_liters ?? 0)), 'g'), note: recipe.priming_total_grams !== undefined ? 'Quantità totale dichiarata' : `${recipe.priming_sugar_gl} g/L sul volume confezionato` });
     if (text(carbonationRaw['preparazione'])) packaging.actions.push({ phase: 'packaging', order: 15, moment: 'Preparazione priming', action: 'Preparare la soluzione di priming', ingredient: firstText(carbonationRaw, ['zucchero_tipo']), quantity: quantity(recipe.priming_total_grams, 'g'), note: text(carbonationRaw['preparazione']) });
     packaging.actions.unshift({ phase: 'packaging', order: 10, moment: 'Prima del confezionamento', action: 'Verificare stabilità della FG' });
@@ -427,6 +429,7 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
     summaryTargets: [
       target('Batch target', recipe.batch_size_liters, ' L'), target('Volume pre-boil', recipe.pre_boil_volume_liters, ' L'), target('Volume post-boil', recipe.post_boil_volume_liters, ' L'), target('Volume fermentatore', recipe.fermentation_volume_liters, ' L'), target('Volume confezionato', recipe.packaging_volume_liters, ' L'), target('OG', recipe.og), target('FG', recipe.fg), target('ABV', recipe.abv_percent, '%'), target('IBU', recipe.ibu), target('EBC', recipe.ebc), target('Efficienza', recipe.efficiency_percent, '%'), target('BU:GU', firstNumber(params, ['bu_gu']), ''), target('Colore', text(params['colore'])), target('Corpo', text(params['corpo'])), target('Bollitura', recipe.boil_time_minutes, ' min'),
     ].filter((item): item is TargetValue => item !== undefined),
+    summaryNotes: [firstText(params, ['note', 'nota'])].filter((item): item is string => Boolean(item)),
     sections,
     notes: [recipe.note, ...(Array.isArray(raw['note']) ? raw['note'].filter((item): item is string => typeof item === 'string') : []), ...(Array.isArray(raw['note_critiche']) ? raw['note_critiche'].filter((item): item is string => typeof item === 'string') : [])].filter((item): item is string => Boolean(item)),
     alternatives,

@@ -193,6 +193,26 @@ async function main(): Promise<void> {
     await new YamlToDocxTool().resolveExecution({ input_file: unmappedFixture, output_file: unmappedDocx }).execute({ turnId: 5, toolCallId: 'unmapped-fields-docx', signal: new AbortController().signal });
     const unmappedXml = execFileSync('unzip', ['-p', unmappedDocx, 'word/document.xml']).toString();
     assert(unmappedXml.includes('bollitura.dettagli_extra') && unmappedXml.includes('densita: 1.04') && unmappedXml.includes('controllare colore'), 'DOCX should render unmapped field names and structured values');
+    const sectionNotesFixture = join(workDir, 'section-notes.yaml');
+    const sectionNotesYaml = VALID_RECIPE
+      .replace('parametri:\n', 'parametri:\n  note: "Nota parametri"\n')
+      .replace('  whirlpool_durata_min: 20\n', '  whirlpool_durata_min: 20\n  note: "Nota bollitura"\n')
+      .replace('carbonazione:\n', 'carbonazione:\n  note: "Nota carbonazione"\n')
+      .replace('  total_litri: 36\n', '  total_litri: 36\n  note: "Nota acqua"\n');
+    writeFileSync(sectionNotesFixture, sectionNotesYaml, 'utf-8');
+    const sectionNotesModel = buildRecipeDocumentModel(sectionNotesFixture).model;
+    assert(sectionNotesModel.summaryNotes.includes('Nota parametri'), 'parameter note should be attached to recipe summary');
+    assert(!sectionNotesModel.unmappedFields.some(field => /^(parametri|bollitura|carbonazione|acqua)\.(note|nota)$/.test(field)), 'section note fields should be treated as mapped');
+    assert(sectionNotesModel.sections.find(section => section.phase === 'water')?.notes.includes('Nota acqua'), 'water note should be attached to water section');
+    assert(sectionNotesModel.sections.find(section => section.phase === 'boil')?.notes.includes('Nota bollitura'), 'boil note should be attached to boil section');
+    assert(sectionNotesModel.sections.find(section => section.phase === 'packaging')?.notes.includes('Nota carbonazione'), 'carbonation note should be attached to packaging section');
+    const sectionNotesDocx = join(workDir, 'section-notes.docx');
+    await new YamlToDocxTool().resolveExecution({ input_file: sectionNotesFixture, output_file: sectionNotesDocx }).execute({ turnId: 6, toolCallId: 'section-notes-docx', signal: new AbortController().signal });
+    const sectionNotesXml = execFileSync('unzip', ['-p', sectionNotesDocx, 'word/document.xml']).toString();
+    assert(['Nota parametri', 'Nota acqua', 'Nota bollitura', 'Nota carbonazione'].every(note => sectionNotesXml.includes(note)), 'DOCX should render all section-specific YAML notes');
+    assert(sectionNotesXml.indexOf('Nota parametri') < sectionNotesXml.lastIndexOf('Preparazione degli ingredienti')
+      && sectionNotesXml.indexOf('Nota acqua') < sectionNotesXml.lastIndexOf('Mash-in e ammostamento')
+      && sectionNotesXml.indexOf('Nota bollitura') < sectionNotesXml.lastIndexOf('Post-boil e whirlpool'), 'DOCX should place summary, water, and boil notes at the end of their related content');
     assert(documentXml.includes('Lampone') && documentXml.includes('1.25 kg') && documentXml.includes('5-7 giorni di contatto'), 'DOCX XML should render the special fruit addition, amount, and contact time');
     assert(documentXml.includes('Acido lattico') && documentXml.includes('1.50 mL') && documentXml.includes('0.60 mL'), 'DOCX XML should render conventional mash and sparge acid fields');
       const derivedSpargeFixture = join(workDir, 'derived-sparge.yaml');

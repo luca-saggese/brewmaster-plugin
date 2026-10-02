@@ -13655,7 +13655,9 @@ function collectUnmappedFieldDetails(raw) {
 			"bu_gu",
 			"colore",
 			"corpo",
-			"volume_fermentatore"
+			"volume_fermentatore",
+			"note",
+			"nota"
 		],
 		mash: [
 			"tipo",
@@ -13687,6 +13689,7 @@ function collectUnmappedFieldDetails(raw) {
 			"whirlpool_durata_min",
 			"hop_stand_temperatura_c",
 			"aggiunte_bollitura",
+			"note",
 			"nota"
 		],
 		fermentazione: [
@@ -13714,7 +13717,9 @@ function collectUnmappedFieldDetails(raw) {
 			"priming_totale_g",
 			"priming_total_g",
 			"zucchero_totale_g",
-			"preparazione"
+			"preparazione",
+			"note",
+			"nota"
 		],
 		lievito: [
 			"ceppo",
@@ -13757,6 +13762,7 @@ function collectUnmappedFieldDetails(raw) {
 			"hco3_mg_l",
 			"rapporto_so4_cl",
 			"ph_target",
+			"note",
 			"nota"
 		],
 		sparge: [
@@ -13949,7 +13955,7 @@ function buildModel(recipe, raw) {
 		const originalProfile = record(waterRaw["profilo_originale"]);
 		water.notes.push(...[
 			text(waterRaw["fonte"]) ? `Fonte: ${text(waterRaw["fonte"])}` : void 0,
-			text(waterRaw["nota"]),
+			text(waterRaw["note"]) ?? text(waterRaw["nota"]),
 			numberFromText(originalProfile["ph"]) !== void 0 ? `pH fonte: ${numberFromText(originalProfile["ph"])}` : void 0
 		].filter((item) => Boolean(item)));
 		water.actions.push(...saltActions("water", recipe.mash_salts, "Trattamento acqua mash", 10));
@@ -14060,7 +14066,7 @@ function buildModel(recipe, raw) {
 			target("Temperatura whirlpool", recipe.whirlpool_temp_c, " °C"),
 			target("Durata whirlpool", firstNumber(boilRaw, ["whirlpool_durata_min"]), " min")
 		].filter((item) => item !== void 0));
-		if (text(boilRaw["nota"])) boil.notes.push(text(boilRaw["nota"]));
+		if (text(boilRaw["note"]) || text(boilRaw["nota"])) boil.notes.push(text(boilRaw["note"]) ?? text(boilRaw["nota"]));
 		const boilMinutes = recipe.boil_time_minutes ?? 60;
 		recipe.hop_schedule.filter((hop) => [
 			"first_wort",
@@ -14270,6 +14276,7 @@ function buildModel(recipe, raw) {
 			target("Carbonazione", recipe.carbonation_volumes, " vol CO₂"),
 			target("Priming", recipe.priming_sugar_gl, " g/L")
 		].filter((item) => item !== void 0));
+		if (text(carbonationRaw["note"]) || text(carbonationRaw["nota"])) packaging.notes.push(text(carbonationRaw["note"]) ?? text(carbonationRaw["nota"]));
 		if (method && /bott|bottiglia/i.test(method) && (recipe.priming_total_grams !== void 0 || recipe.priming_sugar_gl !== void 0)) packaging.actions.push({
 			phase: "packaging",
 			order: 20,
@@ -14331,6 +14338,7 @@ function buildModel(recipe, raw) {
 			target("Corpo", text(params["corpo"])),
 			target("Bollitura", recipe.boil_time_minutes, " min")
 		].filter((item) => item !== void 0),
+		summaryNotes: [firstText(params, ["note", "nota"])].filter((item) => Boolean(item)),
 		sections,
 		notes: [
 			recipe.note,
@@ -14570,6 +14578,7 @@ function renderModel(model) {
 		size: 19,
 		after: 120
 	});
+	for (const note of model.summaryNotes) body += paragraph(`NOTA  ${note}`, { color: "52606D" });
 	if (model.objectives.length) body += table(["OBIETTIVO PRODUTTIVO", "DESCRIZIONE"], targetRows$1(model.objectives), [3300, 6338]);
 	body += heading("Macrofasi", 2) + table(["N.", "FASE"], model.sections.map((section, index) => [String(index + 1), section.title]), [900, 8738], ["center", "left"]);
 	for (const section of model.sections) body += renderSection(section);
@@ -15188,6 +15197,7 @@ var BrewdayPdfRenderer = class {
 			...targetRows(model.summaryTargets),
 			...targetRows(model.objectives)
 		]);
+		for (const note of model.summaryNotes) this.paragraph(`NOTA: ${note}`);
 		for (const section of model.sections) this.section(section);
 		if (model.notes.length) {
 			this.title("Note informative");

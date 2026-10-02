@@ -411,7 +411,7 @@ Il YAML è la fonte canonica, ma il validator attuale usa un mapping tollerante 
 I nomi dei campi canonici sono italiani: `varieta`, non `variety`; `grammi`, non `grams`; `tempo_min`, non `time`.
 
 <!-- RECIPE_SCHEMA:START -->
-Campi di primo livello obbligatori per una ricetta completa:
+Campi canonici di primo livello supportati:
 
 - `nome`
 - `stile`
@@ -433,6 +433,29 @@ Campi di primo livello obbligatori per una ricetta completa:
 
 Il parser del validator richiede stringhe non vuote per `nome`, `stile` e valori numerici validi per `parametri.batch_size_litri` > 0, `parametri.og` > 0, `parametri.fg` > 0, `parametri.ibu` >= 0. Accetta inoltre questi campi di primo livello: `schema_version`, `nome`, `stile`, `codice_bjcp`, `descrizione`, `note`, `parametri`, `grist`, `luppolatura`, `aggiunte_speciali`, `lievito`, `mash`, `fermentazione`, `bollitura`, `acqua`, `agua`, `sparge`, `sales`, `mash_salts`, `sparge_salts`, `carbonazione`, `spezie`, `zuccheri`, `confezionamento`, `obiettivi_sensoriali`, `vincoli_produzione`, `fonte`, `note_critiche`, `alternative`. schema_version è facoltativo e supportato per compatibilità.
 
+Requisiti di completezza per bollitura e fermentazione (sincronizzati da `validator.recipe_fields`):
+
+- `bollitura.durata_min`: required
+- `bollitura.volume_pre_boil_litri`: required
+- `bollitura.volume_post_boil_litri`: required
+- `bollitura.og_pre_boil`: required
+- `bollitura.og_post_boil`: required
+- `bollitura.evaporazione_litri`: required
+- `bollitura.perdita_trub_litri`: required
+- `bollitura.irish_moss`: required
+- `bollitura.whirlpool`: required
+- `bollitura.whirlpool_temp_c`: required when `bollitura.whirlpool` is `true`
+- `bollitura.whirlpool_durata_min`: required when `bollitura.whirlpool` is `true`
+- `fermentazione.steps`: required, at least 1 phase(s)
+- `fermentazione.steps[].fase`: required
+- `fermentazione.steps[].giorno_inizio`: required
+- `fermentazione.steps[].giorno_fine`: required
+- `fermentazione.steps[].temperatura_c`: optional
+- `fermentazione.steps[].temperatura_min_c`: optional
+- `fermentazione.steps[].temperatura_max_c`: optional
+- `fermentazione.steps[].note`: optional
+- Fermentation temperature: exactly one of `temperatura_c` or `temperatura_min_c` + `temperatura_max_c`
+
 Schema base obbligatorio:
 
 ```yaml
@@ -451,6 +474,7 @@ parametri:
   efficienza_percent: 75
   impianto: "BrewZilla 35L"
   volume_fermentatore: 23
+  confezionamento_litri: 22
 
 grist:
   - malto: "Pale Ale Malt"
@@ -493,6 +517,8 @@ lievito:
   note: "Neutro, lascia spazio al luppolo"
 
 acqua:
+  sparge_litri: 10
+  total_litri: 28
   ca_mg_l: 110
   mg_mg_l: 18
   na_mg_l: 16
@@ -539,6 +565,7 @@ bollitura:
 
 fermentazione:
   primaria_giorni: 7
+  temperatura_c: 19
   steps:
     - fase: "Avvio"
       giorno_inizio: 0
@@ -558,6 +585,7 @@ fermentazione:
 
 carbonazione:
   metodo: bottiglia
+  tipo_botella: "Long neck"
   zucchero_tipo: saccarosio
   zucchero_grammi: 130
   zucchero_g_per_litro: 6.5

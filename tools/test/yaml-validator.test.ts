@@ -13,9 +13,10 @@
  *   `tsx test/yaml-validator.test.ts /path/to/recipe.yaml`
  */
 
-import { mkdtempSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import * as yaml from 'js-yaml';
 
 import { YamlValidatorTool } from '../src/brewing/yaml-validator.ts';
 
@@ -100,9 +101,21 @@ mash:
 fermentazione:
   temperatura_c: 19
   primaria_giorni: 14
+  steps:
+    - fase: "Primaria"
+      giorno_inizio: 0
+      giorno_fine: 14
+      temperatura_c: 19
 bollitura:
+  durata_min: 60
+  volume_pre_boil_litri: 25
+  volume_post_boil_litri: 22
   og_pre_boil: 1.038
   og_post_boil: 1.052
+  evaporazione_litri: 3
+  perdita_trub_litri: 0
+  irish_moss: false
+  whirlpool: false
 agua:
   mash_litri: 24
   sparge_litri: 16
@@ -185,6 +198,18 @@ async function main(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), 'yaml-validator-test-'));
 
   try {
+    const schema = yaml.load(readFileSync(join(process.cwd(), 'src/brewing/recipe-schema.yaml'), 'utf-8')) as { canonical_example: string };
+    const canonicalExamplePath = join(dir, 'canonical-example.yaml');
+    writeFileSync(canonicalExamplePath, schema.canonical_example, 'utf-8');
+    const canonicalExampleRes = await tool.resolveExecution({ input_file: canonicalExamplePath }).execute({
+      turnId: 0,
+      toolCallId: 'test-canonical-example',
+      signal: new AbortController().signal,
+    });
+    assert(!canonicalExampleRes.isError, 'canonical schema example should parse');
+    const canonicalExampleReport = JSON.parse(canonicalExampleRes.output) as { errors: Array<{ message: string }> };
+    assert(!canonicalExampleReport.errors.some(error => error.message.includes('incompleti') || error.message.includes('bollitura.') || error.message.includes('fermentazione.steps')), 'canonical schema example should satisfy required boil and fermentation fields');
+
     // 1. Valid recipe → success result, no critical issues
     const validPath = join(dir, 'valid.yaml');
     writeFileSync(validPath, VALID_RECIPE, 'utf-8');
@@ -307,7 +332,22 @@ async function main(): Promise<void> {
     assertIncludes(invalidSaltRes.output, 'mash_salts.gypsum_g', 'invalid salt amount should identify its YAML field path');
 
     const fermentationStepsPath = join(dir, 'fermentation-steps.yaml');
-    writeFileSync(fermentationStepsPath, `${VALID_RECIPE.replace('temperatura_c: 19\n  primaria_giorni: 14', 'temperatura_c: 19\n  primaria_giorni: 14\n  steps:\n    - fase: "Avvio"\n      giorno_inizio: 0\n      giorno_fine: 4\n      temperatura_c: 18\n    - fase: "Rampa libera"\n      giorno_inizio: 4\n      giorno_fine: 7\n      temperatura_min_c: 21\n      temperatura_max_c: 23')}`, 'utf-8');
+    const originalFermentationStep = `  steps:
+    - fase: "Primaria"
+      giorno_inizio: 0
+      giorno_fine: 14
+      temperatura_c: 19`;
+    const multipleFermentationSteps = `  steps:
+    - fase: "Avvio"
+      giorno_inizio: 0
+      giorno_fine: 4
+      temperatura_c: 18
+    - fase: "Rampa libera"
+      giorno_inizio: 4
+      giorno_fine: 7
+      temperatura_min_c: 21
+      temperatura_max_c: 23`;
+    writeFileSync(fermentationStepsPath, VALID_RECIPE.replace(originalFermentationStep, multipleFermentationSteps), 'utf-8');
     const fermentationStepsRes = await tool.resolveExecution({ input_file: fermentationStepsPath }).execute({
       turnId: 13,
       toolCallId: 'test-fermentation-steps',
@@ -319,7 +359,13 @@ async function main(): Promise<void> {
     assert(fermentationStepsReport.normalized_recipe.fermentation_steps?.[1]?.temperature_min_c === 21, 'validator should preserve fermentation temperature ranges');
 
     const invalidFermentationStepsPath = join(dir, 'invalid-fermentation-steps.yaml');
-    writeFileSync(invalidFermentationStepsPath, `${VALID_RECIPE.replace('temperatura_c: 19\n  primaria_giorni: 14', 'temperatura_c: 19\n  steps:\n    - fase: "Intervallo non valido"\n      giorno_inizio: 5\n      giorno_fine: 3\n      temperatura_min_c: 24\n      temperatura_max_c: 20')}`, 'utf-8');
+    const invalidFermentationStep = `  steps:
+    - fase: "Intervallo non valido"
+      giorno_inizio: 5
+      giorno_fine: 3
+      temperatura_min_c: 24
+      temperatura_max_c: 20`;
+    writeFileSync(invalidFermentationStepsPath, VALID_RECIPE.replace(originalFermentationStep, invalidFermentationStep), 'utf-8');
     const invalidFermentationStepsRes = await tool.resolveExecution({ input_file: invalidFermentationStepsPath }).execute({
       turnId: 14,
       toolCallId: 'test-invalid-fermentation-steps',
@@ -328,6 +374,39 @@ async function main(): Promise<void> {
     assert(invalidFermentationStepsRes.isError, 'validator should reject reversed day and temperature ranges');
     assertIncludes(invalidFermentationStepsRes.output, 'giorno_fine', 'invalid fermentation day range should identify its field');
     assertIncludes(invalidFermentationStepsRes.output, 'temperatura_max_c', 'invalid fermentation temperature range should identify its field');
+
+    const missingBoilFieldPath = join(dir, 'missing-boil-field.yaml');
+    writeFileSync(missingBoilFieldPath, VALID_RECIPE.replace('  og_pre_boil: 1.038\n', ''), 'utf-8');
+    const missingBoilFieldRes = await tool.resolveExecution({ input_file: missingBoilFieldPath }).execute({
+      turnId: 15,
+      toolCallId: 'test-missing-boil-field',
+      signal: new AbortController().signal,
+    });
+    const missingBoilReport = JSON.parse(missingBoilFieldRes.output) as { validation_status: string; errors: Array<{ message: string }> };
+    assert(missingBoilReport.validation_status === 'invalid', 'missing required boil field should invalidate recipe completeness');
+    assert(missingBoilReport.errors.some(error => error.message.includes('bollitura.og_pre_boil')), 'missing required boil field should identify its schema path');
+
+    const emptyBoilFieldPath = join(dir, 'empty-boil-field.yaml');
+    writeFileSync(emptyBoilFieldPath, VALID_RECIPE.replace('og_pre_boil: 1.038', 'og_pre_boil: ""'), 'utf-8');
+    const emptyBoilFieldRes = await tool.resolveExecution({ input_file: emptyBoilFieldPath }).execute({
+      turnId: 16,
+      toolCallId: 'test-empty-boil-field',
+      signal: new AbortController().signal,
+    });
+    assert(emptyBoilFieldRes.isError, 'empty required numeric field should be a schema error');
+    assertIncludes(emptyBoilFieldRes.output, 'bollitura.og_pre_boil', 'empty required field error should identify its path');
+
+    const missingWhirlpoolFieldsPath = join(dir, 'missing-whirlpool-fields.yaml');
+    writeFileSync(missingWhirlpoolFieldsPath, VALID_RECIPE.replace('  whirlpool: false', '  whirlpool: true'), 'utf-8');
+    const missingWhirlpoolFieldsRes = await tool.resolveExecution({ input_file: missingWhirlpoolFieldsPath }).execute({
+      turnId: 17,
+      toolCallId: 'test-missing-whirlpool-fields',
+      signal: new AbortController().signal,
+    });
+    const missingWhirlpoolReport = JSON.parse(missingWhirlpoolFieldsRes.output) as { validation_status: string; errors: Array<{ message: string }> };
+    assert(missingWhirlpoolReport.validation_status === 'invalid', 'whirlpool fields should be required when whirlpool is enabled');
+    assert(missingWhirlpoolReport.errors.some(error => error.message.includes('bollitura.whirlpool_temp_c')), 'conditional requirement should identify whirlpool temperature');
+    assert(missingWhirlpoolReport.errors.some(error => error.message.includes('bollitura.whirlpool_durata_min')), 'conditional requirement should identify whirlpool duration');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

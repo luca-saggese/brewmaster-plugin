@@ -289,8 +289,13 @@ export interface ParsedRecipe {
   sparge_salts?: { gypsum_g?: number; cacl2_g?: number; epsom_g?: number; nahco3_g?: number; lactic_acid_ml?: number };
   mash_in_temp_c?: number;
   whirlpool_temp_c?: number;
+  whirlpool_duration_minutes?: number;
   pre_boil_og?: number;
   post_boil_og?: number;
+  evaporation_liters?: number;
+  trub_loss_liters?: number;
+  irish_moss?: boolean;
+  whirlpool_enabled?: boolean;
   primary_days?: number;
   conditioning_days?: number;
   fermentation_steps?: {
@@ -358,6 +363,27 @@ function pickBool(obj: Record<string, unknown> | undefined, keys: string[]): boo
   return undefined;
 }
 
+interface RecipeFieldRule {
+  type: 'number' | 'string' | 'boolean' | 'array';
+  required?: boolean;
+  required_if?: { field: string; equals: unknown };
+  min?: number;
+  max?: number;
+  exclusive_min?: boolean;
+  non_empty?: boolean;
+  min_items?: number;
+  aliases?: string[];
+}
+
+interface RecipeFieldContract {
+  bollitura: Record<string, RecipeFieldRule>;
+  fermentazione: {
+    steps: RecipeFieldRule;
+    step_fields: Record<string, RecipeFieldRule>;
+    required_one_of: string[][];
+  };
+}
+
 const RECIPE_SCHEMA = yaml.load(readFileSync(new URL('./recipe-schema.yaml', import.meta.url), 'utf-8')) as {
   validator: {
     accepted_top_level_fields: string[];
@@ -367,7 +393,7 @@ const RECIPE_SCHEMA = yaml.load(readFileSync(new URL('./recipe-schema.yaml', imp
     list_fields: string[];
     salt_sections: string[];
     salt_fields: string[];
-    fermentation_step_fields: { string_fields: string[]; non_negative_number_fields: string[] };
+    recipe_fields: RecipeFieldContract;
     special_additions: {
       required_string_fields: string[];
       required_positive_number_fields: string[];
@@ -378,6 +404,85 @@ const RECIPE_SCHEMA = yaml.load(readFileSync(new URL('./recipe-schema.yaml', imp
 };
 const YAML_TOP_LEVEL_KEYS = new Set(RECIPE_SCHEMA.validator.accepted_top_level_fields);
 const YAML_VALIDATOR_SCHEMA = RECIPE_SCHEMA.validator;
+
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function fieldKeys(name: string, rule: RecipeFieldRule): string[] {
+  return [name, ...(rule.aliases ?? [])];
+}
+
+function fieldPresent(source: Record<string, unknown>, name: string, rule: RecipeFieldRule): boolean {
+  return fieldKeys(name, rule).some(key => source[key] !== undefined && source[key] !== null && source[key] !== '');
+}
+
+function validateFieldRules(
+  source: Record<string, unknown>,
+  rules: Record<string, RecipeFieldRule>,
+  path: string,
+  issues: Array<{ path: string; message: string }>,
+): void {
+  for (const [name, rule] of Object.entries(rules)) {
+    for (const key of fieldKeys(name, rule)) {
+      if (!(key in source)) continue;
+      const value = source[key];
+      const fieldPath = `${path}.${key}`;
+      if (rule.type === 'number') {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          issues.push({ path: fieldPath, message: 'Il valore deve essere un numero finito.' });
+          continue;
+        }
+        if (rule.min !== undefined && (rule.exclusive_min ? value <= rule.min : value < rule.min)) {
+          issues.push({ path: fieldPath, message: rule.exclusive_min ? `Il valore deve essere maggiore di ${rule.min}.` : `Il valore deve essere almeno ${rule.min}.` });
+        }
+        if (rule.max !== undefined && value > rule.max) issues.push({ path: fieldPath, message: `Il valore non può superare ${rule.max}.` });
+      } else if (rule.type === 'string') {
+        if (typeof value !== 'string' || (rule.non_empty && !value.trim())) {
+          issues.push({ path: fieldPath, message: rule.non_empty ? 'Il valore deve essere una stringa non vuota.' : 'Il valore deve essere una stringa.' });
+        }
+      } else if (rule.type === 'boolean' && typeof value !== 'boolean') {
+        issues.push({ path: fieldPath, message: 'Il valore deve essere booleano (true/false).' });
+      } else if (rule.type === 'array' && !Array.isArray(value)) {
+        issues.push({ path: fieldPath, message: 'Il valore deve essere una lista.' });
+      }
+    }
+  }
+}
+
+function collectRequiredFieldIssues(rawYaml: string): string[] {
+  const data = objectValue(yaml.load(rawYaml)) ?? {};
+  const missing: string[] = [];
+  const boil = objectValue(data['bollitura']);
+  for (const [name, rule] of Object.entries(YAML_VALIDATOR_SCHEMA.recipe_fields.bollitura)) {
+    const required = rule.required === true || (rule.required_if !== undefined && boil?.[rule.required_if.field] === rule.required_if.equals);
+    if (required && (!boil || !fieldPresent(boil, name, rule))) missing.push(`bollitura.${name}`);
+  }
+
+  const fermentation = objectValue(data['fermentazione']);
+  const fermentationRules = YAML_VALIDATOR_SCHEMA.recipe_fields.fermentazione;
+  const stepsRule = fermentationRules.steps;
+  const stepsValue = fermentation?.['steps'];
+  if (stepsRule.required && (!Array.isArray(stepsValue) || stepsValue.length < (stepsRule.min_items ?? 0))) {
+    missing.push('fermentazione.steps');
+  }
+  const steps = Array.isArray(stepsValue) ? stepsValue : [];
+  steps.forEach((value, index) => {
+    const step = objectValue(value);
+    if (!step) return;
+    for (const [name, rule] of Object.entries(fermentationRules.step_fields)) {
+      if (rule.required && !fieldPresent(step, name, rule)) missing.push(`fermentazione.steps[${index}].${name}`);
+    }
+    const hasAlternative = fermentationRules.required_one_of.some(alternative =>
+      alternative.every(name => {
+        const rule = fermentationRules.step_fields[name];
+        return rule ? fieldPresent(step, name, rule) : fieldPresent(step, name, {} as RecipeFieldRule);
+      }),
+    );
+    if (!hasAlternative) missing.push(`fermentazione.steps[${index}].temperatura_c oppure temperatura_min_c/temperatura_max_c`);
+  });
+  return missing;
+}
 
 function collectSchemaIssues(data: Record<string, unknown>): Array<{ path: string; message: string }> {
   const issues: Array<{ path: string; message: string }> = [];
@@ -401,6 +506,9 @@ function collectSchemaIssues(data: Record<string, unknown>): Array<{ path: strin
         issues.push({ path: `parametri.${key}`, message: 'Il valore deve essere un numero finito.' });
       }
     }
+    if ('bollitura_min' in parameterRecord && typeof parameterRecord['bollitura_min'] === 'number' && parameterRecord['bollitura_min'] <= 0) {
+      issues.push({ path: 'parametri.bollitura_min', message: 'La durata della bollitura deve essere maggiore di zero.' });
+    }
   }
   for (const section of YAML_VALIDATOR_SCHEMA.list_fields) {
     const value = data[section];
@@ -422,41 +530,42 @@ function collectSchemaIssues(data: Record<string, unknown>): Array<{ path: strin
       }
     }
   }
+  const boilValue = data['bollitura'];
+  if (boilValue !== undefined && !objectValue(boilValue)) {
+    issues.push({ path: 'bollitura', message: 'Il valore deve essere un oggetto.' });
+  } else if (objectValue(boilValue)) {
+    validateFieldRules(objectValue(boilValue)!, YAML_VALIDATOR_SCHEMA.recipe_fields.bollitura, 'bollitura', issues);
+  }
   const fermentation = data['fermentazione'];
-  if (fermentation !== undefined && (typeof fermentation !== 'object' || fermentation === null || Array.isArray(fermentation))) {
+  if (fermentation !== undefined && !objectValue(fermentation)) {
     issues.push({ path: 'fermentazione', message: 'Il valore deve essere un oggetto.' });
-  } else if (fermentation && typeof fermentation === 'object' && !Array.isArray(fermentation)) {
-    const steps = (fermentation as Record<string, unknown>)['steps'];
-    if (steps !== undefined && !Array.isArray(steps)) {
-      issues.push({ path: 'fermentazione.steps', message: 'Il valore deve essere una lista.' });
-    } else if (Array.isArray(steps)) {
+  } else if (objectValue(fermentation)) {
+    const fermentationRecord = objectValue(fermentation)!;
+    const fermentationRules = YAML_VALIDATOR_SCHEMA.recipe_fields.fermentazione;
+    const steps = fermentationRecord['steps'];
+    validateFieldRules(fermentationRecord, { steps: fermentationRules.steps }, 'fermentazione', issues);
+    if (Array.isArray(steps)) {
       steps.forEach((value, index) => {
         const path = `fermentazione.steps[${index}]`;
-        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        const step = objectValue(value);
+        if (!step) {
           issues.push({ path, message: 'Ogni fase di fermentazione deve essere un oggetto.' });
           return;
         }
-        const step = value as Record<string, unknown>;
-        for (const field of YAML_VALIDATOR_SCHEMA.fermentation_step_fields.string_fields) {
-          if (field in step && typeof step[field] !== 'string') {
-            issues.push({ path: `${path}.${field}`, message: 'Il campo deve essere una stringa.' });
-          }
-        }
-        for (const field of YAML_VALIDATOR_SCHEMA.fermentation_step_fields.non_negative_number_fields) {
-          if (field in step && (typeof step[field] !== 'number' || !Number.isFinite(step[field]) || (step[field] as number) < 0)) {
-            issues.push({ path: `${path}.${field}`, message: 'Il campo deve essere un numero finito non negativo.' });
-          }
-        }
-        const hasSingleTemperature = typeof step['temperatura_c'] === 'number';
-        const hasTemperatureRange = typeof step['temperatura_min_c'] === 'number' && typeof step['temperatura_max_c'] === 'number';
-        if (!hasSingleTemperature && !hasTemperatureRange) {
-          issues.push({ path, message: 'Specificare temperatura_c oppure temperatura_min_c e temperatura_max_c.' });
-        }
-        if (typeof step['giorno_inizio'] === 'number' && typeof step['giorno_fine'] === 'number' && step['giorno_fine'] < step['giorno_inizio']) {
+        validateFieldRules(step, fermentationRules.step_fields, path, issues);
+        const startDay = step['giorno_inizio'] ?? step['start_day'];
+        const endDay = step['giorno_fine'] ?? step['end_day'];
+        if (typeof startDay === 'number' && typeof endDay === 'number' && endDay < startDay) {
           issues.push({ path: `${path}.giorno_fine`, message: 'Il giorno finale non può precedere il giorno iniziale.' });
         }
-        if (typeof step['temperatura_min_c'] === 'number' && typeof step['temperatura_max_c'] === 'number' && step['temperatura_max_c'] < step['temperatura_min_c']) {
+        const temperatureMin = step['temperatura_min_c'] ?? step['temperature_min_c'];
+        const temperatureMax = step['temperatura_max_c'] ?? step['temperature_max_c'];
+        if (typeof temperatureMin === 'number' && typeof temperatureMax === 'number' && temperatureMax < temperatureMin) {
           issues.push({ path: `${path}.temperatura_max_c`, message: 'La temperatura massima non può essere inferiore alla minima.' });
+        }
+        const singleTemperature = step['temperatura_c'] ?? step['temperature_c'];
+        if (singleTemperature !== undefined && (temperatureMin !== undefined || temperatureMax !== undefined)) {
+          issues.push({ path, message: 'Usare temperatura_c oppure il range, non entrambi.' });
         }
       });
     }
@@ -680,6 +789,11 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
   // Mash-in: sezione "mash" con varianti
   const mashInTemp = pickNum(mash, ['temperatura_in_c', 'mash_in_c', 'temperatura_strike_c', 'strike_c']);
   const whirlpool_temp_c = pickNum(bollitura, ['whirlpool_temperatura_c', 'whirlpool_temp_c', 'hop_stand_temperatura_c']);
+  const whirlpool_duration_minutes = pickNum(bollitura, ['whirlpool_durata_min']);
+  const evaporation_liters = pickNum(bollitura, ['evaporazione_litri', 'perdita_evaporazione_litri']);
+  const trub_loss_liters = pickNum(bollitura, ['perdita_trub_litri']);
+  const irish_moss = pickBool(bollitura, ['irish_moss']);
+  const whirlpool_enabled = pickBool(bollitura, ['whirlpool']);
 
   // Gravità pre/post-boil: sezione "bollitura"
   const pre_boil_og = pickNum(bollitura, ['og_pre_boil', 'gravedad_pre_boil', 'pre_boil_og'])
@@ -755,8 +869,13 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
     sparge_salts,
     mash_in_temp_c: isNaN(mashInTemp as number) ? undefined : mashInTemp,
     whirlpool_temp_c: isNaN(whirlpool_temp_c as number) ? undefined : whirlpool_temp_c,
+    whirlpool_duration_minutes: isNaN(whirlpool_duration_minutes as number) ? undefined : whirlpool_duration_minutes,
     pre_boil_og: isNaN(pre_boil_og as number) ? undefined : pre_boil_og,
     post_boil_og: isNaN(post_boil_og as number) ? undefined : post_boil_og,
+    evaporation_liters: isNaN(evaporation_liters as number) ? undefined : evaporation_liters,
+    trub_loss_liters: isNaN(trub_loss_liters as number) ? undefined : trub_loss_liters,
+    irish_moss,
+    whirlpool_enabled,
     primary_days: isNaN(primary_days as number) ? undefined : primary_days,
     conditioning_days: isNaN(conditioning_days as number) ? undefined : conditioning_days,
     fermentation_steps,
@@ -788,6 +907,7 @@ export function validateRecipe(r: ParsedRecipe): ValidationResult {
   const styleDeviations: string[] = [];
   const volumeIssues: string[] = [];
   const carbonationIssues: string[] = [];
+  issues.push(...collectRequiredFieldIssues(r.rawYaml));
 
   // ── BJCP style checks ──
   if (style) {
@@ -876,9 +996,6 @@ export function validateRecipe(r: ParsedRecipe): ValidationResult {
   if (r.mash_water_liters === undefined) brewdayMissing.push('acqua di ammostamento (acqua.mash_litri)');
   if (r.total_water_liters === undefined) brewdayMissing.push('acqua totale (acqua.total_litri)');
   if (r.mash_in_temp_c === undefined) brewdayMissing.push('temperatura di mash-in (mash.temperatura_in_c)');
-  if (r.pre_boil_og === undefined) brewdayMissing.push('gravità pre-boil (bollitura.og_pre_boil)');
-  if (r.post_boil_og === undefined) brewdayMissing.push('gravità post-boil (bollitura.og_post_boil)');
-  if (r.boil_time_minutes === undefined) brewdayMissing.push('durata della bollitura (parametri.bollitura_min)');
   if (r.fermentation_temp_c === undefined) brewdayMissing.push('temperatura di fermentazione (fermentazione.temperatura_c)');
   if (r.primary_days === undefined) brewdayMissing.push('giorni di fermentazione primaria (fermentazione.primaria_giorni)');
   if (r.carbonation_volumes === undefined) brewdayMissing.push('carbonatazione (carbonazione.co2_volumi)');

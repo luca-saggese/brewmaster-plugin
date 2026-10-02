@@ -24,12 +24,30 @@ const requiredStrings = schema.validator.required_string_fields.map(field => `\`
 const requiredNumbers = Object.entries(schema.validator.required_numeric_parameters)
   .map(([field, rule]) => `\`parametri.${field}\` ${rule === 'positive' ? '> 0' : '>= 0'}`)
   .join(', ');
+const recipeFieldRules = schema.validator.recipe_fields;
+const boilRequirements = Object.entries(recipeFieldRules.bollitura).map(([field, rule]) => {
+  if (rule.required) return `- \`bollitura.${field}\`: required`;
+  if (rule.required_if) return `- \`bollitura.${field}\`: required when \`bollitura.${rule.required_if.field}\` is \`${rule.required_if.equals}\``;
+  return `- \`bollitura.${field}\`: optional`;
+});
+const fermentationRequirements = [
+  `- \`fermentazione.steps\`: required, at least ${recipeFieldRules.fermentazione.steps.min_items} phase(s)`,
+  ...Object.entries(recipeFieldRules.fermentazione.step_fields).map(([field, rule]) =>
+    `- \`fermentazione.steps[].${field}\`: ${rule.required ? 'required' : 'optional'}`),
+  `- Fermentation temperature: exactly one of ${recipeFieldRules.fermentazione.required_one_of
+    .map(alternative => alternative.map(field => `\`${field}\``).join(' + ')).join(' or ')}`,
+];
 const generated = [
-  'Campi di primo livello obbligatori per una ricetta completa:',
+  'Campi canonici di primo livello supportati:',
   '',
   fields,
   '',
   `Il parser del validator richiede stringhe non vuote per ${requiredStrings} e valori numerici validi per ${requiredNumbers}. Accetta inoltre questi campi di primo livello: ${acceptedFields}. schema_version è facoltativo e supportato per compatibilità.`,
+  '',
+  'Requisiti di completezza per bollitura e fermentazione (sincronizzati da `validator.recipe_fields`):',
+  '',
+  ...boilRequirements,
+  ...fermentationRequirements,
   '',
   'Schema base obbligatorio:',
   '',

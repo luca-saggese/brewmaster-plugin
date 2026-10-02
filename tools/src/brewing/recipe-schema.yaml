@@ -89,17 +89,108 @@ validator:
     - epsom_g
     - nahco3_g
     - lactic_acid_ml
-  fermentation_step_fields:
-    string_fields:
-      - fase
-      - note
-    non_negative_number_fields:
-      - giorno_inizio
-      - giorno_fine
-      - giorni
-      - temperatura_c
-      - temperatura_min_c
-      - temperatura_max_c
+  recipe_fields:
+    bollitura:
+      durata_min:
+        type: number
+        required: true
+        min: 1
+        aliases: [duration_min, duracion_min]
+      volume_pre_boil_litri:
+        type: number
+        required: true
+        min: 0
+        exclusive_min: true
+        aliases: [pre_boil_litri, volumen_pre_boil_litri]
+      volume_post_boil_litri:
+        type: number
+        required: true
+        min: 0
+        exclusive_min: true
+        aliases: [post_boil_litri, volumen_post_boil_litri]
+      og_pre_boil:
+        type: number
+        required: true
+        min: 1
+        exclusive_min: true
+        aliases: [gravedad_pre_boil, pre_boil_og]
+      og_post_boil:
+        type: number
+        required: true
+        min: 1
+        exclusive_min: true
+        aliases: [gravedad_post_boil, post_boil_og]
+      evaporazione_litri:
+        type: number
+        required: true
+        min: 0
+        aliases: [perdita_evaporazione_litri]
+      perdita_trub_litri:
+        type: number
+        required: true
+        min: 0
+      irish_moss:
+        type: boolean
+        required: true
+      whirlpool:
+        type: boolean
+        required: true
+      whirlpool_temp_c:
+        type: number
+        required_if: { field: whirlpool, equals: true }
+        min: 0
+        max: 100
+        aliases: [whirlpool_temperatura_c, hop_stand_temperatura_c]
+      whirlpool_durata_min:
+        type: number
+        required_if: { field: whirlpool, equals: true }
+        min: 0
+        exclusive_min: true
+    fermentazione:
+      steps:
+        type: array
+        required: true
+        min_items: 1
+      step_fields:
+        fase:
+          type: string
+          required: true
+          non_empty: true
+          aliases: [phase]
+        giorno_inizio:
+          type: number
+          required: true
+          min: 0
+          aliases: [start_day]
+        giorno_fine:
+          type: number
+          required: true
+          min: 0
+          aliases: [end_day]
+        temperatura_c:
+          type: number
+          required: false
+          min: 0
+          max: 60
+          aliases: [temperature_c]
+        temperatura_min_c:
+          type: number
+          required: false
+          min: 0
+          max: 60
+          aliases: [temperature_min_c]
+        temperatura_max_c:
+          type: number
+          required: false
+          min: 0
+          max: 60
+          aliases: [temperature_max_c]
+        note:
+          type: string
+          required: false
+      required_one_of:
+        - [temperatura_c]
+        - [temperatura_min_c, temperatura_max_c]
   special_additions:
     required_string_fields:
       - ingrediente
@@ -136,6 +227,7 @@ canonical_example: |
     efficienza_percent: 75
     impianto: "BrewZilla 35L"
     volume_fermentatore: 23
+    confezionamento_litri: 22
 
   grist:
     - malto: "Pale Ale Malt"
@@ -178,6 +270,8 @@ canonical_example: |
     note: "Neutro, lascia spazio al luppolo"
 
   acqua:
+    sparge_litri: 10
+    total_litri: 28
     ca_mg_l: 110
     mg_mg_l: 18
     na_mg_l: 16
@@ -224,6 +318,7 @@ canonical_example: |
 
   fermentazione:
     primaria_giorni: 7
+    temperatura_c: 19
     steps:
       - fase: "Avvio"
         giorno_inizio: 0
@@ -243,6 +338,7 @@ canonical_example: |
 
   carbonazione:
     metodo: bottiglia
+    tipo_botella: "Long neck"
     zucchero_tipo: saccarosio
     zucchero_grammi: 130
     zucchero_g_per_litro: 6.5

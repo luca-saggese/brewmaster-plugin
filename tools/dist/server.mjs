@@ -4355,7 +4355,7 @@ const BrewingCalculatorInputSchema = object({
 	strike_mode: _enum(["theoretical", "calibrated"]).optional(),
 	strike_temperature_correction_c: number().min(-20).max(20).optional().describe("Empirical additive correction for the installed system; no default is applied."),
 	pre_boil_gravity: number().min(.99).max(1.3).optional(),
-	mash_efficiency_percent: number().positive().max(100).optional(),
+	mash_efficiency_percent: number().positive().max(100).optional().describe("Efficienza mash percentuale. Default: 75% quando non specificata."),
 	brewhouse_efficiency_percent: number().positive().max(100).optional(),
 	attenuation_percent: number().nonnegative().max(100).optional(),
 	beer_type: _enum([
@@ -4651,7 +4651,7 @@ var BrewingCalculatorTool = class {
 			}, summary);
 		}
 		const volumeMode = args.brewhouse_efficiency_percent !== void 0 ? "brewhouse" : "mash";
-		const efficiency = volumeMode === "brewhouse" ? this.req(args.brewhouse_efficiency_percent, "brewhouse_efficiency_percent") : this.req(args.mash_efficiency_percent, "mash_efficiency_percent");
+		const efficiency = volumeMode === "brewhouse" ? this.req(args.brewhouse_efficiency_percent, "brewhouse_efficiency_percent") : args.mash_efficiency_percent ?? 75;
 		const volume = volumeMode === "brewhouse" ? this.requireWaterVolume(args, "fermenter_l") : this.requireWaterVolume(args, "post_boil_l");
 		const theoretical = this.theoreticalPoints(args);
 		const added = (args.additional_fermentables ?? []).reduce((total, fermentable) => total + fermentable.kg * fermentable.potential_pt_l_per_kg, 0);
@@ -4673,7 +4673,7 @@ var BrewingCalculatorTool = class {
 		}, summary);
 	}
 	calcEstimatedPreBoilGravity(args) {
-		const efficiency = this.req(args.mash_efficiency_percent, "mash_efficiency_percent");
+		const efficiency = args.mash_efficiency_percent ?? 75;
 		const volume = this.requireWaterVolume(args, "pre_boil_l");
 		const theoretical = this.theoreticalPoints(args);
 		const added = (args.additional_fermentables ?? []).reduce((total, fermentable) => total + fermentable.kg * fermentable.potential_pt_l_per_kg, 0);

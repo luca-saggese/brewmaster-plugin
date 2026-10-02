@@ -110,7 +110,8 @@ export const BrewingCalculatorInputSchema = z.object({
   strike_temperature_correction_c: z.number().min(-20).max(20).optional()
     .describe('Empirical additive correction for the installed system; no default is applied.'),
   pre_boil_gravity: z.number().min(0.990).max(1.300).optional(),
-  mash_efficiency_percent: z.number().positive().max(100).optional(),
+  mash_efficiency_percent: z.number().positive().max(100).optional()
+    .describe('Efficienza mash percentuale. Default: 75% quando non specificata.'),
   brewhouse_efficiency_percent: z.number().positive().max(100).optional(),
   attenuation_percent: z.number().nonnegative().max(100).optional(),
 
@@ -366,7 +367,7 @@ export class BrewingCalculatorTool implements BuiltinTool<BrewingCalculatorInput
     const volumeMode = args.brewhouse_efficiency_percent !== undefined ? 'brewhouse' : 'mash';
     const efficiency = volumeMode === 'brewhouse'
       ? this.req(args.brewhouse_efficiency_percent, 'brewhouse_efficiency_percent')
-      : this.req(args.mash_efficiency_percent, 'mash_efficiency_percent');
+      : args.mash_efficiency_percent ?? 75;
     const volume = volumeMode === 'brewhouse'
       ? this.requireWaterVolume(args, 'fermenter_l')
       : this.requireWaterVolume(args, 'post_boil_l');
@@ -391,7 +392,7 @@ export class BrewingCalculatorTool implements BuiltinTool<BrewingCalculatorInput
   }
 
   private calcEstimatedPreBoilGravity(args: BrewingCalculatorInput): ExecutableToolResult {
-    const efficiency = this.req(args.mash_efficiency_percent, 'mash_efficiency_percent');
+    const efficiency = args.mash_efficiency_percent ?? 75;
     const volume = this.requireWaterVolume(args, 'pre_boil_l');
     const theoretical = this.theoreticalPoints(args);
     const added = (args.additional_fermentables ?? []).reduce(

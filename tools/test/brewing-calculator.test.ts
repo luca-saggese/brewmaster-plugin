@@ -140,6 +140,15 @@ async function run(): Promise<void> {
   });
   includes(estimatedOg.output, '1.050', 'estimated OG uses fermenter volume');
 
+  const estimatedOgDefaultMashEfficiency = await execute({
+    calculation: 'estimated_og',
+    grain_bill_kg: grainBill,
+    water_volumes: baseVolumes,
+  });
+  const estimatedOgDefaultJson = structured(estimatedOgDefaultMashEfficiency.output, 'estimated OG default mash efficiency');
+  approx(Number((estimatedOgDefaultJson.result as Record<string, unknown>).efficiency_percent), 75, 0.001, 'estimated OG defaults mash efficiency to 75 percent');
+  assert(!estimatedOgDefaultMashEfficiency.isError, 'estimated OG should not fail when mash efficiency is omitted');
+
   const estimatedPreBoil = await execute({
     calculation: 'estimated_pre_boil_gravity',
     mash_efficiency_percent: 65,
@@ -147,6 +156,15 @@ async function run(): Promise<void> {
     water_volumes: baseVolumes,
   });
   includes(estimatedPreBoil.output, '1.040', 'estimated pre-boil gravity uses pre-boil volume');
+
+  const estimatedPreBoilDefaultMashEfficiency = await execute({
+    calculation: 'estimated_pre_boil_gravity',
+    grain_bill_kg: grainBill,
+    water_volumes: baseVolumes,
+  });
+  const estimatedPreBoilDefaultJson = structured(estimatedPreBoilDefaultMashEfficiency.output, 'estimated pre-boil default mash efficiency');
+  approx(Number((estimatedPreBoilDefaultJson.result as Record<string, unknown>).mash_efficiency_percent), 75, 0.001, 'estimated pre-boil defaults mash efficiency to 75 percent');
+  assert(!estimatedPreBoilDefaultMashEfficiency.isError, 'estimated pre-boil gravity should not fail when mash efficiency is omitted');
 
   const estimatedFg = await execute({ calculation: 'estimated_fg', og: 1.050, attenuation_percent: 80 });
   includes(estimatedFg.output, '1.010', 'estimated FG uses attenuation');

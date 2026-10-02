@@ -1,0 +1,178 @@
+version: 1
+
+canonical_fields:
+  - nome
+  - stile
+  - descrizione
+  - parametri
+  - grist
+  - luppolatura
+  - lievito
+  - acqua
+  - mash
+  - bollitura
+  - fermentazione
+  - carbonazione
+  - note_critiche
+  - alternative
+
+validator:
+  accepted_top_level_fields:
+    - schema_version
+    - nome
+    - stile
+    - codice_bjcp
+    - descrizione
+    - note
+    - parametri
+    - grist
+    - luppolatura
+    - lievito
+    - mash
+    - fermentazione
+    - bollitura
+    - acqua
+    - agua
+    - sparge
+    - sales
+    - mash_salts
+    - sparge_salts
+    - carbonazione
+    - spezie
+    - zuccheri
+    - confezionamento
+    - obiettivi_sensoriali
+    - vincoli_produzione
+    - fonte
+    - note_critiche
+    - alternative
+  required_string_fields:
+    - nome
+    - stile
+  required_numeric_parameters:
+    batch_size_litri: positive
+    og: positive
+    fg: positive
+    ibu: non_negative
+  numeric_parameter_fields:
+    - batch_size_litri
+    - og
+    - fg
+    - ibu
+    - ebc
+    - abv_percent
+    - efficienza_percent
+    - bollitura_min
+    - pre_boil_litri
+    - post_boil_litri
+    - fermentatore_litri
+    - volume_fermentatore
+    - confezionamento_litri
+    - carbonazione_vol
+    - priming_gl
+  list_fields:
+    - grist
+    - luppolatura
+    - spezie
+    - zuccheri
+
+canonical_example: |
+  nome: "Nome della ricetta"
+  stile: "BJCP 21A — American IPA"
+  descrizione: |
+    Descrizione sensoriale e stilistica della ricetta.
+
+  parametri:
+    batch_size_litri: 23
+    og: 1.065
+    fg: 1.012
+    abv_percent: 6.8
+    ibu: 55
+    ebc: 18
+    efficienza_percent: 75
+    impianto: "BrewZilla 35L"
+    volume_fermentatore: 23
+
+  grist:
+    - malto: "Pale Ale Malt"
+      kg: 4.5
+      percent: 75.0
+      note: "Malto base"
+    - malto: "Munich Light"
+      kg: 0.8
+      percent: 13.3
+      note: "Corpo e colore"
+
+  luppolatura:
+    - varieta: "Magnum"
+      grammi: 20
+      tempo_min: 60
+      uso: boil
+      aa_percent: 13.0
+      ibu_stimati: 25
+    - varieta: "Citra"
+      grammi: 30
+      tempo_min: 5
+      uso: boil
+      aa_percent: 12.0
+      ibu_stimati: 5
+
+  lievito:
+    ceppo: "SafAle US-05"
+    forma: secco
+    attenuazione_percent: 80
+    temperatura_fermentazione: "18-20°C"
+    note: "Neutro, lascia spazio al luppolo"
+
+  acqua:
+    ca_mg_l: 110
+    mg_mg_l: 18
+    na_mg_l: 16
+    cl_mg_l: 60
+    so4_mg_l: 275
+    hco3_mg_l: 50
+    rapporto_so4_cl: 4.6
+    ph_target: 5.4
+    note: "Profilo coerente con l'obiettivo sensoriale"
+
+  mash:
+    temperatura_c: 65
+    durata_min: 60
+    spessore_l_kg: 3.0
+    acqua_strike_litri: 18.0
+    temperatura_strike_c: 72
+    note: "Single infusion"
+
+  bollitura:
+    durata_min: 60
+    volume_pre_boil_litri: 28
+    volume_post_boil_litri: 23
+    evaporazione_litri: 5
+    irish_moss: true
+    whirlpool_temp_c: 80
+    whirlpool_durata_min: 20
+
+  fermentazione:
+    primaria_giorni: 7
+    temperatura_c: 19
+    dry_hop_giorno: 5
+    dry_hop_temperatura_c: 19
+    cold_crash: true
+    cold_crash_giorni: 2
+    cold_crash_temp_c: 2
+
+  carbonazione:
+    metodo: bottiglia
+    zucchero_tipo: saccarosio
+    zucchero_grammi: 130
+    zucchero_g_per_litro: 6.5
+    co2_volumi: 2.4
+    temperatura_servizio_c: 6
+
+  note_critiche:
+    - "Nota critica di processo"
+
+  alternative:
+    - descrizione: "Alternativa"
+      cambiamenti: "Cosa cambia"
+      impatto: "Impatto tecnico e sensoriale"

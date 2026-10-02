@@ -408,7 +408,10 @@ Non usare `.md` come formato primario di ricetta.
 
 Il YAML è la fonte canonica, ma il validator attuale usa un mapping tollerante e non uno schema chiuso. Mantieni il nesting e la nomenclatura italiana dei campi canonici; non rinominare i campi già usati dal progetto. Campi extra sono ammessi solo quando descrivono dati reali e supportati, in particolare dati di brewday.
 
-I campi di primo livello canonici sono:
+I nomi dei campi canonici sono italiani: `varieta`, non `variety`; `grammi`, non `grams`; `tempo_min`, non `time`.
+
+<!-- RECIPE_SCHEMA:START -->
+Campi di primo livello obbligatori per una ricetta completa:
 
 - `nome`
 - `stile`
@@ -425,9 +428,7 @@ I campi di primo livello canonici sono:
 - `note_critiche`
 - `alternative`
 
-Non aggiungere una chiave `versione_schema` o altri metadati dichiarati come obbligatori: il validator attuale non li interpreta. Se serve un'informazione non prevista, aggiungila come chiave extra coerente, sapendo che il validator la conserverà nel YAML ma potrebbe non validarla.
-
-Usa i nomi dei campi in italiano: `varieta`, non `variety`; `grammi`, non `grams`; `tempo_min`, non `time`.
+Il parser del validator richiede stringhe non vuote per `nome`, `stile` e valori numerici validi per `parametri.batch_size_litri` > 0, `parametri.og` > 0, `parametri.fg` > 0, `parametri.ibu` >= 0. Accetta inoltre questi campi di primo livello: `schema_version`, `nome`, `stile`, `codice_bjcp`, `descrizione`, `note`, `parametri`, `grist`, `luppolatura`, `lievito`, `mash`, `fermentazione`, `bollitura`, `acqua`, `agua`, `sparge`, `sales`, `mash_salts`, `sparge_salts`, `carbonazione`, `spezie`, `zuccheri`, `confezionamento`, `obiettivi_sensoriali`, `vincoli_produzione`, `fonte`, `note_critiche`, `alternative`. schema_version è facoltativo e supportato per compatibilità.
 
 Schema base obbligatorio:
 
@@ -532,10 +533,11 @@ alternative:
     cambiamenti: "Cosa cambia"
     impatto: "Impatto tecnico e sensoriale"
 ```
+<!-- RECIPE_SCHEMA:END -->
 
 I valori dell'esempio sono solo dimostrativi: non copiarli automaticamente nelle ricette reali.
 
-Il validator legge obbligatoriamente `nome`, `stile`, `parametri.batch_size_litri`, `parametri.og`, `parametri.fg`, `parametri.ibu`, `grist`, `luppolatura` e `lievito` come dati della ricetta. Legge inoltre, quando presenti, i volumi in `parametri` o `bollitura`, la carbonazione in `parametri` o `carbonazione`, il profilo in `acqua`, il mash in `mash` e la fermentazione in `fermentazione`.
+Il validator legge inoltre, quando presenti, i volumi in `parametri` o `bollitura`, la carbonazione in `parametri` o `carbonazione`, il profilo in `acqua`, il mash in `mash` e la fermentazione in `fermentazione`.
 
 Per i dati necessari al brewday usa i nomi italiani supportati dal mapping attuale: `mash.acqua_strike_litri`, `acqua.mash_litri`, `acqua.sparge_litri`, `acqua.total_litri`, `mash_salts` o `sales` per i sali, `mash.temperatura_strike_c`, `bollitura.og_pre_boil`, `bollitura.og_post_boil`, `fermentazione.primaria_giorni`, `fermentazione.madurazione_giorni`, `carbonazione.temperatura_servizio_c` e `carbonazione.tipo_botella`. Il volume confezionato è `parametri.confezionamento_litri`; non usare `batch_size_liters` come sinonimo universale.
 

@@ -331,12 +331,17 @@ function pickBool(obj: Record<string, unknown> | undefined, keys: string[]): boo
   return undefined;
 }
 
-const YAML_TOP_LEVEL_KEYS = new Set([
-  'schema_version', 'nome', 'stile', 'codice_bjcp', 'descrizione', 'note', 'parametri',
-  'grist', 'luppolatura', 'lievito', 'mash', 'fermentazione', 'bollitura', 'acqua',
-  'agua', 'sparge', 'sales', 'mash_salts', 'sparge_salts', 'carbonazione', 'spezie', 'zuccheri',
-  'confezionamento', 'obiettivi_sensoriali', 'vincoli_produzione', 'fonte', 'note_critiche', 'alternative',
-]);
+const RECIPE_SCHEMA = yaml.load(readFileSync(new URL('./recipe-schema.yaml', import.meta.url), 'utf-8')) as {
+  validator: {
+    accepted_top_level_fields: string[];
+    required_string_fields: string[];
+    required_numeric_parameters: Record<string, 'positive' | 'non_negative'>;
+    numeric_parameter_fields: string[];
+    list_fields: string[];
+  };
+};
+const YAML_TOP_LEVEL_KEYS = new Set(RECIPE_SCHEMA.validator.accepted_top_level_fields);
+const YAML_VALIDATOR_SCHEMA = RECIPE_SCHEMA.validator;
 
 function collectSchemaIssues(data: Record<string, unknown>): Array<{ path: string; message: string }> {
   const issues: Array<{ path: string; message: string }> = [];
@@ -345,8 +350,7 @@ function collectSchemaIssues(data: Record<string, unknown>): Array<{ path: strin
       issues.push({ path: key, message: `Campo non riconosciuto. Campi validi: ${[...YAML_TOP_LEVEL_KEYS].join(', ')}.` });
     }
   }
-  const requiredStrings = ['nome', 'stile'];
-  for (const key of requiredStrings) {
+  for (const key of YAML_VALIDATOR_SCHEMA.required_string_fields) {
     if (data[key] !== undefined && typeof data[key] !== 'string') {
       issues.push({ path: key, message: 'Il valore deve essere una stringa.' });
     }
@@ -356,19 +360,15 @@ function collectSchemaIssues(data: Record<string, unknown>): Array<{ path: strin
     issues.push({ path: 'parametri', message: 'Il valore deve essere un oggetto.' });
   } else if (params && typeof params === 'object' && !Array.isArray(params)) {
     const parameterRecord = params as Record<string, unknown>;
-    const numericParameterKeys = [
-      'batch_size_litri', 'og', 'fg', 'ibu', 'ebc', 'abv_percent', 'efficienza_percent',
-      'bollitura_min', 'pre_boil_litri', 'post_boil_litri', 'fermentatore_litri',
-      'confezionamento_litri', 'carbonazione_vol', 'priming_gl',
-    ];
-    for (const key of numericParameterKeys) {
+    for (const key of YAML_VALIDATOR_SCHEMA.numeric_parameter_fields) {
       if (key in parameterRecord && (typeof parameterRecord[key] !== 'number' || !Number.isFinite(parameterRecord[key]))) {
         issues.push({ path: `parametri.${key}`, message: 'Il valore deve essere un numero finito.' });
       }
     }
   }
-  for (const [section, value] of Object.entries(data)) {
-    if (['grist', 'luppolatura', 'spezie', 'zuccheri'].includes(section) && value !== undefined && !Array.isArray(value)) {
+  for (const section of YAML_VALIDATOR_SCHEMA.list_fields) {
+    const value = data[section];
+    if (value !== undefined && !Array.isArray(value)) {
       issues.push({ path: section, message: 'Il valore deve essere una lista.' });
     }
   }
@@ -564,12 +564,14 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
 
   // Validate required fields
   const missing: string[] = [];
-  if (!recipe_name) missing.push('nome');
-  if (!beer_style) missing.push('stile');
-  if (isNaN(batch_size_liters) || batch_size_liters <= 0) missing.push('parametri.batch_size_litri');
-  if (isNaN(og) || og <= 0) missing.push('parametri.og');
-  if (isNaN(fg) || fg <= 0) missing.push('parametri.fg');
-  if (isNaN(ibu) || ibu < 0) missing.push('parametri.ibu');
+  for (const key of YAML_VALIDATOR_SCHEMA.required_string_fields) {
+    if (typeof d[key] !== 'string' || !(d[key] as string).trim()) missing.push(key);
+  }
+  for (const [key, constraint] of Object.entries(YAML_VALIDATOR_SCHEMA.required_numeric_parameters)) {
+    const value = Number(params[key]);
+    const invalid = !Number.isFinite(value) || (constraint === 'positive' ? value <= 0 : value < 0);
+    if (invalid) missing.push(`parametri.${key}`);
+  }
 
   if (missing.length > 0) {
     throw new Error(`Campi obbligatori mancanti o non validi: ${missing.join(', ')}`);

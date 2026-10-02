@@ -15,6 +15,13 @@ function stripRaw(id) {
 export function rawTextPlugin() {
   return {
     name: 'raw-text',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'recipe-schema.yaml',
+        source: readFileSync(new URL('./src/brewing/recipe-schema.yaml', import.meta.url)),
+      });
+    },
     resolveId(source, importer) {
       if (!source.includes(RAW_SUFFIX)) return null;
       if (!importer) return { id: source };

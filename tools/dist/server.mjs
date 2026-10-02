@@ -11139,43 +11139,16 @@ function pickStr(obj, keys) {
 		if (typeof v === "string" && v.trim() !== "") return v;
 	}
 }
-const YAML_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
-	"schema_version",
-	"nome",
-	"stile",
-	"codice_bjcp",
-	"descrizione",
-	"note",
-	"parametri",
-	"grist",
-	"luppolatura",
-	"lievito",
-	"mash",
-	"fermentazione",
-	"bollitura",
-	"acqua",
-	"agua",
-	"sparge",
-	"sales",
-	"mash_salts",
-	"sparge_salts",
-	"carbonazione",
-	"spezie",
-	"zuccheri",
-	"confezionamento",
-	"obiettivi_sensoriali",
-	"vincoli_produzione",
-	"fonte",
-	"note_critiche",
-	"alternative"
-]);
+const RECIPE_SCHEMA = load(readFileSync(new URL("./recipe-schema.yaml", import.meta.url), "utf-8"));
+const YAML_TOP_LEVEL_KEYS = new Set(RECIPE_SCHEMA.validator.accepted_top_level_fields);
+const YAML_VALIDATOR_SCHEMA = RECIPE_SCHEMA.validator;
 function collectSchemaIssues(data) {
 	const issues = [];
 	for (const key of Object.keys(data)) if (!YAML_TOP_LEVEL_KEYS.has(key)) issues.push({
 		path: key,
-		message: "Campo non riconosciuto."
+		message: `Campo non riconosciuto. Campi validi: ${[...YAML_TOP_LEVEL_KEYS].join(", ")}.`
 	});
-	for (const key of ["nome", "stile"]) if (data[key] !== void 0 && typeof data[key] !== "string") issues.push({
+	for (const key of YAML_VALIDATOR_SCHEMA.required_string_fields) if (data[key] !== void 0 && typeof data[key] !== "string") issues.push({
 		path: key,
 		message: "Il valore deve essere una stringa."
 	});
@@ -11186,35 +11159,18 @@ function collectSchemaIssues(data) {
 	});
 	else if (params && typeof params === "object" && !Array.isArray(params)) {
 		const parameterRecord = params;
-		for (const key of [
-			"batch_size_litri",
-			"og",
-			"fg",
-			"ibu",
-			"ebc",
-			"abv_percent",
-			"efficienza_percent",
-			"bollitura_min",
-			"pre_boil_litri",
-			"post_boil_litri",
-			"fermentatore_litri",
-			"confezionamento_litri",
-			"carbonazione_vol",
-			"priming_gl"
-		]) if (key in parameterRecord && (typeof parameterRecord[key] !== "number" || !Number.isFinite(parameterRecord[key]))) issues.push({
+		for (const key of YAML_VALIDATOR_SCHEMA.numeric_parameter_fields) if (key in parameterRecord && (typeof parameterRecord[key] !== "number" || !Number.isFinite(parameterRecord[key]))) issues.push({
 			path: `parametri.${key}`,
 			message: "Il valore deve essere un numero finito."
 		});
 	}
-	for (const [section, value] of Object.entries(data)) if ([
-		"grist",
-		"luppolatura",
-		"spezie",
-		"zuccheri"
-	].includes(section) && value !== void 0 && !Array.isArray(value)) issues.push({
-		path: section,
-		message: "Il valore deve essere una lista."
-	});
+	for (const section of YAML_VALIDATOR_SCHEMA.list_fields) {
+		const value = data[section];
+		if (value !== void 0 && !Array.isArray(value)) issues.push({
+			path: section,
+			message: "Il valore deve essere una lista."
+		});
+	}
 	return issues;
 }
 function parseYamlRecipe(filePath) {
@@ -11431,12 +11387,11 @@ function parseYamlRecipe(filePath) {
 		"botella"
 	]);
 	const missing = [];
-	if (!recipe_name) missing.push("nome");
-	if (!beer_style) missing.push("stile");
-	if (isNaN(batch_size_liters) || batch_size_liters <= 0) missing.push("parametri.batch_size_litri");
-	if (isNaN(og) || og <= 0) missing.push("parametri.og");
-	if (isNaN(fg) || fg <= 0) missing.push("parametri.fg");
-	if (isNaN(ibu) || ibu < 0) missing.push("parametri.ibu");
+	for (const key of YAML_VALIDATOR_SCHEMA.required_string_fields) if (typeof d[key] !== "string" || !d[key].trim()) missing.push(key);
+	for (const [key, constraint] of Object.entries(YAML_VALIDATOR_SCHEMA.required_numeric_parameters)) {
+		const value = Number(params[key]);
+		if (!Number.isFinite(value) || (constraint === "positive" ? value <= 0 : value < 0)) missing.push(`parametri.${key}`);
+	}
 	if (missing.length > 0) throw new Error(`Campi obbligatori mancanti o non validi: ${missing.join(", ")}`);
 	return {
 		schema_version: typeof schemaVersion === "string" ? schemaVersion : void 0,

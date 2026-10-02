@@ -108,8 +108,15 @@ acqua:
   total_litri: 36
 sales:
   gesso_g: 1
+mash_salts:
+  gypsum_g: 3.2
+  cacl2_g: 2.4
+  epsom_g: 0.8
+  nahco3_g: 0.3
+  lactic_acid_ml: 1.5
 sparge_salts:
   cacl2_g: 1
+  lactic_acid_ml: 0.6
 `;
 
 async function main(): Promise<void> {
@@ -138,6 +145,9 @@ async function main(): Promise<void> {
     assert(packaging?.actions.some(action => action.quantity === '52.50 g'), 'priming total should use the declared total quantity');
     assert(!packaging?.actions.some(action => action.quantity === '52 g'), 'priming must not use batch_size_liters');
     assert(validModel.sections.find(section => section.phase === 'water')?.actions.some(action => action.moment.includes('sparge')), 'mash and sparge salts should be distinct');
+    const waterActions = validModel.sections.find(section => section.phase === 'water')?.actions ?? [];
+    assert(waterActions.some(action => action.ingredient === 'Acido lattico' && action.quantity === '1.50 mL' && action.moment.includes('mash')), 'mash lactic acid should be present in the operational model');
+    assert(waterActions.some(action => action.ingredient === 'Acido lattico' && action.quantity === '0.60 mL' && action.moment.includes('sparge')), 'sparge lactic acid should be present when explicitly declared');
     assert(validModel.sections.find(section => section.phase === 'post_boil')?.actions.some(action => action.temperature === '80 °C'), 'whirlpool temperature should be mapped');
     const fermentation = validModel.sections.find(section => section.phase === 'fermentation');
     assert(fermentation?.actions.filter(action => action.action.includes('Mantenere la fermentazione')).length === 2, 'multistep fermentation should be rendered');
@@ -153,6 +163,7 @@ async function main(): Promise<void> {
     const documentXml = execFileSync('unzip', ['-p', docx, 'word/document.xml']).toString();
     assert(documentXml.includes('Operational Test Ale') && documentXml.includes('52.50 g') && documentXml.includes('80 °C'), 'DOCX XML should contain rendered operational content');
     assert(documentXml.includes('Lampone') && documentXml.includes('1.25 kg') && documentXml.includes('5-7 giorni di contatto'), 'DOCX XML should render the special fruit addition, amount, and contact time');
+    assert(documentXml.includes('Acido lattico') && documentXml.includes('1.50 mL') && documentXml.includes('0.60 mL'), 'DOCX XML should render conventional mash and sparge acid fields');
     assert(!documentXml.includes('w:type="page"'), 'DOCX should not force page breaks between operational sections');
     execFileSync('unzip', ['-t', docx], { stdio: 'ignore' });
     assertDocxXmlIsValid(docx, workDir);
@@ -161,6 +172,7 @@ async function main(): Promise<void> {
     const pdfText = execFileSync('strings', [pdf]).toString();
     assert(pdfText.includes('Operational Test Ale'), 'PDF should contain the recipe title');
     assert(pdfText.includes('Lampone') && pdfText.includes('1.25 kg') && pdfText.includes('5-7 giorni di contatto'), 'PDF should render the special fruit addition, amount, and contact time');
+    assert(pdfText.includes('Acido lattico') && pdfText.includes('1.50 mL') && pdfText.includes('0.60 mL'), 'PDF should render conventional mash and sparge acid fields');
     const pdfInfoResult = spawnSync('pdfinfo', [pdf], { encoding: 'utf-8' });
     if (!pdfInfoResult.error) assert(Number(pdfInfoResult.stdout.match(/^Pages:\s+(\d+)/m)?.[1] ?? 0) > 1, 'PDF should be genuinely multipage');
 

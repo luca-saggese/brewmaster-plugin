@@ -407,11 +407,30 @@ export class WaterProfileCalculatorTool implements BuiltinTool<WaterProfileCalcu
       const epsomG = e * totalVol;
       const nahco3G = n * totalVol;
 
+      const mashFraction = mashVol / totalVol;
+      const roundSalt = (value: number): number => Number(value.toFixed(2));
+      const mashSalts: Record<string, number> = {};
+      const spargeSalts: Record<string, number> = {};
+      const acidSalts = mashVol > 0 ? mashSalts : spargeSalts;
+      for (const [field, totalGrams] of [
+        ['gypsum_g', gypsumG],
+        ['cacl2_g', cacl2G],
+        ['epsom_g', epsomG],
+        ['nahco3_g', nahco3G],
+      ] as const) {
+        const mashGrams = roundSalt(totalGrams * mashFraction);
+        const spargeGrams = roundSalt(totalGrams - mashGrams);
+        if (mashGrams > 0) mashSalts[field] = mashGrams;
+        if (spargeGrams > 0) spargeSalts[field] = spargeGrams;
+      }
+      if (acidMl > 0.5) acidSalts['lactic_acid_ml'] = roundSalt(acidMl);
+      const acidTreatment = mashVol > 0 ? 'nel mash' : 'nello sparge';
+
       if (gypsumG > 0.05) adds.push(`  • ${SALT.gypsum.label}: ~${gypsumG.toFixed(1)} g`);
       if (cacl2G > 0.05) adds.push(`  • ${SALT.cacl2.label}: ~${cacl2G.toFixed(1)} g`);
       if (epsomG > 0.05) adds.push(`  • ${SALT.epsom.label}: ~${epsomG.toFixed(1)} g`);
       if (nahco3G > 0.05) adds.push(`  • ${SALT.nahco3.label}: ~${nahco3G.toFixed(1)} g`);
-      if (acidMl > 0.5) adds.push(`  • Acido lattico 88%: ~${acidMl.toFixed(1)} ml (nel mash)`);
+      if (acidMl > 0.5) adds.push(`  • Acido lattico 88%: ~${acidMl.toFixed(1)} ml (${acidTreatment})`);
 
       if (adds.length === 0) adds.push('  • Nessuna aggiunta necessaria.');
       lines.push(...adds);
@@ -439,7 +458,49 @@ export class WaterProfileCalculatorTool implements BuiltinTool<WaterProfileCalcu
         lines.push('', 'Note:', ...warnings);
       }
 
-      return Promise.resolve({ output: lines.join('\n') });
+      return Promise.resolve({
+        output: JSON.stringify({
+          schema_version: '1.0',
+          tool: 'water_profile_calculator',
+          calculation: 'water_profile',
+          status: 'ok',
+          inputs: {
+            target_profile: args.target_profile,
+            mash_water_liters: mashVol,
+            sparge_water_liters: spargeVol,
+            total_water_liters: totalVol,
+          },
+          result: {
+            recipe_yaml: {
+              acqua: {
+                mash_litri: Number(mashVol.toFixed(2)),
+                sparge_litri: Number(spargeVol.toFixed(2)),
+                total_litri: Number(totalVol.toFixed(2)),
+                ca_mg_l: Number(finalCa.toFixed(1)),
+                mg_mg_l: Number(finalMg.toFixed(1)),
+                na_mg_l: Number(finalNa.toFixed(1)),
+                cl_mg_l: Number(finalCl.toFixed(1)),
+                so4_mg_l: Number(finalSo4.toFixed(1)),
+                hco3_mg_l: Number(finalHco3.toFixed(1)),
+                rapporto_so4_cl: Number((finalCl > 0 ? finalSo4 / finalCl : 0).toFixed(2)),
+                ...(args.target_ph === undefined ? {} : { ph_target: args.target_ph }),
+              },
+              mash_salts: mashSalts,
+              sparge_salts: spargeSalts,
+            },
+            additions_total_g: {
+              gypsum_g: roundSalt(gypsumG),
+              cacl2_g: roundSalt(cacl2G),
+              epsom_g: roundSalt(epsomG),
+              nahco3_g: roundSalt(nahco3G),
+              ...(acidMl > 0.5 ? { lactic_acid_ml: roundSalt(acidMl) } : {}),
+            },
+            final_profile_mg_l: { ca: finalCa, mg: finalMg, na: finalNa, cl: finalCl, so4: finalSo4, hco3: finalHco3 },
+          },
+          warnings: warnings.map(warning => warning.trim()),
+          display: { report: lines.join('\n') },
+        }, null, 2),
+      });
     } catch (e) {
       return Promise.resolve({ isError: true, output: e instanceof Error ? e.message : String(e) });
     }

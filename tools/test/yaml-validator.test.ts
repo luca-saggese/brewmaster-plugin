@@ -295,6 +295,16 @@ async function main(): Promise<void> {
     });
     assert(invalidFruitRes.isError, 'special fruit addition with zero quantity should be rejected');
     assertIncludes(invalidFruitRes.output, 'aggiunte_speciali[0].quantita_kg', 'invalid fruit quantity should identify its field path');
+
+    const invalidSaltPath = join(dir, 'invalid-salt.yaml');
+    writeFileSync(invalidSaltPath, `nome: "Test sale invalido"\nstile: "American Pale Ale"\nparametri:\n  batch_size_litri: 20\n  og: 1.052\n  fg: 1.012\n  ibu: 40\nmash_salts:\n  gypsum_g: -1\n`, 'utf-8');
+    const invalidSaltRes = await tool.resolveExecution({ input_file: invalidSaltPath }).execute({
+      turnId: 12,
+      toolCallId: 'test-invalid-salt',
+      signal: new AbortController().signal,
+    });
+    assert(invalidSaltRes.isError, 'negative mineral salt amount should be rejected');
+    assertIncludes(invalidSaltRes.output, 'mash_salts.gypsum_g', 'invalid salt amount should identify its YAML field path');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

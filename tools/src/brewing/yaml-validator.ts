@@ -356,6 +356,8 @@ const RECIPE_SCHEMA = yaml.load(readFileSync(new URL('./recipe-schema.yaml', imp
     required_numeric_parameters: Record<string, 'positive' | 'non_negative'>;
     numeric_parameter_fields: string[];
     list_fields: string[];
+    salt_sections: string[];
+    salt_fields: string[];
     special_additions: {
       required_string_fields: string[];
       required_positive_number_fields: string[];
@@ -394,6 +396,20 @@ function collectSchemaIssues(data: Record<string, unknown>): Array<{ path: strin
     const value = data[section];
     if (value !== undefined && !Array.isArray(value)) {
       issues.push({ path: section, message: 'Il valore deve essere una lista.' });
+    }
+  }
+  for (const section of YAML_VALIDATOR_SCHEMA.salt_sections) {
+    const value = data[section];
+    if (value === undefined) continue;
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      issues.push({ path: section, message: 'Il valore deve essere un oggetto.' });
+      continue;
+    }
+    const salts = value as Record<string, unknown>;
+    for (const field of YAML_VALIDATOR_SCHEMA.salt_fields) {
+      if (field in salts && (typeof salts[field] !== 'number' || !Number.isFinite(salts[field]) || (salts[field] as number) < 0)) {
+        issues.push({ path: `${section}.${field}`, message: 'La quantità deve essere un numero finito non negativo.' });
+      }
     }
   }
   const specialAdditions = data['aggiunte_speciali'];

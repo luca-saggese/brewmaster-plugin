@@ -422,6 +422,8 @@ Campi di primo livello obbligatori per una ricetta completa:
 - `aggiunte_speciali`
 - `lievito`
 - `acqua`
+- `mash_salts`
+- `sparge_salts`
 - `mash`
 - `bollitura`
 - `fermentazione`
@@ -500,6 +502,19 @@ acqua:
   rapporto_so4_cl: 4.6
   ph_target: 5.4
   note: "Profilo coerente con l'obiettivo sensoriale"
+
+mash_salts:
+  gypsum_g: 3.2
+  cacl2_g: 2.4
+  epsom_g: 0.8
+  nahco3_g: 0.3
+  lactic_acid_ml: 1.5
+
+sparge_salts:
+  gypsum_g: 1.6
+  cacl2_g: 1.2
+  epsom_g: 0.4
+  nahco3_g: 0.15
 
 mash:
   temperatura_c: 65

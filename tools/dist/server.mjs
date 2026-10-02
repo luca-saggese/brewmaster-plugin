@@ -5959,7 +5959,7 @@ var WaterProfileCalculatorTool = class {
 				output: `Unknown: "${args.target_profile}"`
 			});
 			const s = args.source_water;
-			const MASH_RATIO = args.mash_ratio_l_per_kg ?? 3;
+			const MASH_RATIO = args.mash_ratio_l_per_kg ?? 4.5;
 			const DEAD_SPACE = args.dead_space_l ?? 6.5;
 			const ABSORPTION = args.grain_absorption_l_per_kg ?? .9;
 			const BOIL_OFF = args.boil_off_l_per_hour ?? 3;
@@ -6087,11 +6087,29 @@ var WaterProfileCalculatorTool = class {
 			const cacl2G = cc * totalVol;
 			const epsomG = e * totalVol;
 			const nahco3G = n * totalVol;
+			const mashFraction = mashVol / totalVol;
+			const roundSalt = (value) => Number(value.toFixed(2));
+			const mashSalts = {};
+			const spargeSalts = {};
+			const acidSalts = mashVol > 0 ? mashSalts : spargeSalts;
+			for (const [field, totalGrams] of [
+				["gypsum_g", gypsumG],
+				["cacl2_g", cacl2G],
+				["epsom_g", epsomG],
+				["nahco3_g", nahco3G]
+			]) {
+				const mashGrams = roundSalt(totalGrams * mashFraction);
+				const spargeGrams = roundSalt(totalGrams - mashGrams);
+				if (mashGrams > 0) mashSalts[field] = mashGrams;
+				if (spargeGrams > 0) spargeSalts[field] = spargeGrams;
+			}
+			if (acidMl > .5) acidSalts["lactic_acid_ml"] = roundSalt(acidMl);
+			const acidTreatment = mashVol > 0 ? "nel mash" : "nello sparge";
 			if (gypsumG > .05) adds.push(`  • ${SALT.gypsum.label}: ~${gypsumG.toFixed(1)} g`);
 			if (cacl2G > .05) adds.push(`  • ${SALT.cacl2.label}: ~${cacl2G.toFixed(1)} g`);
 			if (epsomG > .05) adds.push(`  • ${SALT.epsom.label}: ~${epsomG.toFixed(1)} g`);
 			if (nahco3G > .05) adds.push(`  • ${SALT.nahco3.label}: ~${nahco3G.toFixed(1)} g`);
-			if (acidMl > .5) adds.push(`  • Acido lattico 88%: ~${acidMl.toFixed(1)} ml (nel mash)`);
+			if (acidMl > .5) adds.push(`  • Acido lattico 88%: ~${acidMl.toFixed(1)} ml (${acidTreatment})`);
 			if (adds.length === 0) adds.push("  • Nessuna aggiunta necessaria.");
 			lines.push(...adds);
 			const warnings = [];
@@ -6103,7 +6121,54 @@ var WaterProfileCalculatorTool = class {
 			if (Math.abs(naDev) > 10) warnings.push(`  ⚠ Na devia di ${naDev > 0 ? "+" : ""}${naDev.toFixed(0)} mg/L dal target (legato a HCO₃).`);
 			if (acidMl > .5) warnings.push("  ⚠ L'acido lattico è una stima. Il pH reale dipende da alcalinità, grist e pH target.");
 			if (warnings.length > 0) lines.push("", "Note:", ...warnings);
-			return Promise.resolve({ output: lines.join("\n") });
+			return Promise.resolve({ output: JSON.stringify({
+				schema_version: "1.0",
+				tool: "water_profile_calculator",
+				calculation: "water_profile",
+				status: "ok",
+				inputs: {
+					target_profile: args.target_profile,
+					mash_water_liters: mashVol,
+					sparge_water_liters: spargeVol,
+					total_water_liters: totalVol
+				},
+				result: {
+					recipe_yaml: {
+						acqua: {
+							mash_litri: Number(mashVol.toFixed(2)),
+							sparge_litri: Number(spargeVol.toFixed(2)),
+							total_litri: Number(totalVol.toFixed(2)),
+							ca_mg_l: Number(finalCa.toFixed(1)),
+							mg_mg_l: Number(finalMg.toFixed(1)),
+							na_mg_l: Number(finalNa.toFixed(1)),
+							cl_mg_l: Number(finalCl.toFixed(1)),
+							so4_mg_l: Number(finalSo4.toFixed(1)),
+							hco3_mg_l: Number(finalHco3.toFixed(1)),
+							rapporto_so4_cl: Number((finalCl > 0 ? finalSo4 / finalCl : 0).toFixed(2)),
+							...args.target_ph === void 0 ? {} : { ph_target: args.target_ph }
+						},
+						mash_salts: mashSalts,
+						sparge_salts: spargeSalts
+					},
+					additions_total_g: {
+						gypsum_g: roundSalt(gypsumG),
+						cacl2_g: roundSalt(cacl2G),
+						epsom_g: roundSalt(epsomG),
+						nahco3_g: roundSalt(nahco3G),
+						...acidMl > .5 ? { lactic_acid_ml: roundSalt(acidMl) } : {}
+					},
+					final_profile_mg_l: {
+						ca: finalCa,
+						mg: finalMg,
+						na: finalNa,
+						cl: finalCl,
+						so4: finalSo4,
+						hco3: finalHco3
+					}
+				},
+				warnings: warnings.map((warning) => warning.trim()),
+				display: { report: lines.join("\n") }
+			}, null, 2) });
 		} catch (e) {
 			return Promise.resolve({
 				isError: true,
@@ -11169,6 +11234,22 @@ function collectSchemaIssues(data) {
 		if (value !== void 0 && !Array.isArray(value)) issues.push({
 			path: section,
 			message: "Il valore deve essere una lista."
+		});
+	}
+	for (const section of YAML_VALIDATOR_SCHEMA.salt_sections) {
+		const value = data[section];
+		if (value === void 0) continue;
+		if (typeof value !== "object" || value === null || Array.isArray(value)) {
+			issues.push({
+				path: section,
+				message: "Il valore deve essere un oggetto."
+			});
+			continue;
+		}
+		const salts = value;
+		for (const field of YAML_VALIDATOR_SCHEMA.salt_fields) if (field in salts && (typeof salts[field] !== "number" || !Number.isFinite(salts[field]) || salts[field] < 0)) issues.push({
+			path: `${section}.${field}`,
+			message: "La quantità deve essere un numero finito non negativo."
 		});
 	}
 	const specialAdditions = data["aggiunte_speciali"];

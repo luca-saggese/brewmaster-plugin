@@ -341,7 +341,9 @@ const YAML_TOP_LEVEL_KEYS = new Set([
 function collectSchemaIssues(data: Record<string, unknown>): Array<{ path: string; message: string }> {
   const issues: Array<{ path: string; message: string }> = [];
   for (const key of Object.keys(data)) {
-    if (!YAML_TOP_LEVEL_KEYS.has(key)) issues.push({ path: key, message: 'Campo non riconosciuto.' });
+    if (!YAML_TOP_LEVEL_KEYS.has(key)) {
+      issues.push({ path: key, message: `Campo non riconosciuto. Campi validi: ${[...YAML_TOP_LEVEL_KEYS].join(', ')}.` });
+    }
   }
   const requiredStrings = ['nome', 'stile'];
   for (const key of requiredStrings) {

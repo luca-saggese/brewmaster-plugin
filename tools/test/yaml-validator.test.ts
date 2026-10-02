@@ -147,6 +147,11 @@ parametri:
   og: [unclosed
 `;
 
+const UNKNOWN_FIELD_RECIPE = `nome: "Test"
+stile: "American Pale Ale"
+campo_errato: true
+`;
+
 // ── Test runner ──
 async function main(): Promise<void> {
   const tool = new YamlValidatorTool();
@@ -254,6 +259,21 @@ async function main(): Promise<void> {
       signal: new AbortController().signal,
     });
     assert(badRes.isError, 'invalid YAML should return isError');
+
+    // 5. Unknown top-level fields include the complete list of accepted fields.
+    const unknownFieldPath = join(dir, 'unknown-field.yaml');
+    writeFileSync(unknownFieldPath, UNKNOWN_FIELD_RECIPE, 'utf-8');
+    const unknownFieldRes = await tool.resolveExecution({ input_file: unknownFieldPath }).execute({
+      turnId: 10,
+      toolCallId: 'test-unknown-field',
+      signal: new AbortController().signal,
+    });
+    assert(unknownFieldRes.isError, 'unknown top-level field should return isError');
+    assertIncludes(
+      unknownFieldRes.output,
+      'Campo non riconosciuto. Campi validi: schema_version, nome, stile, codice_bjcp, descrizione, note, parametri, grist, luppolatura, lievito, mash, fermentazione, bollitura, acqua, agua, sparge, sales, mash_salts, sparge_salts, carbonazione, spezie, zuccheri, confezionamento, obiettivi_sensoriali, vincoli_produzione, fonte, note_critiche, alternative.',
+      'unknown field error should include all accepted top-level fields',
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

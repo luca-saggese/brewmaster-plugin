@@ -72,6 +72,14 @@ grist:
   - malto: "Crystal 40L"
     kg: 0.5
     percent: 10
+aggiunte_speciali:
+  - ingrediente: "Uva fragolino (Isabella)"
+    quantita_kg: 4
+    forma: "fresca intera, pigiata"
+    stadio: "primario, a fine fermentazione primaria"
+    giorni_contatto: "7-10"
+    preparazione: "Congelare, scongelare e pigiare."
+    note: "Attendere FG stabile dopo l'aggiunta."
 luppolatura:
   - varieta: "Cascade"
     grammi: 40
@@ -187,9 +195,12 @@ async function main(): Promise<void> {
       signal: new AbortController().signal,
     });
     assert(!validRes.isError, `Valid recipe should not error, got: ${validRes.output}`);
-    const validReport = JSON.parse(validRes.output) as { validation_status: string; normalized_recipe: { recipe_name: string }; checks: Array<{ id: string; status: string }> };
+    const validReport = JSON.parse(validRes.output) as { validation_status: string; normalized_recipe: { recipe_name: string; aggiunte_speciali?: Array<{ ingrediente: string; quantita_kg: number; giorni_contatto?: string }> }; checks: Array<{ id: string; status: string }> };
     assert(validReport.validation_status === 'incomplete', 'recipe without calculator results should be marked incomplete');
     assert(validReport.normalized_recipe.recipe_name === 'Test Pale Ale', 'normalized recipe should be returned');
+    assert(validReport.normalized_recipe.aggiunte_speciali?.[0]?.ingrediente === 'Uva fragolino (Isabella)', 'normalized recipe should preserve special fruit addition');
+    assert(validReport.normalized_recipe.aggiunte_speciali?.[0]?.quantita_kg === 4, 'normalized fruit addition should preserve quantity');
+    assert(validReport.normalized_recipe.aggiunte_speciali?.[0]?.giorni_contatto === '7-10', 'normalized fruit addition should preserve contact range');
     assert(validReport.checks.every(check => check.status === 'passed' || check.status === 'not_verified'), 'checks should expose structured statuses');
     assert(validReport.checks.some(check => check.id === 'BREWING_FG_MISMATCH' && check.status === 'not_verified'), 'missing brewing result should leave FG not verified');
 
@@ -271,9 +282,19 @@ async function main(): Promise<void> {
     assert(unknownFieldRes.isError, 'unknown top-level field should return isError');
     assertIncludes(
       unknownFieldRes.output,
-      'Campo non riconosciuto. Campi validi: schema_version, nome, stile, codice_bjcp, descrizione, note, parametri, grist, luppolatura, lievito, mash, fermentazione, bollitura, acqua, agua, sparge, sales, mash_salts, sparge_salts, carbonazione, spezie, zuccheri, confezionamento, obiettivi_sensoriali, vincoli_produzione, fonte, note_critiche, alternative.',
+      'Campo non riconosciuto. Campi validi: schema_version, nome, stile, codice_bjcp, descrizione, note, parametri, grist, luppolatura, aggiunte_speciali, lievito, mash, fermentazione, bollitura, acqua, agua, sparge, sales, mash_salts, sparge_salts, carbonazione, spezie, zuccheri, confezionamento, obiettivi_sensoriali, vincoli_produzione, fonte, note_critiche, alternative.',
       'unknown field error should include all accepted top-level fields',
     );
+
+    const invalidFruitPath = join(dir, 'invalid-fruit.yaml');
+    writeFileSync(invalidFruitPath, `nome: "Test frutta invalida"\nstile: "American Pale Ale"\nparametri:\n  batch_size_litri: 20\n  og: 1.052\n  fg: 1.012\n  ibu: 40\naggiunte_speciali:\n  - ingrediente: "Uva"\n    quantita_kg: 0\n    forma: "fresca"\n    stadio: "secondario"\n`, 'utf-8');
+    const invalidFruitRes = await tool.resolveExecution({ input_file: invalidFruitPath }).execute({
+      turnId: 11,
+      toolCallId: 'test-invalid-fruit',
+      signal: new AbortController().signal,
+    });
+    assert(invalidFruitRes.isError, 'special fruit addition with zero quantity should be rejected');
+    assertIncludes(invalidFruitRes.output, 'aggiunte_speciali[0].quantita_kg', 'invalid fruit quantity should identify its field path');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

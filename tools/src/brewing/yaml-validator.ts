@@ -280,6 +280,7 @@ export interface ParsedRecipe {
   note?: string;
   spezie?: { nome: string; grammi: number; uso: string; tempo_min?: number; note?: string }[];
   zuccheri?: { tipo: string; grammi: number; note?: string }[];
+  aggiunte_speciali?: FruitAddition[];
   // ── Dati di quotazione (brewday) ──
   mash_water_liters?: number;
   sparge_water_liters?: number;
@@ -296,6 +297,23 @@ export interface ParsedRecipe {
   serving_temp_c?: number;
   bottle_type?: string;
   rawYaml: string;
+}
+
+export interface FruitAddition {
+  ingrediente: string;
+  quantita_kg: number;
+  forma: string;
+  stadio: string;
+  giorni_contatto?: string;
+  preparazione?: string;
+  note?: string;
+  equivalente_fresco_kg?: number;
+  equivalente_fresco_g_l?: number;
+  dose_min_kg?: number;
+  dose_max_kg?: number;
+  zuccheri_stimati_g?: number;
+  acqua_stimata_l?: number;
+  intensita_calcolata?: string;
 }
 
 const VALID_HOP_USES = new Set(['boil', 'whirlpool', 'dry_hop', 'first_wort', 'mash', 'hopback', 'dip_hop', 'hop_stand']);
@@ -338,6 +356,12 @@ const RECIPE_SCHEMA = yaml.load(readFileSync(new URL('./recipe-schema.yaml', imp
     required_numeric_parameters: Record<string, 'positive' | 'non_negative'>;
     numeric_parameter_fields: string[];
     list_fields: string[];
+    special_additions: {
+      required_string_fields: string[];
+      required_positive_number_fields: string[];
+      optional_number_fields: string[];
+      optional_string_fields: string[];
+    };
   };
 };
 const YAML_TOP_LEVEL_KEYS = new Set(RECIPE_SCHEMA.validator.accepted_top_level_fields);
@@ -371,6 +395,37 @@ function collectSchemaIssues(data: Record<string, unknown>): Array<{ path: strin
     if (value !== undefined && !Array.isArray(value)) {
       issues.push({ path: section, message: 'Il valore deve essere una lista.' });
     }
+  }
+  const specialAdditions = data['aggiunte_speciali'];
+  if (Array.isArray(specialAdditions)) {
+    specialAdditions.forEach((value, index) => {
+      const path = `aggiunte_speciali[${index}]`;
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        issues.push({ path, message: 'Ogni aggiunta speciale deve essere un oggetto.' });
+        return;
+      }
+      const addition = value as Record<string, unknown>;
+      for (const key of YAML_VALIDATOR_SCHEMA.special_additions.required_string_fields) {
+        if (typeof addition[key] !== 'string' || !(addition[key] as string).trim()) {
+          issues.push({ path: `${path}.${key}`, message: 'Il campo deve essere una stringa non vuota.' });
+        }
+      }
+      for (const key of YAML_VALIDATOR_SCHEMA.special_additions.required_positive_number_fields) {
+        if (typeof addition[key] !== 'number' || !Number.isFinite(addition[key]) || (addition[key] as number) <= 0) {
+          issues.push({ path: `${path}.${key}`, message: 'Il campo deve essere un numero positivo.' });
+        }
+      }
+      for (const key of YAML_VALIDATOR_SCHEMA.special_additions.optional_number_fields) {
+        if (key in addition && (typeof addition[key] !== 'number' || !Number.isFinite(addition[key]))) {
+          issues.push({ path: `${path}.${key}`, message: 'Il campo deve essere un numero finito.' });
+        }
+      }
+      for (const key of YAML_VALIDATOR_SCHEMA.special_additions.optional_string_fields) {
+        if (key in addition && typeof addition[key] !== 'string') {
+          issues.push({ path: `${path}.${key}`, message: 'Il campo deve essere una stringa.' });
+        }
+      }
+    });
   }
   return issues;
 }
@@ -517,6 +572,26 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
     note: typeof z['note'] === 'string' ? z['note'] : undefined,
   })) : undefined;
 
+  const aggiunte_speciali = Array.isArray(d['aggiunte_speciali']) ? d['aggiunte_speciali'].map(item => {
+    const addition = item as Record<string, unknown>;
+    return {
+      ingrediente: String(addition['ingrediente'] ?? ''),
+      quantita_kg: Number(addition['quantita_kg']),
+      forma: String(addition['forma'] ?? ''),
+      stadio: String(addition['stadio'] ?? ''),
+      giorni_contatto: typeof addition['giorni_contatto'] === 'string' ? addition['giorni_contatto'] : undefined,
+      preparazione: typeof addition['preparazione'] === 'string' ? addition['preparazione'] : undefined,
+      note: typeof addition['note'] === 'string' ? addition['note'] : undefined,
+      equivalente_fresco_kg: typeof addition['equivalente_fresco_kg'] === 'number' ? addition['equivalente_fresco_kg'] : undefined,
+      equivalente_fresco_g_l: typeof addition['equivalente_fresco_g_l'] === 'number' ? addition['equivalente_fresco_g_l'] : undefined,
+      dose_min_kg: typeof addition['dose_min_kg'] === 'number' ? addition['dose_min_kg'] : undefined,
+      dose_max_kg: typeof addition['dose_max_kg'] === 'number' ? addition['dose_max_kg'] : undefined,
+      zuccheri_stimati_g: typeof addition['zuccheri_stimati_g'] === 'number' ? addition['zuccheri_stimati_g'] : undefined,
+      acqua_stimata_l: typeof addition['acqua_stimata_l'] === 'number' ? addition['acqua_stimata_l'] : undefined,
+      intensita_calcolata: typeof addition['intensita_calcolata'] === 'string' ? addition['intensita_calcolata'] : undefined,
+    };
+  }) : undefined;
+
   // ── Dati di quotazione (brewday) ──
   // Acqua: sezione `acqua` con mash/sparge/total, oppure `mash.acqua_strike_litri`
   const agua = (d['agua'] ?? d['acqua']) as Record<string, unknown> | undefined;
@@ -602,6 +677,7 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
     note,
     spezie,
     zuccheri,
+    aggiunte_speciali,
     mash_water_liters: isNaN(mash_water_liters as number) ? undefined : mash_water_liters,
     sparge_water_liters: isNaN(sparge_water_liters as number) ? undefined : sparge_water_liters,
     total_water_liters: isNaN(total_water_liters as number) ? undefined : total_water_liters,

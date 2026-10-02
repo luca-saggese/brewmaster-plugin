@@ -708,8 +708,69 @@ export class FruitCalculatorTool implements BuiltinTool<FruitCalculatorInput> {
             description: `Fruit calc: ${args.fruit_name} @ ${args.intensity}`,
             approvalRule: this.name,
             execute: () => {
-                try { return Promise.resolve({ output: formatResults(args) }); }
-                catch (e) { return Promise.resolve({ isError: true, output: e instanceof Error ? e.message : String(e) }); }
+                try {
+                    const calc = compute(args);
+                    const display = formatResults(args);
+                    const minProductKg = toProductKg((calc.rangeMinGL * args.batch_size_liters) / 1000, calc.fruit, calc.form);
+                    const maxProductKg = toProductKg((calc.rangeMaxGL * args.batch_size_liters) / 1000, calc.fruit, calc.form);
+                    return Promise.resolve({
+                        output: JSON.stringify({
+                            schema_version: '1.0',
+                            tool: 'fruit_calculator',
+                            calculation: 'fruit_dosage',
+                            status: 'ok',
+                            inputs: {
+                                fruit_name: args.fruit_name,
+                                batch_size_liters: args.batch_size_liters,
+                                intensity: calc.intensityLabel.toLowerCase(),
+                                fruit_form: calc.form,
+                                addition_method: args.addition_method,
+                                beer_style: args.beer_style,
+                            },
+                            result: {
+                                aggiunte_speciali: [{
+                                    ingrediente: calc.fruit.name,
+                                    quantita_kg: Number(calc.midProductKg.toFixed(3)),
+                                    forma: calc.form,
+                                    stadio: args.addition_method,
+                                    equivalente_fresco_kg: Number(calc.midFreshKg.toFixed(3)),
+                                    equivalente_fresco_g_l: Number(calc.midFreshGL.toFixed(1)),
+                                    dose_min_kg: Number(minProductKg.toFixed(3)),
+                                    dose_max_kg: Number(maxProductKg.toFixed(3)),
+                                    zuccheri_stimati_g: Number(calc.sugarGrams.toFixed(1)),
+                                    acqua_stimata_l: Number(calc.waterLiters.toFixed(3)),
+                                    intensita_calcolata: calc.intensityLabel,
+                                }],
+                                dosage: {
+                                    min_kg: Number(minProductKg.toFixed(3)),
+                                    recommended_kg: Number(calc.midProductKg.toFixed(3)),
+                                    max_kg: Number(maxProductKg.toFixed(3)),
+                                    fresh_equivalent_kg: Number(calc.midFreshKg.toFixed(3)),
+                                },
+                                estimated_impact: {
+                                    sugar_g: Number(calc.sugarGrams.toFixed(1)),
+                                    product_water_l: Number(calc.waterLiters.toFixed(3)),
+                                    fruit_ph: calc.fruit.ph,
+                                },
+                            },
+                            warnings: ['Dosaggio indicativo basato su euristiche sensoriali; verificare la fermentazione e la stabilità della FG prima del confezionamento.'],
+                            display: { report: display },
+                        }, null, 2),
+                    });
+                } catch (e) {
+                    const message = e instanceof Error ? e.message : String(e);
+                    return Promise.resolve({
+                        isError: true,
+                        output: JSON.stringify({
+                            schema_version: '1.0',
+                            tool: 'fruit_calculator',
+                            calculation: 'fruit_dosage',
+                            status: 'error',
+                            errors: [message],
+                            display: { report: formatResults(args) },
+                        }, null, 2),
+                    });
+                }
             },
         };
     }

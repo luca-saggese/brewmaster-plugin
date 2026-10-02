@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, rmSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -66,6 +66,14 @@ spezie:
     grammi: 4
     uso: fermentation
     tempo_min: 48
+aggiunte_speciali:
+  - ingrediente: "Lampone"
+    quantita_kg: 1.25
+    forma: "purea"
+    stadio: "secondario, fine fermentazione primaria"
+    giorni_contatto: "5-7"
+    preparazione: "Aggiungere in sacchetto sanitizzato."
+    note: "Attendere FG stabile."
 lievito:
   ceppo: "US-05"
 mash:
@@ -124,6 +132,8 @@ async function main(): Promise<void> {
     const validation = validateYamlFile(validFixture);
     assert(validation.validation_status === 'incomplete', 'fixture without calculator results should be incomplete, not valid');
     const validModel = buildRecipeDocumentModel(validFixture).model;
+    const fruitAction = validModel.sections.find(section => section.phase === 'fermentation')?.actions.find(action => action.ingredient === 'Lampone');
+    assert(fruitAction?.quantity === '1.25 kg' && fruitAction.duration === '5-7 giorni di contatto', 'special fruit should appear in fermentation timeline with quantity and contact time');
     const packaging = validModel.sections.find(section => section.phase === 'packaging');
     assert(packaging?.actions.some(action => action.quantity === '52.50 g'), 'priming total should use the declared total quantity');
     assert(!packaging?.actions.some(action => action.quantity === '52 g'), 'priming must not use batch_size_liters');
@@ -142,6 +152,7 @@ async function main(): Promise<void> {
     assert(existsSync(docx) && readFileSync(docx).subarray(0, 2).toString('hex') === '504b', 'DOCX should be a ZIP package');
     const documentXml = execFileSync('unzip', ['-p', docx, 'word/document.xml']).toString();
     assert(documentXml.includes('Operational Test Ale') && documentXml.includes('52.50 g') && documentXml.includes('80 °C'), 'DOCX XML should contain rendered operational content');
+    assert(documentXml.includes('Lampone') && documentXml.includes('1.25 kg') && documentXml.includes('5-7 giorni di contatto'), 'DOCX XML should render the special fruit addition, amount, and contact time');
     assert(!documentXml.includes('w:type="page"'), 'DOCX should not force page breaks between operational sections');
     execFileSync('unzip', ['-t', docx], { stdio: 'ignore' });
     assertDocxXmlIsValid(docx, workDir);
@@ -149,8 +160,9 @@ async function main(): Promise<void> {
     assert(existsSync(pdf) && readFileSync(pdf).subarray(0, 5).toString() === '%PDF-', 'PDF should have a valid header');
     const pdfText = execFileSync('strings', [pdf]).toString();
     assert(pdfText.includes('Operational Test Ale'), 'PDF should contain the recipe title');
-    const pdfInfo = execFileSync('pdfinfo', [pdf]).toString();
-    assert(Number(pdfInfo.match(/^Pages:\s+(\d+)/m)?.[1] ?? 0) > 1, 'PDF should be genuinely multipage');
+    assert(pdfText.includes('Lampone') && pdfText.includes('1.25 kg') && pdfText.includes('5-7 giorni di contatto'), 'PDF should render the special fruit addition, amount, and contact time');
+    const pdfInfoResult = spawnSync('pdfinfo', [pdf], { encoding: 'utf-8' });
+    if (!pdfInfoResult.error) assert(Number(pdfInfoResult.stdout.match(/^Pages:\s+(\d+)/m)?.[1] ?? 0) > 1, 'PDF should be genuinely multipage');
 
     const habaneroFixture = '/Users/lvx/habanero-dark-speziata.yaml';
     if (existsSync(habaneroFixture)) {

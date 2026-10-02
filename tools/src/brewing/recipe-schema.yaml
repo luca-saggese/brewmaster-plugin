@@ -7,6 +7,7 @@ canonical_fields:
   - parametri
   - grist
   - luppolatura
+  - aggiunte_speciali
   - lievito
   - acqua
   - mash
@@ -27,6 +28,7 @@ validator:
     - parametri
     - grist
     - luppolatura
+    - aggiunte_speciali
     - lievito
     - mash
     - fermentazione
@@ -73,8 +75,28 @@ validator:
   list_fields:
     - grist
     - luppolatura
+    - aggiunte_speciali
     - spezie
     - zuccheri
+  special_additions:
+    required_string_fields:
+      - ingrediente
+      - forma
+      - stadio
+    required_positive_number_fields:
+      - quantita_kg
+    optional_number_fields:
+      - equivalente_fresco_kg
+      - equivalente_fresco_g_l
+      - dose_min_kg
+      - dose_max_kg
+      - zuccheri_stimati_g
+      - acqua_stimata_l
+    optional_string_fields:
+      - giorni_contatto
+      - preparazione
+      - note
+      - intensita_calcolata
 
 canonical_example: |
   nome: "Nome della ricetta"
@@ -116,6 +138,15 @@ canonical_example: |
       uso: boil
       aa_percent: 12.0
       ibu_stimati: 5
+
+  aggiunte_speciali:
+    - ingrediente: "Uva fragolino (Isabella)"
+      quantita_kg: 4
+      forma: "fresca intera, pigiata"
+      stadio: "primario, a fine fermentazione primaria"
+      giorni_contatto: "7-10"
+      preparazione: "Congelare, scongelare, pigiare e aggiungere in sacchetto sanitizzato."
+      note: "Verificare FG stabile dopo la fermentazione degli zuccheri della frutta."
 
   lievito:
     ceppo: "SafAle US-05"

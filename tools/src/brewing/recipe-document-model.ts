@@ -234,6 +234,10 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
     phase: 'preparation', order: 40, moment: 'Prima della cotta', action: 'Pesare lo zucchero/fermentabile', ingredient: sugar.tipo,
     quantity: quantity(sugar.grammi, 'g'), note: sugar.note,
   }));
+  recipe.aggiunte_speciali?.forEach(addition => preparation.actions.push({
+    phase: 'preparation', order: 45, moment: 'Prima dell’aggiunta', action: 'Preparare l’aggiunta speciale', ingredient: addition.ingrediente,
+    quantity: quantity(addition.quantita_kg, 'kg'), note: [addition.forma, addition.stadio, addition.preparazione, addition.note].filter(Boolean).join(' — ') || undefined,
+  }));
   if (recipe.yeast.strain) preparation.actions.push({ phase: 'preparation', order: 50, moment: 'Prima dell\'inoculo', action: 'Preparare il lievito', ingredient: recipe.yeast.strain, note: firstText(record(raw['lievito']), ['forma', 'note']) });
   sections.push(preparation);
 
@@ -350,6 +354,14 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
       fermentation.actions.push({ phase: 'fermentation', order: 25, moment: isTincture ? 'Dopo bench trial' : 'Aggiunta in fermentazione/secondaria', action: isTincture ? 'Dosare la tintura dopo bench trial' : 'Aggiungere botanica', ingredient: spice.nome, quantity: quantity(spice.grammi, 'g'), note: spice.note });
       if (isTincture) fermentation.warnings.push(`La dose di ${spice.nome} resta da determinare sperimentalmente con bench trial.`);
     });
+    recipe.aggiunte_speciali?.filter(addition => /primar|ferment|secondar|conditioning/i.test(addition.stadio)).forEach(addition => {
+      fermentation.actions.push({
+        phase: 'fermentation', order: 25, moment: addition.stadio, action: 'Aggiungere ingrediente speciale',
+        ingredient: addition.ingrediente, quantity: quantity(addition.quantita_kg, 'kg'),
+        duration: addition.giorni_contatto ? `${addition.giorni_contatto} giorni di contatto` : undefined,
+        note: [addition.forma, addition.preparazione, addition.note].filter(Boolean).join(' — ') || undefined,
+      });
+    });
     fermentation.measurements.push(measurement('FG reale', 'SG'), measurement('Temperatura reale', '°C'), measurement('Data fine fermentazione'));
     fermentation.warnings.push('La fermentazione è conclusa solo dopo stabilità della FG, non per sola durata nominale.');
     if (text(fermentationRaw['temperatura_controllo'])) fermentation.notes.push(`Controllo temperatura: ${text(fermentationRaw['temperatura_controllo'])}`);
@@ -372,7 +384,7 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
   }
 
   const alternatives = Array.isArray(raw['alternative']) ? (raw['alternative'] as RecordValue[]).map(item => [text(item['descrizione']), text(item['cambiamenti']), text(item['impatto'])].filter(Boolean).join(' — ')).filter(Boolean) : [];
-  const handled = new Set(['schema_version', 'nome', 'stile', 'codice_bjcp', 'descrizione', 'note', 'parametri', 'grist', 'luppolatura', 'lievito', 'mash', 'fermentazione', 'bollitura', 'acqua', 'agua', 'sparge', 'sales', 'mash_salts', 'sparge_salts', 'carbonazione', 'spezie', 'zuccheri', 'confezionamento', 'obiettivi_sensoriali', 'vincoli_produzione', 'fonte', 'alternative', 'note_critiche']);
+  const handled = new Set(['schema_version', 'nome', 'stile', 'codice_bjcp', 'descrizione', 'note', 'parametri', 'grist', 'luppolatura', 'aggiunte_speciali', 'lievito', 'mash', 'fermentazione', 'bollitura', 'acqua', 'agua', 'sparge', 'sales', 'mash_salts', 'sparge_salts', 'carbonazione', 'spezie', 'zuccheri', 'confezionamento', 'obiettivi_sensoriali', 'vincoli_produzione', 'fonte', 'alternative', 'note_critiche']);
   const unmappedFields = [...Object.keys(raw).filter(key => !handled.has(key)), ...nestedUnmappedFields(raw)];
   return {
     schemaVersion: recipe.schema_version ?? 'unspecified',

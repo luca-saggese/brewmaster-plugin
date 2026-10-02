@@ -11171,6 +11171,34 @@ function collectSchemaIssues(data) {
 			message: "Il valore deve essere una lista."
 		});
 	}
+	const specialAdditions = data["aggiunte_speciali"];
+	if (Array.isArray(specialAdditions)) specialAdditions.forEach((value, index) => {
+		const path = `aggiunte_speciali[${index}]`;
+		if (typeof value !== "object" || value === null || Array.isArray(value)) {
+			issues.push({
+				path,
+				message: "Ogni aggiunta speciale deve essere un oggetto."
+			});
+			return;
+		}
+		const addition = value;
+		for (const key of YAML_VALIDATOR_SCHEMA.special_additions.required_string_fields) if (typeof addition[key] !== "string" || !addition[key].trim()) issues.push({
+			path: `${path}.${key}`,
+			message: "Il campo deve essere una stringa non vuota."
+		});
+		for (const key of YAML_VALIDATOR_SCHEMA.special_additions.required_positive_number_fields) if (typeof addition[key] !== "number" || !Number.isFinite(addition[key]) || addition[key] <= 0) issues.push({
+			path: `${path}.${key}`,
+			message: "Il campo deve essere un numero positivo."
+		});
+		for (const key of YAML_VALIDATOR_SCHEMA.special_additions.optional_number_fields) if (key in addition && (typeof addition[key] !== "number" || !Number.isFinite(addition[key]))) issues.push({
+			path: `${path}.${key}`,
+			message: "Il campo deve essere un numero finito."
+		});
+		for (const key of YAML_VALIDATOR_SCHEMA.special_additions.optional_string_fields) if (key in addition && typeof addition[key] !== "string") issues.push({
+			path: `${path}.${key}`,
+			message: "Il campo deve essere una stringa."
+		});
+	});
 	return issues;
 }
 function parseYamlRecipe(filePath) {
@@ -11303,6 +11331,25 @@ function parseYamlRecipe(filePath) {
 		grammi: Number(z["grammi"] ?? 0),
 		note: typeof z["note"] === "string" ? z["note"] : void 0
 	})) : void 0;
+	const aggiunte_speciali = Array.isArray(d["aggiunte_speciali"]) ? d["aggiunte_speciali"].map((item) => {
+		const addition = item;
+		return {
+			ingrediente: String(addition["ingrediente"] ?? ""),
+			quantita_kg: Number(addition["quantita_kg"]),
+			forma: String(addition["forma"] ?? ""),
+			stadio: String(addition["stadio"] ?? ""),
+			giorni_contatto: typeof addition["giorni_contatto"] === "string" ? addition["giorni_contatto"] : void 0,
+			preparazione: typeof addition["preparazione"] === "string" ? addition["preparazione"] : void 0,
+			note: typeof addition["note"] === "string" ? addition["note"] : void 0,
+			equivalente_fresco_kg: typeof addition["equivalente_fresco_kg"] === "number" ? addition["equivalente_fresco_kg"] : void 0,
+			equivalente_fresco_g_l: typeof addition["equivalente_fresco_g_l"] === "number" ? addition["equivalente_fresco_g_l"] : void 0,
+			dose_min_kg: typeof addition["dose_min_kg"] === "number" ? addition["dose_min_kg"] : void 0,
+			dose_max_kg: typeof addition["dose_max_kg"] === "number" ? addition["dose_max_kg"] : void 0,
+			zuccheri_stimati_g: typeof addition["zuccheri_stimati_g"] === "number" ? addition["zuccheri_stimati_g"] : void 0,
+			acqua_stimata_l: typeof addition["acqua_stimata_l"] === "number" ? addition["acqua_stimata_l"] : void 0,
+			intensita_calcolata: typeof addition["intensita_calcolata"] === "string" ? addition["intensita_calcolata"] : void 0
+		};
+	}) : void 0;
 	const agua = d["agua"] ?? d["acqua"];
 	const mash_water_liters = pickNum(agua, [
 		"mash_litri",
@@ -11425,6 +11472,7 @@ function parseYamlRecipe(filePath) {
 		note,
 		spezie,
 		zuccheri,
+		aggiunte_speciali,
 		mash_water_liters: isNaN(mash_water_liters) ? void 0 : mash_water_liters,
 		sparge_water_liters: isNaN(sparge_water_liters) ? void 0 : sparge_water_liters,
 		total_water_liters: isNaN(total_water_liters) ? void 0 : total_water_liters,
@@ -13532,6 +13580,20 @@ function buildModel(recipe, raw) {
 		quantity: quantity(sugar.grammi, "g"),
 		note: sugar.note
 	}));
+	recipe.aggiunte_speciali?.forEach((addition) => preparation.actions.push({
+		phase: "preparation",
+		order: 45,
+		moment: "Prima dell’aggiunta",
+		action: "Preparare l’aggiunta speciale",
+		ingredient: addition.ingrediente,
+		quantity: quantity(addition.quantita_kg, "kg"),
+		note: [
+			addition.forma,
+			addition.stadio,
+			addition.preparazione,
+			addition.note
+		].filter(Boolean).join(" — ") || void 0
+	}));
 	if (recipe.yeast.strain) preparation.actions.push({
 		phase: "preparation",
 		order: 50,
@@ -13829,6 +13891,22 @@ function buildModel(recipe, raw) {
 			});
 			if (isTincture) fermentation.warnings.push(`La dose di ${spice.nome} resta da determinare sperimentalmente con bench trial.`);
 		});
+		recipe.aggiunte_speciali?.filter((addition) => /primar|ferment|secondar|conditioning/i.test(addition.stadio)).forEach((addition) => {
+			fermentation.actions.push({
+				phase: "fermentation",
+				order: 25,
+				moment: addition.stadio,
+				action: "Aggiungere ingrediente speciale",
+				ingredient: addition.ingrediente,
+				quantity: quantity(addition.quantita_kg, "kg"),
+				duration: addition.giorni_contatto ? `${addition.giorni_contatto} giorni di contatto` : void 0,
+				note: [
+					addition.forma,
+					addition.preparazione,
+					addition.note
+				].filter(Boolean).join(" — ") || void 0
+			});
+		});
 		fermentation.measurements.push(measurement("FG reale", "SG"), measurement("Temperatura reale", "°C"), measurement("Data fine fermentazione"));
 		fermentation.warnings.push("La fermentazione è conclusa solo dopo stabilità della FG, non per sola durata nominale.");
 		if (text(fermentationRaw["temperatura_controllo"])) fermentation.notes.push(`Controllo temperatura: ${text(fermentationRaw["temperatura_controllo"])}`);
@@ -13887,6 +13965,7 @@ function buildModel(recipe, raw) {
 		"parametri",
 		"grist",
 		"luppolatura",
+		"aggiunte_speciali",
 		"lievito",
 		"mash",
 		"fermentazione",
@@ -17748,11 +17827,64 @@ var FruitCalculatorTool = class {
 			approvalRule: this.name,
 			execute: () => {
 				try {
-					return Promise.resolve({ output: formatResults$1(args) });
+					const calc = compute$1(args);
+					const display = formatResults$1(args);
+					const minProductKg = toProductKg(calc.rangeMinGL * args.batch_size_liters / 1e3, calc.fruit, calc.form);
+					const maxProductKg = toProductKg(calc.rangeMaxGL * args.batch_size_liters / 1e3, calc.fruit, calc.form);
+					return Promise.resolve({ output: JSON.stringify({
+						schema_version: "1.0",
+						tool: "fruit_calculator",
+						calculation: "fruit_dosage",
+						status: "ok",
+						inputs: {
+							fruit_name: args.fruit_name,
+							batch_size_liters: args.batch_size_liters,
+							intensity: calc.intensityLabel.toLowerCase(),
+							fruit_form: calc.form,
+							addition_method: args.addition_method,
+							beer_style: args.beer_style
+						},
+						result: {
+							aggiunte_speciali: [{
+								ingrediente: calc.fruit.name,
+								quantita_kg: Number(calc.midProductKg.toFixed(3)),
+								forma: calc.form,
+								stadio: args.addition_method,
+								equivalente_fresco_kg: Number(calc.midFreshKg.toFixed(3)),
+								equivalente_fresco_g_l: Number(calc.midFreshGL.toFixed(1)),
+								dose_min_kg: Number(minProductKg.toFixed(3)),
+								dose_max_kg: Number(maxProductKg.toFixed(3)),
+								zuccheri_stimati_g: Number(calc.sugarGrams.toFixed(1)),
+								acqua_stimata_l: Number(calc.waterLiters.toFixed(3)),
+								intensita_calcolata: calc.intensityLabel
+							}],
+							dosage: {
+								min_kg: Number(minProductKg.toFixed(3)),
+								recommended_kg: Number(calc.midProductKg.toFixed(3)),
+								max_kg: Number(maxProductKg.toFixed(3)),
+								fresh_equivalent_kg: Number(calc.midFreshKg.toFixed(3))
+							},
+							estimated_impact: {
+								sugar_g: Number(calc.sugarGrams.toFixed(1)),
+								product_water_l: Number(calc.waterLiters.toFixed(3)),
+								fruit_ph: calc.fruit.ph
+							}
+						},
+						warnings: ["Dosaggio indicativo basato su euristiche sensoriali; verificare la fermentazione e la stabilità della FG prima del confezionamento."],
+						display: { report: display }
+					}, null, 2) });
 				} catch (e) {
+					const message = e instanceof Error ? e.message : String(e);
 					return Promise.resolve({
 						isError: true,
-						output: e instanceof Error ? e.message : String(e)
+						output: JSON.stringify({
+							schema_version: "1.0",
+							tool: "fruit_calculator",
+							calculation: "fruit_dosage",
+							status: "error",
+							errors: [message],
+							display: { report: formatResults$1(args) }
+						}, null, 2)
 					});
 				}
 			}

@@ -419,6 +419,7 @@ Campi di primo livello obbligatori per una ricetta completa:
 - `parametri`
 - `grist`
 - `luppolatura`
+- `aggiunte_speciali`
 - `lievito`
 - `acqua`
 - `mash`
@@ -428,7 +429,7 @@ Campi di primo livello obbligatori per una ricetta completa:
 - `note_critiche`
 - `alternative`
 
-Il parser del validator richiede stringhe non vuote per `nome`, `stile` e valori numerici validi per `parametri.batch_size_litri` > 0, `parametri.og` > 0, `parametri.fg` > 0, `parametri.ibu` >= 0. Accetta inoltre questi campi di primo livello: `schema_version`, `nome`, `stile`, `codice_bjcp`, `descrizione`, `note`, `parametri`, `grist`, `luppolatura`, `lievito`, `mash`, `fermentazione`, `bollitura`, `acqua`, `agua`, `sparge`, `sales`, `mash_salts`, `sparge_salts`, `carbonazione`, `spezie`, `zuccheri`, `confezionamento`, `obiettivi_sensoriali`, `vincoli_produzione`, `fonte`, `note_critiche`, `alternative`. schema_version è facoltativo e supportato per compatibilità.
+Il parser del validator richiede stringhe non vuote per `nome`, `stile` e valori numerici validi per `parametri.batch_size_litri` > 0, `parametri.og` > 0, `parametri.fg` > 0, `parametri.ibu` >= 0. Accetta inoltre questi campi di primo livello: `schema_version`, `nome`, `stile`, `codice_bjcp`, `descrizione`, `note`, `parametri`, `grist`, `luppolatura`, `aggiunte_speciali`, `lievito`, `mash`, `fermentazione`, `bollitura`, `acqua`, `agua`, `sparge`, `sales`, `mash_salts`, `sparge_salts`, `carbonazione`, `spezie`, `zuccheri`, `confezionamento`, `obiettivi_sensoriali`, `vincoli_produzione`, `fonte`, `note_critiche`, `alternative`. schema_version è facoltativo e supportato per compatibilità.
 
 Schema base obbligatorio:
 
@@ -472,6 +473,15 @@ luppolatura:
     uso: boil
     aa_percent: 12.0
     ibu_stimati: 5
+
+aggiunte_speciali:
+  - ingrediente: "Uva fragolino (Isabella)"
+    quantita_kg: 4
+    forma: "fresca intera, pigiata"
+    stadio: "primario, a fine fermentazione primaria"
+    giorni_contatto: "7-10"
+    preparazione: "Congelare, scongelare, pigiare e aggiungere in sacchetto sanitizzato."
+    note: "Verificare FG stabile dopo la fermentazione degli zuccheri della frutta."
 
 lievito:
   ceppo: "SafAle US-05"

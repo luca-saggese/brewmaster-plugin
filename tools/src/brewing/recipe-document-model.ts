@@ -261,7 +261,7 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
   if (Object.keys(waterRaw).length > 0 || recipe.mash_water_liters !== undefined || recipe.sparge_water_liters !== undefined) {
     const water = section('water', 'Preparazione dell\'acqua');
     water.targets.push(...[
-      target('Acqua mash', recipe.mash_water_liters, ' L'), target('Acqua sparge', spargeWaterLiters, ' L'), target('Acqua totale', recipe.total_water_liters, ' L'),
+      target('Acqua mash', recipe.mash_water_liters, ' L'), target('Acqua sparge', Math.round(spargeWaterLiters * 10)/10, ' L'), target('Acqua totale', recipe.total_water_liters, ' L'),
       target('pH mash target', firstNumber(mashRaw, ['ph_target', 'pH_target']), ''),
       target('Rapporto SO₄:Cl', firstNumber(waterRaw, ['rapporto_so4_cl']), ''),
     ].filter((item): item is TargetValue => item !== undefined));

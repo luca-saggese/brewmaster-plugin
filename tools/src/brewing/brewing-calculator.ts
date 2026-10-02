@@ -63,8 +63,18 @@ export const BrewingCalculatorInputSchema = z.object({
     'abv', 'attenuation', 'efficiency', 'mash_efficiency', 'brewhouse_efficiency',
     'estimated_og', 'estimated_pre_boil_gravity', 'estimated_fg',
     'strike_water', 'pitching_rate', 'gravity_correction', 'dilution',
-    'gravity_balance', 'boil_correction', 'gravity_temperature_correction',
+    'gravity_balance', 'boil_correction', 'gravity_temperature_correction', 'fermentation_schedule',
   ]),
+
+  fermentation_steps: z.array(z.object({
+    phase: z.string().trim().min(1),
+    start_day: z.number().nonnegative(),
+    end_day: z.number().nonnegative(),
+    temperature_c: z.number().min(-5).max(60).optional(),
+    temperature_min_c: z.number().min(-5).max(60).optional(),
+    temperature_max_c: z.number().min(-5).max(60).optional(),
+    note: z.string().optional(),
+  })).optional().describe('Fasi fermentative esplicite. Questo calcolo le valida e ordina senza stimare tempi o temperature.'),
 
   og: z.number().min(0.990).max(1.300).optional(),
   fg: z.number().min(0.990).max(1.200).optional(),
@@ -148,6 +158,21 @@ export const BrewingCalculatorInputSchema = z.object({
   hydrometer_calibration_temperature_c: z.number().min(-20).max(120).optional(),
   gravity_temperature_method: z.enum(['none', 'manual']).optional(),
   manual_gravity_correction_sg: z.number().optional(),
+}).superRefine((data, ctx) => {
+  if (data.calculation !== 'fermentation_schedule') return;
+  if (!data.fermentation_steps?.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fermentation_steps'], message: 'Specificare almeno una fase fermentativa.' });
+    return;
+  }
+  data.fermentation_steps.forEach((step, index) => {
+    if (step.end_day < step.start_day) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fermentation_steps', index, 'end_day'], message: 'end_day non può precedere start_day.' });
+    const singleTemperature = step.temperature_c !== undefined;
+    const temperatureRange = step.temperature_min_c !== undefined && step.temperature_max_c !== undefined;
+    if (!singleTemperature && !temperatureRange) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fermentation_steps', index], message: 'Specificare temperature_c oppure temperature_min_c e temperature_max_c.' });
+    if (step.temperature_min_c !== undefined && step.temperature_max_c !== undefined && step.temperature_max_c < step.temperature_min_c) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fermentation_steps', index, 'temperature_max_c'], message: 'temperature_max_c non può essere inferiore a temperature_min_c.' });
+    }
+  });
 });
 
 export type BrewingCalculatorInput = z.infer<typeof BrewingCalculatorInputSchema>;
@@ -190,6 +215,7 @@ export class BrewingCalculatorTool implements BuiltinTool<BrewingCalculatorInput
         case 'gravity_balance': result = this.calcGravityBalance(args); break;
         case 'boil_correction': result = this.calcBoilCorrection(args); break;
         case 'gravity_temperature_correction': result = this.calcGravityTemperatureCorrection(args); break;
+        case 'fermentation_schedule': result = this.calcFermentationSchedule(args); break;
       }
       return Promise.resolve(this.asStructuredResult(args.calculation, result));
     } catch (error) {
@@ -635,6 +661,32 @@ export class BrewingCalculatorTool implements BuiltinTool<BrewingCalculatorInput
       calibration_temperature_c: calibrationTemperature, method, correction_sg: correction,
       corrected_gravity: corrected,
     }, summary, ['Offset manuale: non è una conversione automatica SG/°Plato.']);
+  }
+
+  private calcFermentationSchedule(args: BrewingCalculatorInput): ExecutableToolResult {
+    const steps = this.req(args.fermentation_steps, 'fermentation_steps')
+      .map(step => ({ ...step }))
+      .sort((a, b) => a.start_day - b.start_day || a.end_day - b.end_day);
+    const schedule = steps.map(step => ({
+      phase: step.phase,
+      start_day: step.start_day,
+      end_day: step.end_day,
+      duration_days: step.end_day - step.start_day,
+      temperature_c: step.temperature_c ?? null,
+      temperature_min_c: step.temperature_min_c ?? null,
+      temperature_max_c: step.temperature_max_c ?? null,
+      note: step.note ?? null,
+    }));
+    const startDay = Math.min(...steps.map(step => step.start_day));
+    const endDay = Math.max(...steps.map(step => step.end_day));
+    const summary = `Pianificazione fermentativa: ${schedule.length} fasi dichiarate, giorni ${startDay}-${endDay} (${endDay - startDay} giorni di intervallo). Temperature mantenute come specificate; nessuna fase è stata stimata.`;
+    return this.structuredSuccess('fermentation_schedule', {
+      steps: schedule,
+      phase_count: schedule.length,
+      start_day: startDay,
+      end_day: endDay,
+      schedule_span_days: endDay - startDay,
+    }, summary);
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────

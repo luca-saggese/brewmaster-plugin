@@ -46,6 +46,15 @@ function actionRows(section: OperationalSection): string[][] {
       .join('\n'),
   ]);
 }
+function fermentationRows(section: OperationalSection): string[][] {
+  return section.actions.filter(action => action.action === 'Mantenere la fermentazione' || action.action === 'Fermentazione primaria').map(action => [
+    action.moment,
+    action.duration ?? '',
+    action.temperature ?? '',
+    [action.action, action.ingredient, action.quantity].filter(Boolean).join(' - '),
+    action.note ?? '',
+  ]);
+}
 
 class BrewdayPdfRenderer {
   private readonly doc = new PDFLite({ size: 'A4', margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } });
@@ -53,8 +62,8 @@ class BrewdayPdfRenderer {
   private ensure(height: number): void { if (this.doc.y + height > PAGE_H - MARGIN) this.doc.addPage(); }
   private title(text: string): void { const safeText = pdfText(text); this.ensure(35); this.doc.font('Helvetica-Bold').fontSize(14).fillColor(PRIMARY).text(safeText, MARGIN, this.doc.y + 6, { width: USABLE_W }); this.doc.moveTo(MARGIN, this.doc.y + 2).lineTo(PAGE_W - MARGIN, this.doc.y + 2).strokeColor(PRIMARY).lineWidth(1).stroke(); this.doc.y += 8; }
   private paragraph(text: string, bold = false): void { const safeText = pdfText(text); this.ensure(24); this.doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9.5).fillColor(TEXT).text(safeText, MARGIN, this.doc.y + 2, { width: USABLE_W, lineGap: 2 }); this.doc.y += 3; }
-  private table(headers: string[], rows: string[][]): void {
-    const widths = headers.length === 2 ? this.widths : headers.map(() => USABLE_W / headers.length);
+  private table(headers: string[], rows: string[][], columnWidths?: number[]): void {
+    const widths = columnWidths ?? (headers.length === 2 ? this.widths : headers.map(() => USABLE_W / headers.length));
     let headerPending = true;
     const drawHeader = (): void => { this.ensure(24); const headerY = this.doc.y; let x = MARGIN; headers.forEach((header, index) => { const width = widths[index]!; this.doc.rect(x, headerY, width, 22).fill(PRIMARY); this.doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff').text(pdfText(header), x + 3, headerY + 5, { width: width - 6 }); x += width; }); this.doc.y = headerY + 22; headerPending = false; };
     drawHeader();
@@ -72,7 +81,15 @@ class BrewdayPdfRenderer {
   section(section: OperationalSection): void {
     this.title(section.title);
     if (section.targets.length) this.table(['TARGET', 'Valore'], targetRows(section.targets));
-    if (section.actions.length) this.table(['MOMENTO / OPERAZIONE', 'INGREDIENTE / PARAMETRI / NOTE'], actionRows(section));
+    if (section.actions.length) {
+      if (section.phase === 'fermentation') {
+        const scheduleRows = fermentationRows(section);
+        const otherActions = section.actions.filter(action => action.action !== 'Mantenere la fermentazione' && action.action !== 'Fermentazione primaria');
+        if (scheduleRows.length) this.table(['FASE', 'GIORNI', 'TEMPERATURA', 'OPERAZIONE', 'NOTE'], scheduleRows, [100, 70, 75, 145, 121]);
+        if (otherActions.length) this.table(['MOMENTO / OPERAZIONE', 'INGREDIENTE / PARAMETRI / NOTE'], actionRows({ ...section, actions: otherActions }));
+      }
+      else this.table(['MOMENTO / OPERAZIONE', 'INGREDIENTE / PARAMETRI / NOTE'], actionRows(section));
+    }
     if (section.measurements.length) this.table(['MISURATO', 'Valore reale'], section.measurements.map(item => [`${item.label}${item.unit ? ` (${item.unit})` : ''}`, '____________________________']));
     for (const warning of section.warnings) this.paragraph(`ATTENZIONE: ${warning}`);
     for (const note of section.notes) this.paragraph(`NOTA: ${note}`);

@@ -45,9 +45,18 @@ function table(headers: string[], rows: string[][], widths: number[], aligns: st
 }
 function targetRows(values: TargetValue[]): string[][] { return values.map(item => [item.label, item.value]); }
 function checkpointRows(section: OperationalSection): string[][] { return section.measurements.map(item => [`${item.label}${item.unit ? ` (${item.unit})` : ''}`, '________________________', '']); }
-function actionRows(section: OperationalSection): string[][] {
-  return section.actions.map(action => [
+function actionRows(section: OperationalSection, actions = section.actions): string[][] {
+  return actions.map(action => [
     '☐', action.moment, action.action, action.ingredient ?? '', action.quantity ?? '', [action.temperature, action.duration].filter(Boolean).join(' / '), action.note ?? '',
+  ]);
+}
+function fermentationRows(section: OperationalSection): string[][] {
+  return section.actions.filter(action => action.action === 'Mantenere la fermentazione' || action.action === 'Fermentazione primaria').map(action => [
+    action.moment,
+    action.duration ?? '',
+    action.temperature ?? '',
+    [action.action, action.ingredient, action.quantity].filter(Boolean).join(' — '),
+    action.note ?? '',
   ]);
 }
 function renderSection(section: OperationalSection): string {
@@ -55,7 +64,14 @@ function renderSection(section: OperationalSection): string {
   if (section.targets.length) output += heading('Target di fase', 2) + table(['PARAMETRO', 'TARGET'], targetRows(section.targets), [5300, 4338]);
   if (section.actions.length) {
     output += heading('Operazioni e checklist', 2);
-    output += table(['CHECK', 'MOMENTO', 'OPERAZIONE', 'INGREDIENTE', 'QUANTITÀ', 'PARAMETRI', 'NOTE'], actionRows(section), [600, 1350, 2200, 1750, 950, 1250, 1538], ['center', 'left', 'left', 'left', 'right', 'left', 'left']);
+    if (section.phase === 'fermentation') {
+      const scheduleRows = fermentationRows(section);
+      const otherActions = section.actions.filter(action => action.action !== 'Mantenere la fermentazione' && action.action !== 'Fermentazione primaria');
+      if (scheduleRows.length) output += table(['FASE', 'GIORNI', 'TEMPERATURA', 'OPERAZIONE', 'NOTE'], scheduleRows, [1700, 1200, 1300, 2750, 2688]);
+      if (otherActions.length) output += table(['CHECK', 'MOMENTO', 'OPERAZIONE', 'INGREDIENTE', 'QUANTITÀ', 'PARAMETRI', 'NOTE'], actionRows(section, otherActions), [600, 1350, 2200, 1750, 950, 1250, 1538], ['center', 'left', 'left', 'left', 'right', 'left', 'left']);
+    } else {
+      output += table(['CHECK', 'MOMENTO', 'OPERAZIONE', 'INGREDIENTE', 'QUANTITÀ', 'PARAMETRI', 'NOTE'], actionRows(section), [600, 1350, 2200, 1750, 950, 1250, 1538], ['center', 'left', 'left', 'left', 'right', 'left', 'left']);
+    }
   }
   if (section.measurements.length) output += heading('Checkpoint compilabili', 2) + table(['PARAMETRO', 'MISURATO', 'NOTE'], checkpointRows(section), [4100, 2500, 3038]);
   for (const warning of section.warnings) output += paragraph(`ATTENZIONE  ${warning}`, { bold: true, color: '8B2E2E', before: 100, after: 100 });

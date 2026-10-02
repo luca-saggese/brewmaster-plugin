@@ -293,7 +293,16 @@ export interface ParsedRecipe {
   post_boil_og?: number;
   primary_days?: number;
   conditioning_days?: number;
-  fermentation_steps?: { temperature_c: number; duration_days?: number; note?: string }[];
+  fermentation_steps?: {
+    phase?: string;
+    start_day?: number;
+    end_day?: number;
+    temperature_c?: number;
+    temperature_min_c?: number;
+    temperature_max_c?: number;
+    duration_days?: number;
+    note?: string;
+  }[];
   serving_temp_c?: number;
   bottle_type?: string;
   rawYaml: string;
@@ -358,6 +367,7 @@ const RECIPE_SCHEMA = yaml.load(readFileSync(new URL('./recipe-schema.yaml', imp
     list_fields: string[];
     salt_sections: string[];
     salt_fields: string[];
+    fermentation_step_fields: { string_fields: string[]; non_negative_number_fields: string[] };
     special_additions: {
       required_string_fields: string[];
       required_positive_number_fields: string[];
@@ -410,6 +420,45 @@ function collectSchemaIssues(data: Record<string, unknown>): Array<{ path: strin
       if (field in salts && (typeof salts[field] !== 'number' || !Number.isFinite(salts[field]) || (salts[field] as number) < 0)) {
         issues.push({ path: `${section}.${field}`, message: 'La quantità deve essere un numero finito non negativo.' });
       }
+    }
+  }
+  const fermentation = data['fermentazione'];
+  if (fermentation !== undefined && (typeof fermentation !== 'object' || fermentation === null || Array.isArray(fermentation))) {
+    issues.push({ path: 'fermentazione', message: 'Il valore deve essere un oggetto.' });
+  } else if (fermentation && typeof fermentation === 'object' && !Array.isArray(fermentation)) {
+    const steps = (fermentation as Record<string, unknown>)['steps'];
+    if (steps !== undefined && !Array.isArray(steps)) {
+      issues.push({ path: 'fermentazione.steps', message: 'Il valore deve essere una lista.' });
+    } else if (Array.isArray(steps)) {
+      steps.forEach((value, index) => {
+        const path = `fermentazione.steps[${index}]`;
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+          issues.push({ path, message: 'Ogni fase di fermentazione deve essere un oggetto.' });
+          return;
+        }
+        const step = value as Record<string, unknown>;
+        for (const field of YAML_VALIDATOR_SCHEMA.fermentation_step_fields.string_fields) {
+          if (field in step && typeof step[field] !== 'string') {
+            issues.push({ path: `${path}.${field}`, message: 'Il campo deve essere una stringa.' });
+          }
+        }
+        for (const field of YAML_VALIDATOR_SCHEMA.fermentation_step_fields.non_negative_number_fields) {
+          if (field in step && (typeof step[field] !== 'number' || !Number.isFinite(step[field]) || (step[field] as number) < 0)) {
+            issues.push({ path: `${path}.${field}`, message: 'Il campo deve essere un numero finito non negativo.' });
+          }
+        }
+        const hasSingleTemperature = typeof step['temperatura_c'] === 'number';
+        const hasTemperatureRange = typeof step['temperatura_min_c'] === 'number' && typeof step['temperatura_max_c'] === 'number';
+        if (!hasSingleTemperature && !hasTemperatureRange) {
+          issues.push({ path, message: 'Specificare temperatura_c oppure temperatura_min_c e temperatura_max_c.' });
+        }
+        if (typeof step['giorno_inizio'] === 'number' && typeof step['giorno_fine'] === 'number' && step['giorno_fine'] < step['giorno_inizio']) {
+          issues.push({ path: `${path}.giorno_fine`, message: 'Il giorno finale non può precedere il giorno iniziale.' });
+        }
+        if (typeof step['temperatura_min_c'] === 'number' && typeof step['temperatura_max_c'] === 'number' && step['temperatura_max_c'] < step['temperatura_min_c']) {
+          issues.push({ path: `${path}.temperatura_max_c`, message: 'La temperatura massima non può essere inferiore alla minima.' });
+        }
+      });
     }
   }
   const specialAdditions = data['aggiunte_speciali'];
@@ -643,11 +692,16 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
   const conditioning_days = pickNum(ferm, ['madurazione_giorni', 'maduracion_dias', 'dias_maduracion']);
   const fermentation_steps = Array.isArray(ferm['steps']) ? (ferm['steps'] as Array<Record<string, unknown>>)
     .map(step => ({
-      temperature_c: Number(step['temperatura_c'] ?? step['temperature_c'] ?? 0),
+      phase: pickStr(step, ['fase', 'phase']),
+      start_day: pickNum(step, ['giorno_inizio', 'start_day']),
+      end_day: pickNum(step, ['giorno_fine', 'end_day']),
+      temperature_c: pickNum(step, ['temperatura_c', 'temperature_c']),
+      temperature_min_c: pickNum(step, ['temperatura_min_c', 'temperature_min_c']),
+      temperature_max_c: pickNum(step, ['temperatura_max_c', 'temperature_max_c']),
       duration_days: step['giorni'] != null || step['duration_days'] != null ? Number(step['giorni'] ?? step['duration_days']) : undefined,
       note: typeof step['note'] === 'string' ? step['note'] : undefined,
     }))
-    .filter(step => Number.isFinite(step.temperature_c) && step.temperature_c > 0) : undefined;
+    .filter(step => step.temperature_c !== undefined || (step.temperature_min_c !== undefined && step.temperature_max_c !== undefined)) : undefined;
 
   // Carbonatazione: temperatura di servizio e tipo di bottiglia
   const serving_temp_c = pickNum(carbonazione, ['temperatura_servizio_c', 'temperatura_servicio_c', 'servicio_c']);

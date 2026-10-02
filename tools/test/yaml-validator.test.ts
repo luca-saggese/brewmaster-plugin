@@ -305,6 +305,29 @@ async function main(): Promise<void> {
     });
     assert(invalidSaltRes.isError, 'negative mineral salt amount should be rejected');
     assertIncludes(invalidSaltRes.output, 'mash_salts.gypsum_g', 'invalid salt amount should identify its YAML field path');
+
+    const fermentationStepsPath = join(dir, 'fermentation-steps.yaml');
+    writeFileSync(fermentationStepsPath, `${VALID_RECIPE.replace('temperatura_c: 19\n  primaria_giorni: 14', 'temperatura_c: 19\n  primaria_giorni: 14\n  steps:\n    - fase: "Avvio"\n      giorno_inizio: 0\n      giorno_fine: 4\n      temperatura_c: 18\n    - fase: "Rampa libera"\n      giorno_inizio: 4\n      giorno_fine: 7\n      temperatura_min_c: 21\n      temperatura_max_c: 23')}`, 'utf-8');
+    const fermentationStepsRes = await tool.resolveExecution({ input_file: fermentationStepsPath }).execute({
+      turnId: 13,
+      toolCallId: 'test-fermentation-steps',
+      signal: new AbortController().signal,
+    });
+    const fermentationStepsReport = JSON.parse(fermentationStepsRes.output) as { normalized_recipe: { fermentation_steps?: Array<{ phase?: string; start_day?: number; temperature_min_c?: number }> } };
+    assert(fermentationStepsReport.normalized_recipe.fermentation_steps?.[1]?.phase === 'Rampa libera', 'validator should preserve fermentation phase names');
+    assert(fermentationStepsReport.normalized_recipe.fermentation_steps?.[1]?.start_day === 4, 'validator should preserve fermentation day ranges');
+    assert(fermentationStepsReport.normalized_recipe.fermentation_steps?.[1]?.temperature_min_c === 21, 'validator should preserve fermentation temperature ranges');
+
+    const invalidFermentationStepsPath = join(dir, 'invalid-fermentation-steps.yaml');
+    writeFileSync(invalidFermentationStepsPath, `${VALID_RECIPE.replace('temperatura_c: 19\n  primaria_giorni: 14', 'temperatura_c: 19\n  steps:\n    - fase: "Intervallo non valido"\n      giorno_inizio: 5\n      giorno_fine: 3\n      temperatura_min_c: 24\n      temperatura_max_c: 20')}`, 'utf-8');
+    const invalidFermentationStepsRes = await tool.resolveExecution({ input_file: invalidFermentationStepsPath }).execute({
+      turnId: 14,
+      toolCallId: 'test-invalid-fermentation-steps',
+      signal: new AbortController().signal,
+    });
+    assert(invalidFermentationStepsRes.isError, 'validator should reject reversed day and temperature ranges');
+    assertIncludes(invalidFermentationStepsRes.output, 'giorno_fine', 'invalid fermentation day range should identify its field');
+    assertIncludes(invalidFermentationStepsRes.output, 'temperatura_max_c', 'invalid fermentation temperature range should identify its field');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

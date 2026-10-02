@@ -178,7 +178,7 @@ function nestedUnmappedFields(raw: RecordValue): string[] {
   const allowed: Record<string, string[]> = {
     parametri: ['batch_size_litri', 'og', 'fg', 'ibu', 'ebc', 'abv_percent', 'efficienza_percent', 'bollitura_min', 'pre_boil_litri', 'post_boil_litri', 'fermentatore_litri', 'confezionamento_litri', 'carbonazione_vol', 'priming_gl', 'priming_totale_g', 'priming_total_g', 'impianto', 'bu_gu', 'colore', 'corpo', 'volume_fermentatore'],
     mash: ['tipo', 'temperatura_c', 'temperatura_in_c', 'temperatura_strike_c', 'durata_min', 'steps', 'acqua_strike_litri', 'spessore_l_kg', 'ph_target', 'sparge', 'note', 'nota'],
-    bollitura: ['durata_min', 'volume_pre_boil_litri', 'volume_post_boil_litri', 'perdita_evaporazione_litri', 'perdita_trub_litri', 'og_pre_boil', 'og_post_boil', 'whirlpool', 'whirlpool_temperatura_c', 'whirlpool_temp_c', 'whirlpool_durata_min', 'hop_stand_temperatura_c', 'aggiunte_bollitura', 'nota'],
+    bollitura: ['durata_min', 'volume_pre_boil_litri', 'volume_post_boil_litri', 'evaporazione_litri', 'perdita_evaporazione_litri', 'perdita_trub_litri', 'og_pre_boil', 'og_post_boil', 'irish_moss', 'whirlpool', 'whirlpool_temperatura_c', 'whirlpool_temp_c', 'whirlpool_durata_min', 'hop_stand_temperatura_c', 'aggiunte_bollitura', 'nota'],
     fermentazione: ['temperatura_c', 'temperatura_controllo', 'primaria_giorni', 'madurazione_giorni', 'cold_crash', 'cold_crash_giorni', 'cold_crash_temp_c', 'dry_hop_giorno', 'steps', 'note', 'nota'],
     carbonazione: ['metodo', 'zucchero_tipo', 'zucchero_grammi', 'zucchero_g_per_litro', 'co2_volumi', 'temperatura_servizio_c', 'tipo_botella', 'priming_gl', 'priming_totale_g', 'priming_total_g', 'zucchero_totale_g', 'preparazione'],
     lievito: ['ceppo', 'forma', 'quantita_ml', 'quantita_g', 'quantita', 'attenuazione_percent', 'laboratorio', 'temp_min_c', 'temp_max_c', 'temperatura_inoculo_c', 'temp_inoculo_c', 'temperatura_fermentazione', 'durata_primaria_giorni', 'note'],
@@ -293,11 +293,15 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
     sections.push(sparge);
   }
 
-  if (recipe.boil_time_minutes !== undefined || recipe.hop_schedule.some(hop => ['boil', 'first_wort', 'flameout'].includes(hop.use)) || recipe.spezie?.some(spice => spice.uso === 'boil') || boilAdditions.some(addition => ['boil', 'first_wort', 'flameout'].includes(addition.use))) {
+  if (Object.keys(boilRaw).length > 0 || recipe.boil_time_minutes !== undefined || recipe.hop_schedule.some(hop => ['boil', 'first_wort', 'flameout'].includes(hop.use)) || recipe.spezie?.some(spice => spice.uso === 'boil') || boilAdditions.some(addition => ['boil', 'first_wort', 'flameout'].includes(addition.use))) {
     const boil = section('boil', 'Bollitura — timeline cronologica');
     boil.targets.push(...[
       target('Durata bollitura', recipe.boil_time_minutes, ' min'), target('Volume pre-boil', recipe.pre_boil_volume_liters, ' L'),
-      target('Perdita evaporazione', firstNumber(boilRaw, ['perdita_evaporazione_litri']), ' L'), target('Perdita trub', firstNumber(boilRaw, ['perdita_trub_litri']), ' L'),
+      target('OG pre-boil', recipe.pre_boil_og?.toFixed(3)), target('Volume post-boil', recipe.post_boil_volume_liters, ' L'), target('OG post-boil', recipe.post_boil_og?.toFixed(3)),
+      target('Perdita evaporazione', firstNumber(boilRaw, ['evaporazione_litri', 'perdita_evaporazione_litri']), ' L'), target('Perdita trub', firstNumber(boilRaw, ['perdita_trub_litri']), ' L'),
+      target('Irish Moss', boilRaw['irish_moss'] === undefined ? undefined : boilRaw['irish_moss'] ? 'Sì' : 'No'),
+      target('Whirlpool', boilRaw['whirlpool'] === undefined ? undefined : boilRaw['whirlpool'] ? 'Sì' : 'No'),
+      target('Temperatura whirlpool', recipe.whirlpool_temp_c, ' °C'), target('Durata whirlpool', firstNumber(boilRaw, ['whirlpool_durata_min']), ' min'),
     ].filter((item): item is TargetValue => item !== undefined));
     if (text(boilRaw['nota'])) boil.notes.push(text(boilRaw['nota'])!);
     const boilMinutes = recipe.boil_time_minutes ?? 60;
@@ -345,7 +349,21 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
     fermentation.targets.push(...[
       target('Temperatura fermentazione', recipe.fermentation_temp_c, ' °C'), target('Fermentazione primaria', recipe.primary_days, ' giorni'), target('Maturazione', recipe.conditioning_days, ' giorni'),
     ].filter((item): item is TargetValue => item !== undefined));
-    recipe.fermentation_steps?.forEach((step, index) => fermentation.actions.push({ phase: 'fermentation', order: 10 + index, moment: `Step ${index + 1}`, action: 'Mantenere la fermentazione', temperature: quantity(step.temperature_c, '°C'), duration: quantity(step.duration_days, 'giorni'), note: step.note }));
+    recipe.fermentation_steps?.forEach((step, index) => {
+      const dayRange = step.start_day !== undefined && step.end_day !== undefined
+        ? `Giorni ${step.start_day}–${step.end_day}`
+        : undefined;
+      const temperature = step.temperature_c !== undefined
+        ? quantity(step.temperature_c, '°C')
+        : step.temperature_min_c !== undefined && step.temperature_max_c !== undefined
+          ? `${formatNumber(step.temperature_min_c)}–${formatNumber(step.temperature_max_c)} °C`
+          : undefined;
+      fermentation.actions.push({
+        phase: 'fermentation', order: 10 + index, moment: step.phase ?? dayRange ?? `Fase ${index + 1}`,
+        action: 'Mantenere la fermentazione', temperature,
+        duration: dayRange ?? quantity(step.duration_days, 'giorni'), note: step.note,
+      });
+    });
     if (recipe.primary_days !== undefined && recipe.fermentation_steps?.length === 0) fermentation.actions.push({ phase: 'fermentation', order: 10, moment: `Giorni 0–${recipe.primary_days}`, action: 'Fermentazione primaria', temperature: quantity(recipe.fermentation_temp_c, '°C'), duration: `${recipe.primary_days} giorni`, note: text(fermentationRaw['note']) });
     if (Boolean(fermentationRaw['cold_crash'])) fermentation.actions.push({ phase: 'fermentation', order: 30, moment: 'Cold crash', action: 'Raffreddare per il cold crash', temperature: quantity(firstNumber(fermentationRaw, ['cold_crash_temp_c']), '°C'), duration: quantity(firstNumber(fermentationRaw, ['cold_crash_giorni']), 'giorni') });
     recipe.hop_schedule.filter(hop => hop.use === 'dry_hop').forEach(hop => fermentation.actions.push({ phase: 'fermentation', order: 20, moment: text(fermentationRaw['dry_hop_giorno']) ? `Giorno ${String(fermentationRaw['dry_hop_giorno'])}` : 'Dry hop', action: 'Aggiungere dry hop', ingredient: hop.variety, quantity: quantity(hop.grams, 'g'), note: hop.note }));

@@ -89,15 +89,26 @@ bollitura:
   volume_post_boil_litri: 20
   og_pre_boil: 1.050
   og_post_boil: 1.060
+  evaporazione_litri: 3
+  perdita_trub_litri: 2
+  irish_moss: false
+  whirlpool: true
   whirlpool_temperatura_c: 80
+  whirlpool_durata_min: 20
 fermentazione:
   primaria_giorni: 7
   temperatura_c: 18
   steps:
-    - temperatura_c: 18
-      giorni: 4
-    - temperatura_c: 21
-      giorni: 3
+    - fase: "Avvio"
+      giorno_inizio: 0
+      giorno_fine: 4
+      temperatura_c: 18
+    - fase: "Rampa libera"
+      giorno_inizio: 4
+      giorno_fine: 7
+      temperatura_min_c: 21
+      temperatura_max_c: 23
+      note: "Lasciare salire gradualmente"
 carbonazione:
   metodo: bottiglia
   co2_volumi: 2.4
@@ -151,6 +162,20 @@ async function main(): Promise<void> {
     assert(validModel.sections.find(section => section.phase === 'post_boil')?.actions.some(action => action.temperature === '80 °C'), 'whirlpool temperature should be mapped');
     const fermentation = validModel.sections.find(section => section.phase === 'fermentation');
     assert(fermentation?.actions.filter(action => action.action.includes('Mantenere la fermentazione')).length === 2, 'multistep fermentation should be rendered');
+    assert(fermentation?.actions.some(action => action.moment === 'Avvio' && action.duration === 'Giorni 0–4' && action.temperature === '18 °C'), 'fermentation phase should retain its name, day range, and temperature');
+    assert(fermentation?.actions.some(action => action.moment === 'Rampa libera' && action.duration === 'Giorni 4–7' && action.temperature === '21–23 °C'), 'fermentation phase should render a temperature range');
+    const boil = validModel.sections.find(section => section.phase === 'boil');
+    assert(boil?.targets.some(target => target.label === 'OG pre-boil' && target.value === '1.050'), 'boil section should include pre-boil OG');
+    assert(boil?.targets.some(target => target.label === 'OG post-boil' && target.value === '1.060'), 'boil section should include post-boil OG');
+    assert(boil?.targets.some(target => target.label === 'Durata bollitura' && target.value === '60 min'), 'boil section should include boil duration');
+    assert(boil?.targets.some(target => target.label === 'Volume pre-boil' && target.value === '25 L'), 'boil section should include pre-boil volume');
+    assert(boil?.targets.some(target => target.label === 'Volume post-boil' && target.value === '20 L'), 'boil section should include post-boil volume');
+    assert(boil?.targets.some(target => target.label === 'Perdita evaporazione' && target.value === '3 L'), 'boil section should include evaporation loss');
+    assert(boil?.targets.some(target => target.label === 'Perdita trub' && target.value === '2 L'), 'boil section should include trub loss');
+    assert(boil?.targets.some(target => target.label === 'Irish Moss' && target.value === 'No'), 'boil section should preserve an explicit false Irish Moss value');
+    assert(boil?.targets.some(target => target.label === 'Whirlpool' && target.value === 'Sì'), 'boil section should preserve the whirlpool flag');
+    assert(boil?.targets.some(target => target.label === 'Temperatura whirlpool' && target.value === '80 °C'), 'boil section should include whirlpool temperature');
+    assert(boil?.targets.some(target => target.label === 'Durata whirlpool' && target.value === '20 min'), 'boil section should include whirlpool duration');
     assert(fermentation?.actions.map(action => action.ingredient ?? action.action).join('|').includes('Pepe'), 'botanical additions should remain in the fermentation timeline');
     const docxResult = await new YamlToDocxTool().resolveExecution({ input_file: validFixture, output_file: docx }).execute({ turnId: 1, toolCallId: 'docx-test', signal: new AbortController().signal });
     const pdfResult = await new YamlToPdfTool().resolveExecution({ input_file: validFixture, output_file: pdf }).execute({ turnId: 1, toolCallId: 'pdf-test', signal: new AbortController().signal });
@@ -164,15 +189,24 @@ async function main(): Promise<void> {
     assert(documentXml.includes('Operational Test Ale') && documentXml.includes('52.50 g') && documentXml.includes('80 °C'), 'DOCX XML should contain rendered operational content');
     assert(documentXml.includes('Lampone') && documentXml.includes('1.25 kg') && documentXml.includes('5-7 giorni di contatto'), 'DOCX XML should render the special fruit addition, amount, and contact time');
     assert(documentXml.includes('Acido lattico') && documentXml.includes('1.50 mL') && documentXml.includes('0.60 mL'), 'DOCX XML should render conventional mash and sparge acid fields');
+    assert(documentXml.includes('OG pre-boil') && documentXml.includes('OG post-boil') && documentXml.includes('1.050') && documentXml.includes('1.060'), 'DOCX should render both boil gravities');
+    assert(documentXml.includes('Volume post-boil') && documentXml.includes('3 L') && documentXml.includes('2 L') && documentXml.includes('Irish Moss') && documentXml.includes('Whirlpool'), 'DOCX should render the additional boil parameters');
+    assert(documentXml.includes('FASE') && documentXml.includes('GIORNI') && documentXml.includes('TEMPERATURA') && documentXml.includes('Giorni 4–7') && documentXml.includes('Rampa libera') && documentXml.includes('21–23 °C'), 'DOCX should render the fermentation phase and temperature table');
     assert(!documentXml.includes('w:type="page"'), 'DOCX should not force page breaks between operational sections');
     execFileSync('unzip', ['-t', docx], { stdio: 'ignore' });
     assertDocxXmlIsValid(docx, workDir);
     assert(documentXml.includes('<w:tbl>') && documentXml.includes('<w:sectPr>'), 'DOCX should contain tables and section properties, not only a ZIP header');
     assert(existsSync(pdf) && readFileSync(pdf).subarray(0, 5).toString() === '%PDF-', 'PDF should have a valid header');
-    const pdfText = execFileSync('strings', [pdf]).toString();
+    const pdfText = execFileSync('strings', [pdf]).toString('latin1');
     assert(pdfText.includes('Operational Test Ale'), 'PDF should contain the recipe title');
-    assert(pdfText.includes('Lampone') && pdfText.includes('1.25 kg') && pdfText.includes('5-7 giorni di contatto'), 'PDF should render the special fruit addition, amount, and contact time');
+    assert(pdfText.includes('Lampone') && pdfText.includes('1.25 kg') && pdfText.includes('5-7') && pdfText.includes('contatto'), 'PDF should render the special fruit addition, amount, and contact time');
     assert(pdfText.includes('Acido lattico') && pdfText.includes('1.50 mL') && pdfText.includes('0.60 mL'), 'PDF should render conventional mash and sparge acid fields');
+    assert(pdfText.includes('OG pre-boil') && pdfText.includes('OG post-boil') && pdfText.includes('1.050') && pdfText.includes('1.060'), 'PDF should render both boil gravities');
+    assert(pdfText.includes('Volume post-boil') && pdfText.includes('3 L') && pdfText.includes('2 L') && pdfText.includes('Irish Moss') && pdfText.includes('Whirlpool'), 'PDF should render the additional boil parameters');
+    assert(pdfText.includes('FASE') && pdfText.includes('TEMPERATURA'), 'PDF should render the fermentation table headers');
+    assert(pdfText.includes('Rampa libera'), 'PDF should render the fermentation phase name');
+    assert(pdfText.includes('21-23'), 'PDF should render the fermentation temperature range');
+    assert(pdfText.includes('Giorni 4-7'), 'PDF should render the fermentation day range');
     const pdfInfoResult = spawnSync('pdfinfo', [pdf], { encoding: 'utf-8' });
     if (!pdfInfoResult.error) assert(Number(pdfInfoResult.stdout.match(/^Pages:\s+(\d+)/m)?.[1] ?? 0) > 1, 'PDF should be genuinely multipage');
 

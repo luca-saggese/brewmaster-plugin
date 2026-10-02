@@ -352,6 +352,26 @@ async function run(): Promise<void> {
   });
   assert(missingCalibrationTemperature.isError === true, 'temperature correction requires calibration temperature');
 
+  const fermentationSchedule = await execute({
+    calculation: 'fermentation_schedule',
+    fermentation_steps: [
+      { phase: 'Rampa libera', start_day: 4, end_day: 7, temperature_min_c: 21, temperature_max_c: 23 },
+      { phase: 'Avvio', start_day: 0, end_day: 4, temperature_c: 18 },
+    ],
+  });
+  const fermentationJson = structured(fermentationSchedule.output, 'fermentation schedule');
+  const fermentationResult = fermentationJson.result as { steps: Array<{ phase: string }>; schedule_span_days: number };
+  assert(fermentationResult.steps[0]?.phase === 'Avvio' && fermentationResult.steps[1]?.phase === 'Rampa libera', 'fermentation schedule is ordered by declared start day');
+  assert(fermentationResult.schedule_span_days === 7, 'fermentation schedule reports the span of declared days');
+  includes(fermentationSchedule.output, 'nessuna fase è stata stimata', 'fermentation schedule does not invent process values');
+
+  const invalidFermentationSchedule = BrewingCalculatorInputSchema.safeParse({
+    calculation: 'fermentation_schedule',
+    fermentation_steps: [{ phase: 'Invalid', start_day: 4, end_day: 2, temperature_min_c: 24, temperature_max_c: 20 }],
+  });
+  assert(!invalidFermentationSchedule.success, 'fermentation schedule rejects reversed days and temperature ranges');
+  assert(!BrewingCalculatorInputSchema.safeParse({ calculation: 'fermentation_schedule' }).success, 'fermentation schedule requires declared steps');
+
   const pitchingDataMissing = await execute({
     calculation: 'pitching_rate',
     og: 1.050,

@@ -528,14 +528,28 @@ bollitura:
   durata_min: 60
   volume_pre_boil_litri: 28
   volume_post_boil_litri: 23
+  og_pre_boil: 1.050
+  og_post_boil: 1.065
   evaporazione_litri: 5
+  perdita_trub_litri: 2
   irish_moss: true
+  whirlpool: true
   whirlpool_temp_c: 80
   whirlpool_durata_min: 20
 
 fermentazione:
   primaria_giorni: 7
-  temperatura_c: 19
+  steps:
+    - fase: "Avvio"
+      giorno_inizio: 0
+      giorno_fine: 3
+      temperatura_c: 19
+    - fase: "Rampa libera"
+      giorno_inizio: 3
+      giorno_fine: 7
+      temperatura_min_c: 21
+      temperatura_max_c: 24
+      note: "Lasciare salire gradualmente"
   dry_hop_giorno: 5
   dry_hop_temperatura_c: 19
   cold_crash: true

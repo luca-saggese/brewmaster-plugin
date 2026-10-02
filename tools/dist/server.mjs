@@ -4318,8 +4318,18 @@ const BrewingCalculatorInputSchema = object({
 		"dilution",
 		"gravity_balance",
 		"boil_correction",
-		"gravity_temperature_correction"
+		"gravity_temperature_correction",
+		"fermentation_schedule"
 	]),
+	fermentation_steps: array(object({
+		phase: string().trim().min(1),
+		start_day: number().nonnegative(),
+		end_day: number().nonnegative(),
+		temperature_c: number().min(-5).max(60).optional(),
+		temperature_min_c: number().min(-5).max(60).optional(),
+		temperature_max_c: number().min(-5).max(60).optional(),
+		note: string().optional()
+	})).optional().describe("Fasi fermentative esplicite. Questo calcolo le valida e ordina senza stimare tempi o temperature."),
 	og: number().min(.99).max(1.3).optional(),
 	fg: number().min(.99).max(1.2).optional(),
 	batch_size_liters: number().positive().max(200).optional().describe("Legacy/general liquid volume. It is never used as an implicit process-volume fallback."),
@@ -4416,6 +4426,43 @@ const BrewingCalculatorInputSchema = object({
 	hydrometer_calibration_temperature_c: number().min(-20).max(120).optional(),
 	gravity_temperature_method: _enum(["none", "manual"]).optional(),
 	manual_gravity_correction_sg: number().optional()
+}).superRefine((data, ctx) => {
+	if (data.calculation !== "fermentation_schedule") return;
+	if (!data.fermentation_steps?.length) {
+		ctx.addIssue({
+			code: ZodIssueCode.custom,
+			path: ["fermentation_steps"],
+			message: "Specificare almeno una fase fermentativa."
+		});
+		return;
+	}
+	data.fermentation_steps.forEach((step, index) => {
+		if (step.end_day < step.start_day) ctx.addIssue({
+			code: ZodIssueCode.custom,
+			path: [
+				"fermentation_steps",
+				index,
+				"end_day"
+			],
+			message: "end_day non può precedere start_day."
+		});
+		const singleTemperature = step.temperature_c !== void 0;
+		const temperatureRange = step.temperature_min_c !== void 0 && step.temperature_max_c !== void 0;
+		if (!singleTemperature && !temperatureRange) ctx.addIssue({
+			code: ZodIssueCode.custom,
+			path: ["fermentation_steps", index],
+			message: "Specificare temperature_c oppure temperature_min_c e temperature_max_c."
+		});
+		if (step.temperature_min_c !== void 0 && step.temperature_max_c !== void 0 && step.temperature_max_c < step.temperature_min_c) ctx.addIssue({
+			code: ZodIssueCode.custom,
+			path: [
+				"fermentation_steps",
+				index,
+				"temperature_max_c"
+			],
+			message: "temperature_max_c non può essere inferiore a temperature_min_c."
+		});
+	});
 });
 var BrewingCalculatorTool = class {
 	name = "brewing_calculator";
@@ -4474,7 +4521,10 @@ var BrewingCalculatorTool = class {
 				case "boil_correction":
 					result = this.calcBoilCorrection(args);
 					break;
-				case "gravity_temperature_correction": result = this.calcGravityTemperatureCorrection(args);
+				case "gravity_temperature_correction":
+					result = this.calcGravityTemperatureCorrection(args);
+					break;
+				case "fermentation_schedule": result = this.calcFermentationSchedule(args);
 			}
 			return Promise.resolve(this.asStructuredResult(args.calculation, result));
 		} catch (error) {
@@ -4941,6 +4991,29 @@ var BrewingCalculatorTool = class {
 			correction_sg: correction,
 			corrected_gravity: corrected
 		}, summary, ["Offset manuale: non è una conversione automatica SG/°Plato."]);
+	}
+	calcFermentationSchedule(args) {
+		const steps = this.req(args.fermentation_steps, "fermentation_steps").map((step) => ({ ...step })).sort((a, b) => a.start_day - b.start_day || a.end_day - b.end_day);
+		const schedule = steps.map((step) => ({
+			phase: step.phase,
+			start_day: step.start_day,
+			end_day: step.end_day,
+			duration_days: step.end_day - step.start_day,
+			temperature_c: step.temperature_c ?? null,
+			temperature_min_c: step.temperature_min_c ?? null,
+			temperature_max_c: step.temperature_max_c ?? null,
+			note: step.note ?? null
+		}));
+		const startDay = Math.min(...steps.map((step) => step.start_day));
+		const endDay = Math.max(...steps.map((step) => step.end_day));
+		const summary = `Pianificazione fermentativa: ${schedule.length} fasi dichiarate, giorni ${startDay}-${endDay} (${endDay - startDay} giorni di intervallo). Temperature mantenute come specificate; nessuna fase è stata stimata.`;
+		return this.structuredSuccess("fermentation_schedule", {
+			steps: schedule,
+			phase_count: schedule.length,
+			start_day: startDay,
+			end_day: endDay,
+			schedule_span_days: endDay - startDay
+		}, summary);
 	}
 	requireWaterVolumes(args) {
 		if (args.water_volumes == null) throw new Error(MISSING_WATER_VOLUMES);
@@ -11252,6 +11325,51 @@ function collectSchemaIssues(data) {
 			message: "La quantità deve essere un numero finito non negativo."
 		});
 	}
+	const fermentation = data["fermentazione"];
+	if (fermentation !== void 0 && (typeof fermentation !== "object" || fermentation === null || Array.isArray(fermentation))) issues.push({
+		path: "fermentazione",
+		message: "Il valore deve essere un oggetto."
+	});
+	else if (fermentation && typeof fermentation === "object" && !Array.isArray(fermentation)) {
+		const steps = fermentation["steps"];
+		if (steps !== void 0 && !Array.isArray(steps)) issues.push({
+			path: "fermentazione.steps",
+			message: "Il valore deve essere una lista."
+		});
+		else if (Array.isArray(steps)) steps.forEach((value, index) => {
+			const path = `fermentazione.steps[${index}]`;
+			if (typeof value !== "object" || value === null || Array.isArray(value)) {
+				issues.push({
+					path,
+					message: "Ogni fase di fermentazione deve essere un oggetto."
+				});
+				return;
+			}
+			const step = value;
+			for (const field of YAML_VALIDATOR_SCHEMA.fermentation_step_fields.string_fields) if (field in step && typeof step[field] !== "string") issues.push({
+				path: `${path}.${field}`,
+				message: "Il campo deve essere una stringa."
+			});
+			for (const field of YAML_VALIDATOR_SCHEMA.fermentation_step_fields.non_negative_number_fields) if (field in step && (typeof step[field] !== "number" || !Number.isFinite(step[field]) || step[field] < 0)) issues.push({
+				path: `${path}.${field}`,
+				message: "Il campo deve essere un numero finito non negativo."
+			});
+			const hasSingleTemperature = typeof step["temperatura_c"] === "number";
+			const hasTemperatureRange = typeof step["temperatura_min_c"] === "number" && typeof step["temperatura_max_c"] === "number";
+			if (!hasSingleTemperature && !hasTemperatureRange) issues.push({
+				path,
+				message: "Specificare temperatura_c oppure temperatura_min_c e temperatura_max_c."
+			});
+			if (typeof step["giorno_inizio"] === "number" && typeof step["giorno_fine"] === "number" && step["giorno_fine"] < step["giorno_inizio"]) issues.push({
+				path: `${path}.giorno_fine`,
+				message: "Il giorno finale non può precedere il giorno iniziale."
+			});
+			if (typeof step["temperatura_min_c"] === "number" && typeof step["temperatura_max_c"] === "number" && step["temperatura_max_c"] < step["temperatura_min_c"]) issues.push({
+				path: `${path}.temperatura_max_c`,
+				message: "La temperatura massima non può essere inferiore alla minima."
+			});
+		});
+	}
 	const specialAdditions = data["aggiunte_speciali"];
 	if (Array.isArray(specialAdditions)) specialAdditions.forEach((value, index) => {
 		const path = `aggiunte_speciali[${index}]`;
@@ -11500,10 +11618,15 @@ function parseYamlRecipe(filePath) {
 		"dias_maduracion"
 	]);
 	const fermentation_steps = Array.isArray(ferm["steps"]) ? ferm["steps"].map((step) => ({
-		temperature_c: Number(step["temperatura_c"] ?? step["temperature_c"] ?? 0),
+		phase: pickStr(step, ["fase", "phase"]),
+		start_day: pickNum(step, ["giorno_inizio", "start_day"]),
+		end_day: pickNum(step, ["giorno_fine", "end_day"]),
+		temperature_c: pickNum(step, ["temperatura_c", "temperature_c"]),
+		temperature_min_c: pickNum(step, ["temperatura_min_c", "temperature_min_c"]),
+		temperature_max_c: pickNum(step, ["temperatura_max_c", "temperature_max_c"]),
 		duration_days: step["giorni"] != null || step["duration_days"] != null ? Number(step["giorni"] ?? step["duration_days"]) : void 0,
 		note: typeof step["note"] === "string" ? step["note"] : void 0
-	})).filter((step) => Number.isFinite(step.temperature_c) && step.temperature_c > 0) : void 0;
+	})).filter((step) => step.temperature_c !== void 0 || step.temperature_min_c !== void 0 && step.temperature_max_c !== void 0) : void 0;
 	const serving_temp_c = pickNum(carbonazione, [
 		"temperatura_servizio_c",
 		"temperatura_servicio_c",
@@ -13463,10 +13586,12 @@ function nestedUnmappedFields(raw) {
 			"durata_min",
 			"volume_pre_boil_litri",
 			"volume_post_boil_litri",
+			"evaporazione_litri",
 			"perdita_evaporazione_litri",
 			"perdita_trub_litri",
 			"og_pre_boil",
 			"og_post_boil",
+			"irish_moss",
 			"whirlpool",
 			"whirlpool_temperatura_c",
 			"whirlpool_temp_c",
@@ -13782,7 +13907,7 @@ function buildModel(recipe, raw) {
 		sparge.measurements.push(measurement("Volume misurato", "L"), measurement("Densità misurata", "SG"), measurement("pH reale", "pH"));
 		sections.push(sparge);
 	}
-	if (recipe.boil_time_minutes !== void 0 || recipe.hop_schedule.some((hop) => [
+	if (Object.keys(boilRaw).length > 0 || recipe.boil_time_minutes !== void 0 || recipe.hop_schedule.some((hop) => [
 		"boil",
 		"first_wort",
 		"flameout"
@@ -13795,8 +13920,15 @@ function buildModel(recipe, raw) {
 		boil.targets.push(...[
 			target("Durata bollitura", recipe.boil_time_minutes, " min"),
 			target("Volume pre-boil", recipe.pre_boil_volume_liters, " L"),
-			target("Perdita evaporazione", firstNumber(boilRaw, ["perdita_evaporazione_litri"]), " L"),
-			target("Perdita trub", firstNumber(boilRaw, ["perdita_trub_litri"]), " L")
+			target("OG pre-boil", recipe.pre_boil_og?.toFixed(3)),
+			target("Volume post-boil", recipe.post_boil_volume_liters, " L"),
+			target("OG post-boil", recipe.post_boil_og?.toFixed(3)),
+			target("Perdita evaporazione", firstNumber(boilRaw, ["evaporazione_litri", "perdita_evaporazione_litri"]), " L"),
+			target("Perdita trub", firstNumber(boilRaw, ["perdita_trub_litri"]), " L"),
+			target("Irish Moss", boilRaw["irish_moss"] === void 0 ? void 0 : boilRaw["irish_moss"] ? "Sì" : "No"),
+			target("Whirlpool", boilRaw["whirlpool"] === void 0 ? void 0 : boilRaw["whirlpool"] ? "Sì" : "No"),
+			target("Temperatura whirlpool", recipe.whirlpool_temp_c, " °C"),
+			target("Durata whirlpool", firstNumber(boilRaw, ["whirlpool_durata_min"]), " min")
 		].filter((item) => item !== void 0));
 		if (text(boilRaw["nota"])) boil.notes.push(text(boilRaw["nota"]));
 		const boilMinutes = recipe.boil_time_minutes ?? 60;
@@ -13918,15 +14050,19 @@ function buildModel(recipe, raw) {
 			target("Fermentazione primaria", recipe.primary_days, " giorni"),
 			target("Maturazione", recipe.conditioning_days, " giorni")
 		].filter((item) => item !== void 0));
-		recipe.fermentation_steps?.forEach((step, index) => fermentation.actions.push({
-			phase: "fermentation",
-			order: 10 + index,
-			moment: `Step ${index + 1}`,
-			action: "Mantenere la fermentazione",
-			temperature: quantity(step.temperature_c, "°C"),
-			duration: quantity(step.duration_days, "giorni"),
-			note: step.note
-		}));
+		recipe.fermentation_steps?.forEach((step, index) => {
+			const dayRange = step.start_day !== void 0 && step.end_day !== void 0 ? `Giorni ${step.start_day}–${step.end_day}` : void 0;
+			const temperature = step.temperature_c !== void 0 ? quantity(step.temperature_c, "°C") : step.temperature_min_c !== void 0 && step.temperature_max_c !== void 0 ? `${formatNumber(step.temperature_min_c)}–${formatNumber(step.temperature_max_c)} °C` : void 0;
+			fermentation.actions.push({
+				phase: "fermentation",
+				order: 10 + index,
+				moment: step.phase ?? dayRange ?? `Fase ${index + 1}`,
+				action: "Mantenere la fermentazione",
+				temperature,
+				duration: dayRange ?? quantity(step.duration_days, "giorni"),
+				note: step.note
+			});
+		});
 		if (recipe.primary_days !== void 0 && recipe.fermentation_steps?.length === 0) fermentation.actions.push({
 			phase: "fermentation",
 			order: 10,
@@ -14191,8 +14327,8 @@ function checkpointRows(section) {
 		""
 	]);
 }
-function actionRows$1(section) {
-	return section.actions.map((action) => [
+function actionRows$1(section, actions = section.actions) {
+	return actions.map((action) => [
 		"☐",
 		action.moment,
 		action.action,
@@ -14202,12 +14338,66 @@ function actionRows$1(section) {
 		action.note ?? ""
 	]);
 }
+function fermentationRows$1(section) {
+	return section.actions.filter((action) => action.action === "Mantenere la fermentazione" || action.action === "Fermentazione primaria").map((action) => [
+		action.moment,
+		action.duration ?? "",
+		action.temperature ?? "",
+		[
+			action.action,
+			action.ingredient,
+			action.quantity
+		].filter(Boolean).join(" — "),
+		action.note ?? ""
+	]);
+}
 function renderSection(section) {
 	let output = heading(section.title, 1);
 	if (section.targets.length) output += heading("Target di fase", 2) + table(["PARAMETRO", "TARGET"], targetRows$1(section.targets), [5300, 4338]);
 	if (section.actions.length) {
 		output += heading("Operazioni e checklist", 2);
-		output += table([
+		if (section.phase === "fermentation") {
+			const scheduleRows = fermentationRows$1(section);
+			const otherActions = section.actions.filter((action) => action.action !== "Mantenere la fermentazione" && action.action !== "Fermentazione primaria");
+			if (scheduleRows.length) output += table([
+				"FASE",
+				"GIORNI",
+				"TEMPERATURA",
+				"OPERAZIONE",
+				"NOTE"
+			], scheduleRows, [
+				1700,
+				1200,
+				1300,
+				2750,
+				2688
+			]);
+			if (otherActions.length) output += table([
+				"CHECK",
+				"MOMENTO",
+				"OPERAZIONE",
+				"INGREDIENTE",
+				"QUANTITÀ",
+				"PARAMETRI",
+				"NOTE"
+			], actionRows$1(section, otherActions), [
+				600,
+				1350,
+				2200,
+				1750,
+				950,
+				1250,
+				1538
+			], [
+				"center",
+				"left",
+				"left",
+				"left",
+				"right",
+				"left",
+				"left"
+			]);
+		} else output += table([
 			"CHECK",
 			"MOMENTO",
 			"OPERAZIONE",
@@ -14769,6 +14959,19 @@ function actionRows(section) {
 		action.note
 	].filter(Boolean).join("\n")]);
 }
+function fermentationRows(section) {
+	return section.actions.filter((action) => action.action === "Mantenere la fermentazione" || action.action === "Fermentazione primaria").map((action) => [
+		action.moment,
+		action.duration ?? "",
+		action.temperature ?? "",
+		[
+			action.action,
+			action.ingredient,
+			action.quantity
+		].filter(Boolean).join(" - "),
+		action.note ?? ""
+	]);
+}
 var BrewdayPdfRenderer = class {
 	doc = new PDFLite({
 		size: "A4",
@@ -14799,8 +15002,8 @@ var BrewdayPdfRenderer = class {
 		});
 		this.doc.y += 3;
 	}
-	table(headers, rows) {
-		const widths = headers.length === 2 ? this.widths : headers.map(() => USABLE_W / headers.length);
+	table(headers, rows, columnWidths) {
+		const widths = columnWidths ?? (headers.length === 2 ? this.widths : headers.map(() => USABLE_W / headers.length));
 		let headerPending = true;
 		const drawHeader = () => {
 			this.ensure(24);
@@ -14843,7 +15046,29 @@ var BrewdayPdfRenderer = class {
 	section(section) {
 		this.title(section.title);
 		if (section.targets.length) this.table(["TARGET", "Valore"], targetRows(section.targets));
-		if (section.actions.length) this.table(["MOMENTO / OPERAZIONE", "INGREDIENTE / PARAMETRI / NOTE"], actionRows(section));
+		if (section.actions.length) {
+			if (section.phase === "fermentation") {
+				const scheduleRows = fermentationRows(section);
+				const otherActions = section.actions.filter((action) => action.action !== "Mantenere la fermentazione" && action.action !== "Fermentazione primaria");
+				if (scheduleRows.length) this.table([
+					"FASE",
+					"GIORNI",
+					"TEMPERATURA",
+					"OPERAZIONE",
+					"NOTE"
+				], scheduleRows, [
+					100,
+					70,
+					75,
+					145,
+					121
+				]);
+				if (otherActions.length) this.table(["MOMENTO / OPERAZIONE", "INGREDIENTE / PARAMETRI / NOTE"], actionRows({
+					...section,
+					actions: otherActions
+				}));
+			} else this.table(["MOMENTO / OPERAZIONE", "INGREDIENTE / PARAMETRI / NOTE"], actionRows(section));
+		}
 		if (section.measurements.length) this.table(["MISURATO", "Valore reale"], section.measurements.map((item) => [`${item.label}${item.unit ? ` (${item.unit})` : ""}`, "____________________________"]));
 		for (const warning of section.warnings) this.paragraph(`ATTENZIONE: ${warning}`);
 		for (const note of section.notes) this.paragraph(`NOTA: ${note}`);

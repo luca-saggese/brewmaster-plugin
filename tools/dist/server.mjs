@@ -5216,7 +5216,7 @@ const WaterProfileCalculatorInputSchema = object({
 	fermenter_target_l: number().positive().optional().describe("Volume target nel fermentatore in litri (es. 20–23 L). Usato per calcolare automaticamente il pre-boil."),
 	boil_off_l_per_hour: number().nonnegative().optional().describe("Tasso di evaporazione in L/h. Default: 3.0. Misuralo sul tuo impianto."),
 	boil_duration_h: number().positive().optional().describe("Durata bollitura in ore. Default: 1.0."),
-	trub_loss_l: number().nonnegative().optional().describe("Perdite di trub e trasferimento in litri. Default: 2.0."),
+	trub_loss_l: number().nonnegative().optional().describe("Perdite di trub e trasferimento in litri. Default BrewZilla-style: 0.5 L. Specificare un valore diverso per altri impianti."),
 	target_ph: number().optional()
 });
 const WATER = {
@@ -6037,7 +6037,7 @@ var WaterProfileCalculatorTool = class {
 			const ABSORPTION = args.grain_absorption_l_per_kg ?? .9;
 			const BOIL_OFF = args.boil_off_l_per_hour ?? 3;
 			const BOIL_HOURS = args.boil_duration_h ?? 1;
-			const TRUB_LOSS = args.trub_loss_l ?? 2;
+			const TRUB_LOSS = args.trub_loss_l ?? .5;
 			const grainKg = args.grain_kg ?? 0;
 			const absorptionLoss = grainKg * ABSORPTION;
 			const derivedPreBoilTarget = args.fermenter_target_l == null ? void 0 : args.fermenter_target_l + BOIL_OFF * BOIL_HOURS + TRUB_LOSS;
@@ -13628,7 +13628,11 @@ function saltActions(phase, salts, moment, order) {
 		}];
 	});
 }
-function nestedUnmappedFields(raw) {
+function displayUnmappedValue(value) {
+	if (value !== null && typeof value === "object") return dump(value).trim();
+	return String(value);
+}
+function collectUnmappedFieldDetails(raw) {
 	const allowed = {
 		parametri: [
 			"batch_size_litri",
@@ -13792,10 +13796,47 @@ function nestedUnmappedFields(raw) {
 			"acido_lactico"
 		]
 	};
-	const fields = [];
+	const handled = /* @__PURE__ */ new Set([
+		"schema_version",
+		"nome",
+		"stile",
+		"codice_bjcp",
+		"descrizione",
+		"note",
+		"parametri",
+		"grist",
+		"luppolatura",
+		"aggiunte_speciali",
+		"lievito",
+		"mash",
+		"fermentazione",
+		"bollitura",
+		"acqua",
+		"agua",
+		"sparge",
+		"sales",
+		"mash_salts",
+		"sparge_salts",
+		"carbonazione",
+		"spezie",
+		"zuccheri",
+		"confezionamento",
+		"obiettivi_sensoriali",
+		"vincoli_produzione",
+		"fonte",
+		"alternative",
+		"note_critiche"
+	]);
+	const fields = Object.keys(raw).filter((key) => !handled.has(key)).map((key) => ({
+		name: key,
+		value: displayUnmappedValue(raw[key])
+	}));
 	for (const [parent, keys] of Object.entries(allowed)) {
 		const value = record(raw[parent]);
-		for (const key of Object.keys(value)) if (!keys.includes(key)) fields.push(`${parent}.${key}`);
+		for (const key of Object.keys(value)) if (!keys.includes(key)) fields.push({
+			name: `${parent}.${key}`,
+			value: displayUnmappedValue(value[key])
+		});
 	}
 	return fields;
 }
@@ -13815,6 +13856,8 @@ function buildModel(recipe, raw) {
 	const params = record(raw["parametri"]);
 	const mashRaw = record(raw["mash"]);
 	const waterRaw = record(raw["acqua"] ?? raw["agua"]);
+	const derivedSpargeWater = recipe.sparge_water_liters === void 0 && recipe.total_water_liters !== void 0 && recipe.mash_water_liters !== void 0 && recipe.total_water_liters >= recipe.mash_water_liters ? recipe.total_water_liters - recipe.mash_water_liters : void 0;
+	const spargeWaterLiters = recipe.sparge_water_liters ?? derivedSpargeWater;
 	const boilRaw = record(raw["bollitura"]);
 	const fermentationRaw = record(raw["fermentazione"]);
 	raw["confezionamento"];
@@ -13898,7 +13941,7 @@ function buildModel(recipe, raw) {
 		const water = section("water", "Preparazione dell'acqua");
 		water.targets.push(...[
 			target("Acqua mash", recipe.mash_water_liters, " L"),
-			target("Acqua sparge", recipe.sparge_water_liters, " L"),
+			target("Acqua sparge", spargeWaterLiters, " L"),
 			target("Acqua totale", recipe.total_water_liters, " L"),
 			target("pH mash target", firstNumber(mashRaw, ["ph_target", "pH_target"]), ""),
 			target("Rapporto SO₄:Cl", firstNumber(waterRaw, ["rapporto_so4_cl"]), "")
@@ -13930,12 +13973,13 @@ function buildModel(recipe, raw) {
 			quantity: quantity(recipe.mash_water_liters, "L"),
 			note: "Per sistemi all-in-one, il volume sotto il cestello appartiene all’acqua mash."
 		});
-		if (recipe.sparge_water_liters !== void 0) water.actions.push({
+		if (spargeWaterLiters !== void 0) water.actions.push({
 			phase: "water",
 			order: 30,
 			moment: "Sparge",
 			action: "Preparare il volume di acqua sparge",
-			quantity: quantity(recipe.sparge_water_liters, "L")
+			quantity: quantity(spargeWaterLiters, "L"),
+			note: derivedSpargeWater !== void 0 ? "Derivata come acqua totale meno acqua mash." : void 0
 		});
 		water.measurements.push(measurement("pH mash reale", "pH"));
 		sections.push(water);
@@ -13971,11 +14015,11 @@ function buildModel(recipe, raw) {
 		if (text(mashRaw["tipo"]) || text(mashRaw["note"]) || text(mashRaw["nota"])) mash.notes.push(...[text(mashRaw["tipo"]) ? `Metodo: ${text(mashRaw["tipo"])}` : void 0, text(mashRaw["note"]) ?? text(mashRaw["nota"])].filter((item) => Boolean(item)));
 		sections.push(mash);
 	}
-	if (recipe.sparge_water_liters !== void 0 || raw["sparge"] !== void 0) {
+	if (spargeWaterLiters !== void 0 || raw["sparge"] !== void 0) {
 		const sparge = section("sparge", "Sparge e checkpoint pre-boil");
 		const spargeRaw = record(raw["sparge"] ?? mashRaw["sparge"]);
 		sparge.targets.push(...[
-			target("Acqua sparge", recipe.sparge_water_liters, " L"),
+			target("Acqua sparge", spargeWaterLiters, " L"),
 			target("Volume pre-boil", recipe.pre_boil_volume_liters, " L"),
 			target("Densità pre-boil", recipe.pre_boil_og),
 			target("Temperatura sparge", firstNumber(spargeRaw, ["temperatura_c", "temperature_c"]), " °C")
@@ -13986,8 +14030,9 @@ function buildModel(recipe, raw) {
 			order: 10,
 			moment: "Sparge",
 			action: text(spargeRaw["procedura"]) ?? "Eseguire lo sparge previsto dalla ricetta",
-			quantity: quantity(recipe.sparge_water_liters, "L"),
-			temperature: quantity(firstNumber(spargeRaw, ["temperatura_c", "temperature_c"]), "°C")
+			quantity: quantity(spargeWaterLiters, "L"),
+			temperature: quantity(firstNumber(spargeRaw, ["temperatura_c", "temperature_c"]), "°C"),
+			note: derivedSpargeWater !== void 0 ? "Derivata come acqua totale meno acqua mash." : void 0
 		});
 		sparge.measurements.push(measurement("Volume misurato", "L"), measurement("Densità misurata", "SG"), measurement("pH reale", "pH"));
 		sections.push(sparge);
@@ -14257,38 +14302,8 @@ function buildModel(recipe, raw) {
 		text(item["cambiamenti"]),
 		text(item["impatto"])
 	].filter(Boolean).join(" — ")).filter(Boolean) : [];
-	const handled = /* @__PURE__ */ new Set([
-		"schema_version",
-		"nome",
-		"stile",
-		"codice_bjcp",
-		"descrizione",
-		"note",
-		"parametri",
-		"grist",
-		"luppolatura",
-		"aggiunte_speciali",
-		"lievito",
-		"mash",
-		"fermentazione",
-		"bollitura",
-		"acqua",
-		"agua",
-		"sparge",
-		"sales",
-		"mash_salts",
-		"sparge_salts",
-		"carbonazione",
-		"spezie",
-		"zuccheri",
-		"confezionamento",
-		"obiettivi_sensoriali",
-		"vincoli_produzione",
-		"fonte",
-		"alternative",
-		"note_critiche"
-	]);
-	const unmappedFields = [...Object.keys(raw).filter((key) => !handled.has(key)), ...nestedUnmappedFields(raw)];
+	const unmappedFieldDetails = collectUnmappedFieldDetails(raw);
+	const unmappedFields = unmappedFieldDetails.map((field) => field.name);
 	return {
 		schemaVersion: recipe.schema_version ?? "unspecified",
 		metadata: {
@@ -14323,7 +14338,8 @@ function buildModel(recipe, raw) {
 			...Array.isArray(raw["note_critiche"]) ? raw["note_critiche"].filter((item) => typeof item === "string") : []
 		].filter((item) => Boolean(item)),
 		alternatives,
-		unmappedFields
+		unmappedFields,
+		unmappedFieldDetails
 	};
 }
 function buildRecipeDocumentModel(inputPath) {
@@ -14565,12 +14581,9 @@ function renderModel(model) {
 		body += heading("Alternative non selezionate", 1);
 		for (const alternative of model.alternatives) body += paragraph(alternative);
 	}
-	if (model.unmappedFields.length) {
-		body += heading("Campi YAML non mappati", 1);
-		body += paragraph(model.unmappedFields.join(", "), {
-			bold: true,
-			color: "8B2E2E"
-		});
+	if (model.unmappedFieldDetails.length) {
+		body += heading("Note aggiuntive", 1);
+		body += table(["CAMPO", "CONTENUTO"], model.unmappedFieldDetails.map((field) => [field.name, field.value]), [3300, 6338]);
 	}
 	return body;
 }
@@ -15184,9 +15197,9 @@ var BrewdayPdfRenderer = class {
 			this.title("Alternative non selezionate");
 			for (const alternative of model.alternatives) this.paragraph(alternative);
 		}
-		if (model.unmappedFields.length) {
-			this.title("Campi YAML non mappati");
-			this.paragraph(model.unmappedFields.join(", "));
+		if (model.unmappedFieldDetails.length) {
+			this.title("Note aggiuntive");
+			this.table(["CAMPO", "CONTENUTO"], model.unmappedFieldDetails.map((field) => [field.name, field.value]));
 		}
 		this.doc.font("Helvetica-Oblique").fontSize(7.5).fillColor(MUTED).text("Scheda operativa generata da Maestra Birraia AI", MARGIN, Math.min(this.doc.y + 10, 800), {
 			width: USABLE_W,

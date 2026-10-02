@@ -103,7 +103,7 @@ class BrewdayPdfRenderer {
     for (const section of model.sections) this.section(section);
     if (model.notes.length) { this.title('Note informative'); for (const note of model.notes) this.paragraph(`NOTA: ${note}`); }
     if (model.alternatives.length) { this.title('Alternative non selezionate'); for (const alternative of model.alternatives) this.paragraph(alternative); }
-    if (model.unmappedFields.length) { this.title('Campi YAML non mappati'); this.paragraph(model.unmappedFields.join(', ')); }
+    if (model.unmappedFieldDetails.length) { this.title('Note aggiuntive'); this.table(['CAMPO', 'CONTENUTO'], model.unmappedFieldDetails.map(field => [field.name, field.value])); }
     this.doc.font('Helvetica-Oblique').fontSize(7.5).fillColor(MUTED).text('Scheda operativa generata da Maestra Birraia AI', MARGIN, Math.min(this.doc.y + 10, PAGE_H - MARGIN), { width: USABLE_W, align: 'center' });
     this.doc.save(outputPath);
   }

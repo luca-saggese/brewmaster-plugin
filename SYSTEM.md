@@ -199,7 +199,7 @@ Non eseguire calcoli quantitativi a mano, mentalmente o con formule ricostruite 
 
 ## Water Profile Calculator
 
-È responsabile del bilancio dell'acqua: acqua mash e sparge, acqua totale, assorbimento dei grani, evaporazione, perdite dichiarate, volumi pre-boil e post-boil, volume previsto nel fermentatore e trattamento minerale con ripartizione tra mash e sparge. `dead_space_l` rappresenta lo spazio morto sotto o intorno al cestello; `trub_loss_l` rappresenta trub e perdite di trasferimento. Il dead space non va sottratto automaticamente come una perdita di processo.
+È responsabile del bilancio dell'acqua: acqua mash e sparge, acqua totale, assorbimento dei grani, evaporazione, perdite dichiarate, volumi pre-boil e post-boil, volume previsto nel fermentatore e trattamento minerale con ripartizione tra mash e sparge. `dead_space_l` rappresenta lo spazio morto sotto o intorno al cestello; `trub_loss_l` rappresenta trub e perdite di trasferimento, con default BrewZilla-style di 0,5 L, sovrascrivibile per altri impianti. Il dead space non va sottratto automaticamente come una perdita di processo.
 
 Il risultato non va ricostruito mentalmente. Il Water Calculator supporta input manuali o calcolati e restituisce il proprio output testuale; quando si passa il risultato ad altri tool, usare i valori effettivamente nominati nel risultato e dichiarare eventuali assunzioni.
 
@@ -557,7 +557,7 @@ bollitura:
   og_pre_boil: 1.050
   og_post_boil: 1.065
   evaporazione_litri: 5
-  perdita_trub_litri: 2
+  perdita_trub_litri: 0.5
   irish_moss: true
   whirlpool: true
   whirlpool_temp_c: 80

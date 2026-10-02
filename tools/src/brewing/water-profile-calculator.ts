@@ -63,7 +63,7 @@ export const WaterProfileCalculatorInputSchema = z.object({
   boil_duration_h: z.number().positive().optional()
     .describe('Durata bollitura in ore. Default: 1.0.'),
   trub_loss_l: z.number().nonnegative().optional()
-    .describe('Perdite di trub e trasferimento in litri. Default: 2.0.'),
+    .describe('Perdite di trub e trasferimento in litri. Default BrewZilla-style: 0.5 L. Specificare un valore diverso per altri impianti.'),
   target_ph: z.number().optional(),
 });
 
@@ -191,7 +191,7 @@ export class WaterProfileCalculatorTool implements BuiltinTool<WaterProfileCalcu
       const ABSORPTION = args.grain_absorption_l_per_kg ?? 0.9;
       const BOIL_OFF = args.boil_off_l_per_hour ?? 3.0;
       const BOIL_HOURS = args.boil_duration_h ?? 1.0;
-      const TRUB_LOSS = args.trub_loss_l ?? 2.0;
+      const TRUB_LOSS = args.trub_loss_l ?? 0.5;
       const grainKg = args.grain_kg ?? 0;
       const absorptionLoss = grainKg * ABSORPTION;
 

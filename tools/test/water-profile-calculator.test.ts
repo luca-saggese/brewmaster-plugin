@@ -42,6 +42,7 @@ async function main(): Promise<void> {
   assert(!response.isError && payload.status === 'ok', 'water calculator should return a successful structured result');
   assert(payload.tool === 'water_profile_calculator' && payload.calculation === 'water_profile', 'JSON should identify calculator and calculation');
   assert(recipe.acqua.mash_litri === 20 && recipe.acqua.sparge_litri === 10 && recipe.acqua.total_litri === 30, 'recipe YAML patch should expose the computed water volumes');
+  assert(payload.display.report.includes('trub loss 0.5 L (default)'), 'BrewZilla-style trub loss should default to 0.5 L');
   assert(typeof recipe.mash_salts.lactic_acid_ml === 'number' && recipe.mash_salts.lactic_acid_ml > 0, 'estimated lactic acid should be emitted in mash_salts');
   assert(recipe.sparge_salts.lactic_acid_ml === undefined, 'lactic acid should not be assigned to sparge');
   const saltKeys = ['gypsum_g', 'cacl2_g', 'epsom_g', 'nahco3_g'];
@@ -71,6 +72,20 @@ async function main(): Promise<void> {
   assert(spargeOnlyPayload.result.recipe_yaml.mash_salts.lactic_acid_ml === undefined, 'sparge-only water should not receive a mash acid dose');
   assert(typeof spargeOnlyPayload.result.recipe_yaml.sparge_salts.lactic_acid_ml === 'number', 'when mash volume is absent, lactic acid should be assigned to sparge_salts');
   assert(spargeOnlyPayload.display.report.includes('(nello sparge)'), 'text report should identify the sparge acid treatment');
+
+  const explicitTrubResponse = await tool.resolveExecution({
+    source_water: { ca: 0, mg: 0, na: 0, cl: 0, so4: 0, hco3: 200 },
+    target_profile: 'american_ipa',
+    mash_water_liters: 20,
+    sparge_water_liters: 10,
+    trub_loss_l: 1.25,
+  }).execute({
+    turnId: 3,
+    toolCallId: 'water-explicit-trub-test',
+    signal: new AbortController().signal,
+  });
+  const explicitTrubPayload = JSON.parse(explicitTrubResponse.output) as { display: { report: string } };
+  assert(explicitTrubPayload.display.report.includes('trub loss 1.25 L.'), 'explicit trub loss should override the BrewZilla-style default');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exitCode = 1;

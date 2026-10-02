@@ -89,7 +89,7 @@ function renderModel(model: RecipeDocumentModel): string {
   for (const section of model.sections) body += renderSection(section);
   if (model.notes.length) { body += heading('Note e avvertenze', 1); for (const note of model.notes) body += paragraph(`NOTA  ${note}`, { color: '52606D' }); }
   if (model.alternatives.length) { body += heading('Alternative non selezionate', 1); for (const alternative of model.alternatives) body += paragraph(alternative); }
-  if (model.unmappedFields.length) { body += heading('Campi YAML non mappati', 1); body += paragraph(model.unmappedFields.join(', '), { bold: true, color: '8B2E2E' }); }
+  if (model.unmappedFieldDetails.length) { body += heading('Note aggiuntive', 1); body += table(['CAMPO', 'CONTENUTO'], model.unmappedFieldDetails.map(field => [field.name, field.value]), [3300, 6338]); }
   return body;
 }
 function crc32(data: Buffer): number {

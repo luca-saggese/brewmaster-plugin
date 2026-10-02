@@ -63,6 +63,7 @@ export interface RecipeDocumentModel {
   readonly notes: string[];
   readonly alternatives: string[];
   readonly unmappedFields: string[];
+  readonly unmappedFieldDetails: Array<{ readonly name: string; readonly value: string }>;
 }
 
 export interface RecipeDocumentResult {
@@ -174,7 +175,12 @@ function saltActions(phase: 'water', salts: ParsedRecipe['mash_salts'] | undefin
   });
 }
 
-function nestedUnmappedFields(raw: RecordValue): string[] {
+function displayUnmappedValue(value: unknown): string {
+  if (value !== null && typeof value === 'object') return yaml.dump(value).trim();
+  return String(value);
+}
+
+function collectUnmappedFieldDetails(raw: RecordValue): Array<{ name: string; value: string }> {
   const allowed: Record<string, string[]> = {
     parametri: ['batch_size_litri', 'og', 'fg', 'ibu', 'ebc', 'abv_percent', 'efficienza_percent', 'bollitura_min', 'pre_boil_litri', 'post_boil_litri', 'fermentatore_litri', 'confezionamento_litri', 'carbonazione_vol', 'priming_gl', 'priming_totale_g', 'priming_total_g', 'impianto', 'bu_gu', 'colore', 'corpo', 'volume_fermentatore'],
     mash: ['tipo', 'temperatura_c', 'temperatura_in_c', 'temperatura_strike_c', 'durata_min', 'steps', 'acqua_strike_litri', 'spessore_l_kg', 'ph_target', 'sparge', 'note', 'nota'],
@@ -187,10 +193,13 @@ function nestedUnmappedFields(raw: RecordValue): string[] {
     mash_salts: ['gesso_g', 'gypsum_g', 'gesso', 'cacl2_g', 'cacl2', 'epsom_g', 'epsom', 'nahco3_g', 'nahco3', 'acido_lactico_ml', 'lactic_acid_ml', 'acido_lactico'],
     sparge_salts: ['gesso_g', 'gypsum_g', 'gesso', 'cacl2_g', 'cacl2', 'epsom_g', 'epsom', 'nahco3_g', 'nahco3', 'acido_lactico_ml', 'lactic_acid_ml', 'acido_lactico'],
   };
-  const fields: string[] = [];
+  const handled = new Set(['schema_version', 'nome', 'stile', 'codice_bjcp', 'descrizione', 'note', 'parametri', 'grist', 'luppolatura', 'aggiunte_speciali', 'lievito', 'mash', 'fermentazione', 'bollitura', 'acqua', 'agua', 'sparge', 'sales', 'mash_salts', 'sparge_salts', 'carbonazione', 'spezie', 'zuccheri', 'confezionamento', 'obiettivi_sensoriali', 'vincoli_produzione', 'fonte', 'alternative', 'note_critiche']);
+  const fields: Array<{ name: string; value: string }> = Object.keys(raw)
+    .filter(key => !handled.has(key))
+    .map(key => ({ name: key, value: displayUnmappedValue(raw[key]) }));
   for (const [parent, keys] of Object.entries(allowed)) {
     const value = record(raw[parent]);
-    for (const key of Object.keys(value)) if (!keys.includes(key)) fields.push(`${parent}.${key}`);
+    for (const key of Object.keys(value)) if (!keys.includes(key)) fields.push({ name: `${parent}.${key}`, value: displayUnmappedValue(value[key]) });
   }
   return fields;
 }
@@ -206,6 +215,13 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
   const params = record(raw['parametri']);
   const mashRaw = record(raw['mash']);
   const waterRaw = record(raw['acqua'] ?? raw['agua']);
+  const derivedSpargeWater = recipe.sparge_water_liters === undefined
+    && recipe.total_water_liters !== undefined
+    && recipe.mash_water_liters !== undefined
+    && recipe.total_water_liters >= recipe.mash_water_liters
+    ? recipe.total_water_liters - recipe.mash_water_liters
+    : undefined;
+  const spargeWaterLiters = recipe.sparge_water_liters ?? derivedSpargeWater;
   const boilRaw = record(raw['bollitura']);
   const fermentationRaw = record(raw['fermentazione']);
   const packagingRaw = record(raw['confezionamento']);
@@ -244,7 +260,7 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
   if (Object.keys(waterRaw).length > 0 || recipe.mash_water_liters !== undefined || recipe.sparge_water_liters !== undefined) {
     const water = section('water', 'Preparazione dell\'acqua');
     water.targets.push(...[
-      target('Acqua mash', recipe.mash_water_liters, ' L'), target('Acqua sparge', recipe.sparge_water_liters, ' L'), target('Acqua totale', recipe.total_water_liters, ' L'),
+      target('Acqua mash', recipe.mash_water_liters, ' L'), target('Acqua sparge', spargeWaterLiters, ' L'), target('Acqua totale', recipe.total_water_liters, ' L'),
       target('pH mash target', firstNumber(mashRaw, ['ph_target', 'pH_target']), ''),
       target('Rapporto SO₄:Cl', firstNumber(waterRaw, ['rapporto_so4_cl']), ''),
     ].filter((item): item is TargetValue => item !== undefined));
@@ -262,7 +278,7 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
       water.actions.push({ phase: 'water', order: 15 + index, moment: 'Trattamento acqua mash', action: 'Pesare e aggiungere il sale', ingredient: text(sale['sale']), quantity: quantity(sale['grammi'], 'g') });
     });
     if (recipe.mash_water_liters !== undefined) water.actions.push({ phase: 'water', order: 20, moment: 'Mash-in', action: 'Preparare il volume di acqua mash', quantity: quantity(recipe.mash_water_liters, 'L'), note: 'Per sistemi all-in-one, il volume sotto il cestello appartiene all’acqua mash.' });
-    if (recipe.sparge_water_liters !== undefined) water.actions.push({ phase: 'water', order: 30, moment: 'Sparge', action: 'Preparare il volume di acqua sparge', quantity: quantity(recipe.sparge_water_liters, 'L') });
+    if (spargeWaterLiters !== undefined) water.actions.push({ phase: 'water', order: 30, moment: 'Sparge', action: 'Preparare il volume di acqua sparge', quantity: quantity(spargeWaterLiters, 'L'), note: derivedSpargeWater !== undefined ? 'Derivata come acqua totale meno acqua mash.' : undefined });
     water.measurements.push(measurement('pH mash reale', 'pH'));
     sections.push(water);
   }
@@ -281,14 +297,14 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
     sections.push(mash);
   }
 
-  if (recipe.sparge_water_liters !== undefined || raw['sparge'] !== undefined) {
+  if (spargeWaterLiters !== undefined || raw['sparge'] !== undefined) {
     const sparge = section('sparge', 'Sparge e checkpoint pre-boil');
     const spargeRaw = record(raw['sparge'] ?? mashRaw['sparge']);
     sparge.targets.push(...[
-      target('Acqua sparge', recipe.sparge_water_liters, ' L'), target('Volume pre-boil', recipe.pre_boil_volume_liters, ' L'), target('Densità pre-boil', recipe.pre_boil_og), target('Temperatura sparge', firstNumber(spargeRaw, ['temperatura_c', 'temperature_c']), ' °C'),
+      target('Acqua sparge', spargeWaterLiters, ' L'), target('Volume pre-boil', recipe.pre_boil_volume_liters, ' L'), target('Densità pre-boil', recipe.pre_boil_og), target('Temperatura sparge', firstNumber(spargeRaw, ['temperatura_c', 'temperature_c']), ' °C'),
     ].filter((item): item is TargetValue => item !== undefined));
     if (text(spargeRaw['tipo'])) sparge.notes.push(`Metodo: ${text(spargeRaw['tipo'])}`);
-    sparge.actions.push({ phase: 'sparge', order: 10, moment: 'Sparge', action: text(spargeRaw['procedura']) ?? 'Eseguire lo sparge previsto dalla ricetta', quantity: quantity(recipe.sparge_water_liters, 'L'), temperature: quantity(firstNumber(spargeRaw, ['temperatura_c', 'temperature_c']), '°C') });
+    sparge.actions.push({ phase: 'sparge', order: 10, moment: 'Sparge', action: text(spargeRaw['procedura']) ?? 'Eseguire lo sparge previsto dalla ricetta', quantity: quantity(spargeWaterLiters, 'L'), temperature: quantity(firstNumber(spargeRaw, ['temperatura_c', 'temperature_c']), '°C'), note: derivedSpargeWater !== undefined ? 'Derivata come acqua totale meno acqua mash.' : undefined });
     sparge.measurements.push(measurement('Volume misurato', 'L'), measurement('Densità misurata', 'SG'), measurement('pH reale', 'pH'));
     sections.push(sparge);
   }
@@ -402,8 +418,8 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
   }
 
   const alternatives = Array.isArray(raw['alternative']) ? (raw['alternative'] as RecordValue[]).map(item => [text(item['descrizione']), text(item['cambiamenti']), text(item['impatto'])].filter(Boolean).join(' — ')).filter(Boolean) : [];
-  const handled = new Set(['schema_version', 'nome', 'stile', 'codice_bjcp', 'descrizione', 'note', 'parametri', 'grist', 'luppolatura', 'aggiunte_speciali', 'lievito', 'mash', 'fermentazione', 'bollitura', 'acqua', 'agua', 'sparge', 'sales', 'mash_salts', 'sparge_salts', 'carbonazione', 'spezie', 'zuccheri', 'confezionamento', 'obiettivi_sensoriali', 'vincoli_produzione', 'fonte', 'alternative', 'note_critiche']);
-  const unmappedFields = [...Object.keys(raw).filter(key => !handled.has(key)), ...nestedUnmappedFields(raw)];
+  const unmappedFieldDetails = collectUnmappedFieldDetails(raw);
+  const unmappedFields = unmappedFieldDetails.map(field => field.name);
   return {
     schemaVersion: recipe.schema_version ?? 'unspecified',
     metadata: { name: recipe.recipe_name, style: recipe.beer_style, brewDate: measurement('Data della cotta'), equipment: recipe.impianto, description: recipe.descrizione },
@@ -415,6 +431,7 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
     notes: [recipe.note, ...(Array.isArray(raw['note']) ? raw['note'].filter((item): item is string => typeof item === 'string') : []), ...(Array.isArray(raw['note_critiche']) ? raw['note_critiche'].filter((item): item is string => typeof item === 'string') : [])].filter((item): item is string => Boolean(item)),
     alternatives,
     unmappedFields,
+    unmappedFieldDetails,
   };
 }
 

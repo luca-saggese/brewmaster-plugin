@@ -310,7 +310,7 @@ canonical_example: |
     og_pre_boil: 1.050
     og_post_boil: 1.065
     evaporazione_litri: 5
-    perdita_trub_litri: 2
+    perdita_trub_litri: 0.5
     irish_moss: true
     whirlpool: true
     whirlpool_temp_c: 80

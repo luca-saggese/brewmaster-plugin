@@ -117,7 +117,7 @@ acqua:
   mash_litri: 16
   sparge_litri: 20
   total_litri: 36
-sales:
+  sales:
   gesso_g: 1
 mash_salts:
   gypsum_g: 3.2
@@ -187,8 +187,22 @@ async function main(): Promise<void> {
     assert(existsSync(docx) && readFileSync(docx).subarray(0, 2).toString('hex') === '504b', 'DOCX should be a ZIP package');
     const documentXml = execFileSync('unzip', ['-p', docx, 'word/document.xml']).toString();
     assert(documentXml.includes('Operational Test Ale') && documentXml.includes('52.50 g') && documentXml.includes('80 °C'), 'DOCX XML should contain rendered operational content');
+    const unmappedFixture = join(workDir, 'unmapped-fields.yaml');
+    writeFileSync(unmappedFixture, VALID_RECIPE.replace('  whirlpool_durata_min: 20\n', '  whirlpool_durata_min: 20\n  dettagli_extra:\n    densita: 1.04\n    nota: "controllare colore"\n'), 'utf-8');
+    const unmappedDocx = join(workDir, 'unmapped-fields.docx');
+    await new YamlToDocxTool().resolveExecution({ input_file: unmappedFixture, output_file: unmappedDocx }).execute({ turnId: 5, toolCallId: 'unmapped-fields-docx', signal: new AbortController().signal });
+    const unmappedXml = execFileSync('unzip', ['-p', unmappedDocx, 'word/document.xml']).toString();
+    assert(unmappedXml.includes('bollitura.dettagli_extra') && unmappedXml.includes('densita: 1.04') && unmappedXml.includes('controllare colore'), 'DOCX should render unmapped field names and structured values');
     assert(documentXml.includes('Lampone') && documentXml.includes('1.25 kg') && documentXml.includes('5-7 giorni di contatto'), 'DOCX XML should render the special fruit addition, amount, and contact time');
     assert(documentXml.includes('Acido lattico') && documentXml.includes('1.50 mL') && documentXml.includes('0.60 mL'), 'DOCX XML should render conventional mash and sparge acid fields');
+      const derivedSpargeFixture = join(workDir, 'derived-sparge.yaml');
+      writeFileSync(derivedSpargeFixture, VALID_RECIPE.replace('  sparge_litri: 20\n', ''), 'utf-8');
+      const derivedSpargeModel = buildRecipeDocumentModel(derivedSpargeFixture).model;
+      assert(derivedSpargeModel.sections.find(section => section.phase === 'water')?.targets.some(target => target.label === 'Acqua sparge' && target.value === '20 L'), 'water section should derive sparge volume when only total and mash are declared');
+      const derivedSpargeDocx = join(workDir, 'derived-sparge.docx');
+      await new YamlToDocxTool().resolveExecution({ input_file: derivedSpargeFixture, output_file: derivedSpargeDocx }).execute({ turnId: 4, toolCallId: 'derived-sparge-docx', signal: new AbortController().signal });
+      const derivedSpargeXml = execFileSync('unzip', ['-p', derivedSpargeDocx, 'word/document.xml']).toString();
+      assert(derivedSpargeXml.includes('Acqua sparge') && derivedSpargeXml.includes('20 L'), 'DOCX should render derived sparge volume');
     assert(documentXml.includes('OG pre-boil') && documentXml.includes('OG post-boil') && documentXml.includes('1.050') && documentXml.includes('1.060'), 'DOCX should render both boil gravities');
     assert(documentXml.includes('Volume post-boil') && documentXml.includes('3 L') && documentXml.includes('2 L') && documentXml.includes('Irish Moss') && documentXml.includes('Whirlpool'), 'DOCX should render the additional boil parameters');
     assert(documentXml.includes('FASE') && documentXml.includes('GIORNI') && documentXml.includes('TEMPERATURA') && documentXml.includes('Giorni 4–7') && documentXml.includes('Rampa libera') && documentXml.includes('21–23 °C'), 'DOCX should render the fermentation phase and temperature table');

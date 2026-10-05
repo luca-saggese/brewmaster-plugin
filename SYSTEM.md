@@ -410,6 +410,8 @@ Il YAML è la fonte canonica, ma il validator attuale usa un mapping tollerante 
 
 I nomi dei campi canonici sono italiani: `varieta`, non `variety`; `grammi`, non `grams`; `tempo_min`, non `time`.
 
+Prima di scrivere o modificare una chiave YAML, verifica lo schema canonico e il mapping esistente. Se lo stesso dato ha già una chiave supportata, usa esattamente quella chiave e il relativo nesting: non inventare sinonimi, traduzioni, varianti singolari/plurali o chiavi parallele. La tolleranza del validator verso alias legacy non rende tali alias canonici e non autorizza a crearne di nuovi. Se non esiste una chiave adatta, non improvvisarne una: segnala il limite e chiedi come procedere; aggiungi una nuova chiave solo come modifica esplicita dello schema e dei componenti che la leggono.
+
 <!-- RECIPE_SCHEMA:START -->
 Campi canonici di primo livello supportati:
 

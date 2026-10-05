@@ -99,11 +99,21 @@ class BrewdayPdfRenderer {
     this.doc.font('Helvetica-Oblique').fontSize(11).fillColor(MUTED).text(pdfText(model.metadata.style), MARGIN, this.doc.y + 4, { width: USABLE_W, align: 'center' });
     if (model.metadata.description) this.paragraph(model.metadata.description);
     this.title('A. Scheda iniziale');
-    this.table(['Campo', 'TARGET / dato'], [['Data della cotta', '____________________________'], ['Impianto', model.metadata.equipment ?? ''], ...targetRows(model.summaryTargets), ...targetRows(model.objectives)]);
+    this.table(['Campo', 'TARGET / dato'], [
+      ['Data della cotta', '____________________________'],
+      ['Impianto', model.metadata.equipment ?? ''],
+      ...(model.recipeVersion === undefined ? [] : [['Versione ricetta', String(model.recipeVersion)]]),
+      ...targetRows(model.summaryTargets),
+      ...targetRows(model.objectives),
+    ]);
     for (const note of model.summaryNotes) this.paragraph(`NOTA: ${note}`);
     for (const section of model.sections) this.section(section);
     if (model.notes.length) { this.title('Note informative'); for (const note of model.notes) this.paragraph(`NOTA: ${note}`); }
     if (model.alternatives.length) { this.title('Alternative non selezionate'); for (const alternative of model.alternatives) this.paragraph(alternative); }
+    if (model.changelog.length) {
+      this.title('Cronologia della ricetta');
+      this.table(['VERSIONE', 'DATA', 'MODIFICA'], model.changelog.map(entry => [String(entry.version), entry.date, entry.change]), [75, 85, USABLE_W - 160]);
+    }
     if (model.unmappedFieldDetails.length) { this.title('Note aggiuntive'); this.table(['CAMPO', 'CONTENUTO'], model.unmappedFieldDetails.map(field => [field.name, field.value])); }
     this.doc.font('Helvetica-Oblique').fontSize(7.5).fillColor(MUTED).text('Scheda operativa generata da Maestra Birraia AI', MARGIN, Math.min(this.doc.y + 10, PAGE_H - MARGIN), { width: USABLE_W, align: 'center' });
     this.doc.save(outputPath);

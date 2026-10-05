@@ -250,6 +250,8 @@ function findAllStyles(query: string): BjcpStyle[] {
 
 export interface ParsedRecipe {
   schema_version?: string;
+  versione_ricetta?: number;
+  changelog?: { versione: number; data: string; modifica: string }[];
   recipe_name: string;
   beer_style: string;
   batch_size_liters: number;
@@ -384,11 +386,18 @@ interface RecipeFieldContract {
   };
 }
 
+interface RecipeHistoryContract {
+  version_field: string;
+  changelog_field: string;
+  entry_fields: Record<string, 'positive_integer' | 'iso_date' | 'non_empty_string'>;
+}
+
 const RECIPE_SCHEMA = yaml.load(readFileSync(new URL('./recipe-schema.yaml', import.meta.url), 'utf-8')) as {
   validator: {
     accepted_top_level_fields: string[];
     required_string_fields: string[];
     required_numeric_parameters: Record<string, 'positive' | 'non_negative'>;
+    recipe_history: RecipeHistoryContract;
     numeric_parameter_fields: string[];
     list_fields: string[];
     salt_sections: string[];
@@ -494,6 +503,54 @@ function collectSchemaIssues(data: Record<string, unknown>): Array<{ path: strin
   for (const key of YAML_VALIDATOR_SCHEMA.required_string_fields) {
     if (data[key] !== undefined && typeof data[key] !== 'string') {
       issues.push({ path: key, message: 'Il valore deve essere una stringa.' });
+    }
+  }
+  const historyRules = YAML_VALIDATOR_SCHEMA.recipe_history;
+  const recipeVersion = data[historyRules.version_field];
+  const changelogValue = data[historyRules.changelog_field];
+  if ((recipeVersion === undefined) !== (changelogValue === undefined)) {
+    issues.push({ path: historyRules.version_field, message: 'versione_ricetta e changelog devono essere dichiarati insieme.' });
+  }
+  if (recipeVersion !== undefined && (typeof recipeVersion !== 'number' || !Number.isInteger(recipeVersion) || recipeVersion < 1)) {
+    issues.push({ path: historyRules.version_field, message: 'La versione della ricetta deve essere un intero positivo.' });
+  }
+  if (changelogValue !== undefined && !Array.isArray(changelogValue)) {
+    issues.push({ path: historyRules.changelog_field, message: 'Il changelog deve essere una lista di voci.' });
+  } else if (Array.isArray(changelogValue)) {
+    if (changelogValue.length === 0) issues.push({ path: historyRules.changelog_field, message: 'Il changelog deve contenere almeno una voce.' });
+    let previousVersion = 0;
+    changelogValue.forEach((value, index) => {
+      const path = `${historyRules.changelog_field}[${index}]`;
+      const entry = objectValue(value);
+      if (!entry) {
+        issues.push({ path, message: 'Ogni voce del changelog deve essere un oggetto.' });
+        return;
+      }
+      for (const [field, rule] of Object.entries(historyRules.entry_fields)) {
+        const fieldValue = entry[field];
+        if (rule === 'positive_integer') {
+          if (typeof fieldValue !== 'number' || !Number.isInteger(fieldValue) || fieldValue < 1) issues.push({ path: `${path}.${field}`, message: 'Il valore deve essere un intero positivo.' });
+        } else if (rule === 'non_empty_string') {
+          if (typeof fieldValue !== 'string' || !fieldValue.trim()) issues.push({ path: `${path}.${field}`, message: 'Il valore deve essere una stringa non vuota.' });
+        } else if (rule === 'iso_date') {
+          const validDate = typeof fieldValue === 'string'
+            && /^\d{4}-\d{2}-\d{2}$/.test(fieldValue)
+            && !Number.isNaN(Date.parse(`${fieldValue}T00:00:00.000Z`))
+            && new Date(`${fieldValue}T00:00:00.000Z`).toISOString().slice(0, 10) === fieldValue;
+          if (!validDate) issues.push({ path: `${path}.${field}`, message: 'La data deve essere una data valida nel formato YYYY-MM-DD, tra virgolette.' });
+        }
+      }
+      const version = entry['versione'];
+      if (typeof version === 'number' && Number.isInteger(version) && version > 0) {
+        if ((version as number) <= previousVersion) issues.push({ path: `${path}.versione`, message: 'Le versioni del changelog devono essere in ordine crescente e senza duplicati.' });
+        previousVersion = version as number;
+      }
+    });
+    if (typeof recipeVersion === 'number' && Number.isInteger(recipeVersion) && changelogValue.length > 0) {
+      const latestEntry = objectValue(changelogValue[changelogValue.length - 1]);
+      if (latestEntry && latestEntry['versione'] !== recipeVersion) {
+        issues.push({ path: historyRules.changelog_field, message: 'La versione dell’ultima voce del changelog deve coincidere con versione_ricetta.' });
+      }
     }
   }
   const params = data['parametri'];
@@ -625,6 +682,7 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
     throw new Error(`Schema YAML non valido: ${schemaIssues.map(issue => `${issue.path}: ${issue.message}`).join('; ')}`);
   }
   const params = (d['parametri'] ?? {}) as Record<string, unknown>;
+  const changelog = Array.isArray(d['changelog']) ? d['changelog'] as Array<Record<string, unknown>> : undefined;
 
   // Required fields
   const recipe_name = typeof d['nome'] === 'string' ? d['nome'].trim() : '';
@@ -839,6 +897,12 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
 
   return {
     schema_version: typeof schemaVersion === 'string' ? schemaVersion : undefined,
+    versione_ricetta: typeof d['versione_ricetta'] === 'number' ? d['versione_ricetta'] : undefined,
+    changelog: changelog?.map(entry => ({
+      versione: entry['versione'] as number,
+      data: entry['data'] as string,
+      modifica: entry['modifica'] as string,
+    })),
     recipe_name, beer_style, batch_size_liters, og, fg, ibu,
     ebc: isNaN(ebc as number) ? undefined : ebc,
     abv_percent: isNaN(abv_percent as number) ? undefined : abv_percent,

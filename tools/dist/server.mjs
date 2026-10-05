@@ -11364,6 +11364,73 @@ function collectSchemaIssues(data) {
 		path: key,
 		message: "Il valore deve essere una stringa."
 	});
+	const historyRules = YAML_VALIDATOR_SCHEMA.recipe_history;
+	const recipeVersion = data[historyRules.version_field];
+	const changelogValue = data[historyRules.changelog_field];
+	if (recipeVersion === void 0 !== (changelogValue === void 0)) issues.push({
+		path: historyRules.version_field,
+		message: "versione_ricetta e changelog devono essere dichiarati insieme."
+	});
+	if (recipeVersion !== void 0 && (typeof recipeVersion !== "number" || !Number.isInteger(recipeVersion) || recipeVersion < 1)) issues.push({
+		path: historyRules.version_field,
+		message: "La versione della ricetta deve essere un intero positivo."
+	});
+	if (changelogValue !== void 0 && !Array.isArray(changelogValue)) issues.push({
+		path: historyRules.changelog_field,
+		message: "Il changelog deve essere una lista di voci."
+	});
+	else if (Array.isArray(changelogValue)) {
+		if (changelogValue.length === 0) issues.push({
+			path: historyRules.changelog_field,
+			message: "Il changelog deve contenere almeno una voce."
+		});
+		let previousVersion = 0;
+		changelogValue.forEach((value, index) => {
+			const path = `${historyRules.changelog_field}[${index}]`;
+			const entry = objectValue(value);
+			if (!entry) {
+				issues.push({
+					path,
+					message: "Ogni voce del changelog deve essere un oggetto."
+				});
+				return;
+			}
+			for (const [field, rule] of Object.entries(historyRules.entry_fields)) {
+				const fieldValue = entry[field];
+				if (rule === "positive_integer") {
+					if (typeof fieldValue !== "number" || !Number.isInteger(fieldValue) || fieldValue < 1) issues.push({
+						path: `${path}.${field}`,
+						message: "Il valore deve essere un intero positivo."
+					});
+				} else if (rule === "non_empty_string") {
+					if (typeof fieldValue !== "string" || !fieldValue.trim()) issues.push({
+						path: `${path}.${field}`,
+						message: "Il valore deve essere una stringa non vuota."
+					});
+				} else if (rule === "iso_date") {
+					if (!(typeof fieldValue === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fieldValue) && !Number.isNaN(Date.parse(`${fieldValue}T00:00:00.000Z`)) && (/* @__PURE__ */ new Date(`${fieldValue}T00:00:00.000Z`)).toISOString().slice(0, 10) === fieldValue)) issues.push({
+						path: `${path}.${field}`,
+						message: "La data deve essere una data valida nel formato YYYY-MM-DD, tra virgolette."
+					});
+				}
+			}
+			const version = entry["versione"];
+			if (typeof version === "number" && Number.isInteger(version) && version > 0) {
+				if (version <= previousVersion) issues.push({
+					path: `${path}.versione`,
+					message: "Le versioni del changelog devono essere in ordine crescente e senza duplicati."
+				});
+				previousVersion = version;
+			}
+		});
+		if (typeof recipeVersion === "number" && Number.isInteger(recipeVersion) && changelogValue.length > 0) {
+			const latestEntry = objectValue(changelogValue[changelogValue.length - 1]);
+			if (latestEntry && latestEntry["versione"] !== recipeVersion) issues.push({
+				path: historyRules.changelog_field,
+				message: "La versione dell’ultima voce del changelog deve coincidere con versione_ricetta."
+			});
+		}
+	}
 	const params = data["parametri"];
 	if (params !== void 0 && (typeof params !== "object" || params === null || Array.isArray(params))) issues.push({
 		path: "parametri",
@@ -11492,6 +11559,7 @@ function parseYamlRecipe(filePath) {
 	});
 	if (schemaIssues.length > 0) throw new Error(`Schema YAML non valido: ${schemaIssues.map((issue) => `${issue.path}: ${issue.message}`).join("; ")}`);
 	const params = d["parametri"] ?? {};
+	const changelog = Array.isArray(d["changelog"]) ? d["changelog"] : void 0;
 	const recipe_name = typeof d["nome"] === "string" ? d["nome"].trim() : "";
 	const beer_style = typeof d["stile"] === "string" ? d["stile"].trim() : "";
 	const batch_size_liters = Number(params["batch_size_litri"]);
@@ -11730,6 +11798,12 @@ function parseYamlRecipe(filePath) {
 	if (missing.length > 0) throw new Error(`Campi obbligatori mancanti o non validi: ${missing.join(", ")}`);
 	return {
 		schema_version: typeof schemaVersion === "string" ? schemaVersion : void 0,
+		versione_ricetta: typeof d["versione_ricetta"] === "number" ? d["versione_ricetta"] : void 0,
+		changelog: changelog?.map((entry) => ({
+			versione: entry["versione"],
+			data: entry["data"],
+			modifica: entry["modifica"]
+		})),
 		recipe_name,
 		beer_style,
 		batch_size_liters,
@@ -14320,6 +14394,12 @@ function buildModel(recipe, raw) {
 	const unmappedFields = unmappedFieldDetails.map((field) => field.name);
 	return {
 		schemaVersion: recipe.schema_version ?? "unspecified",
+		recipeVersion: recipe.versione_ricetta,
+		changelog: (recipe.changelog ?? []).map((entry) => ({
+			version: entry.versione,
+			date: entry.data,
+			change: entry.modifica
+		})),
 		metadata: {
 			name: recipe.recipe_name,
 			style: recipe.beer_style,
@@ -14579,6 +14659,7 @@ function renderModel(model) {
 	body += table(["CAMPO", "VALORE"], [
 		["Data della cotta", "____________________________"],
 		["Impianto", model.metadata.equipment ?? ""],
+		...model.recipeVersion === void 0 ? [] : [["Versione ricetta", String(model.recipeVersion)]],
 		...targetRows$1(model.summaryTargets)
 	], [3300, 6338]);
 	if (model.metadata.description) body += paragraph(model.metadata.description, {
@@ -14596,6 +14677,22 @@ function renderModel(model) {
 	if (model.alternatives.length) {
 		body += heading("Alternative non selezionate", 1);
 		for (const alternative of model.alternatives) body += paragraph(alternative);
+	}
+	if (model.changelog.length) {
+		body += heading("Cronologia della ricetta", 1);
+		body += table([
+			"VERSIONE",
+			"DATA",
+			"MODIFICA"
+		], model.changelog.map((entry) => [
+			String(entry.version),
+			entry.date,
+			entry.change
+		]), [
+			1400,
+			1800,
+			6438
+		]);
 	}
 	if (model.unmappedFieldDetails.length) {
 		body += heading("Note aggiuntive", 1);
@@ -15201,6 +15298,7 @@ var BrewdayPdfRenderer = class {
 		this.table(["Campo", "TARGET / dato"], [
 			["Data della cotta", "____________________________"],
 			["Impianto", model.metadata.equipment ?? ""],
+			...model.recipeVersion === void 0 ? [] : [["Versione ricetta", String(model.recipeVersion)]],
 			...targetRows(model.summaryTargets),
 			...targetRows(model.objectives)
 		]);
@@ -15213,6 +15311,22 @@ var BrewdayPdfRenderer = class {
 		if (model.alternatives.length) {
 			this.title("Alternative non selezionate");
 			for (const alternative of model.alternatives) this.paragraph(alternative);
+		}
+		if (model.changelog.length) {
+			this.title("Cronologia della ricetta");
+			this.table([
+				"VERSIONE",
+				"DATA",
+				"MODIFICA"
+			], model.changelog.map((entry) => [
+				String(entry.version),
+				entry.date,
+				entry.change
+			]), [
+				75,
+				85,
+				351
+			]);
 		}
 		if (model.unmappedFieldDetails.length) {
 			this.title("Note aggiuntive");

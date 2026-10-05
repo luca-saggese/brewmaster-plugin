@@ -82,7 +82,12 @@ function renderModel(model: RecipeDocumentModel): string {
   let body = paragraph(model.metadata.name, { bold: true, color: PRIMARY, size: 36, align: 'center', keepNext: true, before: 100, after: 40 });
   body += paragraph(model.metadata.style, { italic: true, color: '52606D', size: 22, align: 'center', keepNext: true, after: 180 });
   body += heading('A. Riepilogo operativo', 1);
-  body += table(['CAMPO', 'VALORE'], [['Data della cotta', '____________________________'], ['Impianto', model.metadata.equipment ?? ''], ...targetRows(model.summaryTargets)], [3300, 6338]);
+  body += table(['CAMPO', 'VALORE'], [
+    ['Data della cotta', '____________________________'],
+    ['Impianto', model.metadata.equipment ?? ''],
+    ...(model.recipeVersion === undefined ? [] : [['Versione ricetta', String(model.recipeVersion)]]),
+    ...targetRows(model.summaryTargets),
+  ], [3300, 6338]);
   if (model.metadata.description) body += paragraph(model.metadata.description, { size: 19, after: 120 });
   for (const note of model.summaryNotes) body += paragraph(`NOTA  ${note}`, { color: '52606D' });
   if (model.objectives.length) body += table(['OBIETTIVO PRODUTTIVO', 'DESCRIZIONE'], targetRows(model.objectives), [3300, 6338]);
@@ -90,6 +95,10 @@ function renderModel(model: RecipeDocumentModel): string {
   for (const section of model.sections) body += renderSection(section);
   if (model.notes.length) { body += heading('Note e avvertenze', 1); for (const note of model.notes) body += paragraph(`NOTA  ${note}`, { color: '52606D' }); }
   if (model.alternatives.length) { body += heading('Alternative non selezionate', 1); for (const alternative of model.alternatives) body += paragraph(alternative); }
+  if (model.changelog.length) {
+    body += heading('Cronologia della ricetta', 1);
+    body += table(['VERSIONE', 'DATA', 'MODIFICA'], model.changelog.map(entry => [String(entry.version), entry.date, entry.change]), [1400, 1800, 6438]);
+  }
   if (model.unmappedFieldDetails.length) { body += heading('Note aggiuntive', 1); body += table(['CAMPO', 'CONTENUTO'], model.unmappedFieldDetails.map(field => [field.name, field.value]), [3300, 6338]); }
   return body;
 }

@@ -24,6 +24,11 @@ const requiredStrings = schema.validator.required_string_fields.map(field => `\`
 const requiredNumbers = Object.entries(schema.validator.required_numeric_parameters)
   .map(([field, rule]) => `\`parametri.${field}\` ${rule === 'positive' ? '> 0' : '>= 0'}`)
   .join(', ');
+const historyRules = schema.validator.recipe_history;
+const historyRequirements = [
+  `- \`${historyRules.version_field}\`: optional positive integer; required together with \`${historyRules.changelog_field}\``,
+  `- \`${historyRules.changelog_field}\`: optional non-empty list; entries have strictly increasing \`versione\`, quoted ISO date \`data\`, and non-empty \`modifica\`; latest entry must match \`${historyRules.version_field}\``,
+];
 const recipeFieldRules = schema.validator.recipe_fields;
 const boilRequirements = Object.entries(recipeFieldRules.bollitura).map(([field, rule]) => {
   if (rule.required) return `- \`bollitura.${field}\`: required`;
@@ -43,6 +48,9 @@ const generated = [
   fields,
   '',
   `Il parser del validator richiede stringhe non vuote per ${requiredStrings} e valori numerici validi per ${requiredNumbers}. Accetta inoltre questi campi di primo livello: ${acceptedFields}. schema_version è facoltativo e supportato per compatibilità.`,
+  '',
+  'Metadati di revisione della ricetta:',
+  ...historyRequirements,
   '',
   'Requisiti di completezza per bollitura e fermentazione (sincronizzati da `validator.recipe_fields`):',
   '',

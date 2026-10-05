@@ -50,6 +50,8 @@ export interface OperationalSection {
 
 export interface RecipeDocumentModel {
   readonly schemaVersion: string;
+  readonly recipeVersion?: number;
+  readonly changelog: Array<{ readonly version: number; readonly date: string; readonly change: string }>;
   readonly metadata: {
     readonly name: string;
     readonly style: string;
@@ -428,6 +430,8 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
   const unmappedFields = unmappedFieldDetails.map(field => field.name);
   return {
     schemaVersion: recipe.schema_version ?? 'unspecified',
+    recipeVersion: recipe.versione_ricetta,
+    changelog: (recipe.changelog ?? []).map(entry => ({ version: entry.versione, date: entry.data, change: entry.modifica })),
     metadata: { name: recipe.recipe_name, style: recipe.beer_style, brewDate: measurement('Data della cotta'), equipment: recipe.impianto, description: recipe.descrizione },
     objectives: parseObjectives(raw),
     summaryTargets: [

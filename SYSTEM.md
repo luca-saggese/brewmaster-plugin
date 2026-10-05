@@ -415,6 +415,8 @@ Prima di scrivere o modificare una chiave YAML, verifica lo schema canonico e il
 <!-- RECIPE_SCHEMA:START -->
 Campi canonici di primo livello supportati:
 
+- `versione_ricetta`
+- `changelog`
 - `nome`
 - `stile`
 - `descrizione`
@@ -433,7 +435,11 @@ Campi canonici di primo livello supportati:
 - `note_critiche`
 - `alternative`
 
-Il parser del validator richiede stringhe non vuote per `nome`, `stile` e valori numerici validi per `parametri.batch_size_litri` > 0, `parametri.og` > 0, `parametri.fg` > 0, `parametri.ibu` >= 0. Accetta inoltre questi campi di primo livello: `schema_version`, `nome`, `stile`, `codice_bjcp`, `descrizione`, `note`, `parametri`, `grist`, `luppolatura`, `aggiunte_speciali`, `lievito`, `mash`, `fermentazione`, `bollitura`, `acqua`, `agua`, `sparge`, `sales`, `mash_salts`, `sparge_salts`, `carbonazione`, `spezie`, `zuccheri`, `confezionamento`, `obiettivi_sensoriali`, `vincoli_produzione`, `fonte`, `note_critiche`, `alternative`. schema_version è facoltativo e supportato per compatibilità.
+Il parser del validator richiede stringhe non vuote per `nome`, `stile` e valori numerici validi per `parametri.batch_size_litri` > 0, `parametri.og` > 0, `parametri.fg` > 0, `parametri.ibu` >= 0. Accetta inoltre questi campi di primo livello: `schema_version`, `versione_ricetta`, `changelog`, `nome`, `stile`, `codice_bjcp`, `descrizione`, `note`, `parametri`, `grist`, `luppolatura`, `aggiunte_speciali`, `lievito`, `mash`, `fermentazione`, `bollitura`, `acqua`, `agua`, `sparge`, `sales`, `mash_salts`, `sparge_salts`, `carbonazione`, `spezie`, `zuccheri`, `confezionamento`, `obiettivi_sensoriali`, `vincoli_produzione`, `fonte`, `note_critiche`, `alternative`. schema_version è facoltativo e supportato per compatibilità.
+
+Metadati di revisione della ricetta:
+- `versione_ricetta`: optional positive integer; required together with `changelog`
+- `changelog`: optional non-empty list; entries have strictly increasing `versione`, quoted ISO date `data`, and non-empty `modifica`; latest entry must match `versione_ricetta`
 
 Requisiti di completezza per bollitura e fermentazione (sincronizzati da `validator.recipe_fields`):
 
@@ -461,6 +467,12 @@ Requisiti di completezza per bollitura e fermentazione (sincronizzati da `valida
 Schema base obbligatorio:
 
 ```yaml
+versione_ricetta: 1
+changelog:
+  - versione: 1
+    data: "2026-10-05"
+    modifica: "Versione iniziale della ricetta"
+
 nome: "Nome della ricetta"
 stile: "BJCP 21A — American IPA"
 descrizione: |

@@ -210,6 +210,19 @@ async function main(): Promise<void> {
     const canonicalExampleReport = JSON.parse(canonicalExampleRes.output) as { errors: Array<{ message: string }> };
     assert(!canonicalExampleReport.errors.some(error => error.message.includes('incompleti') || error.message.includes('bollitura.') || error.message.includes('fermentazione.steps')), 'canonical schema example should satisfy required boil and fermentation fields');
 
+    const versionedRecipePath = join(dir, 'versioned-recipe.yaml');
+    const versionedRecipe = `versione_ricetta: 2\nchangelog:\n  - versione: 1\n    data: "2026-09-30"\n    modifica: "Prima revisione"\n  - versione: 2\n    data: "2026-10-05"\n    modifica: "Aggiornati i parametri di fermentazione"\n\n${VALID_RECIPE}`;
+    writeFileSync(versionedRecipePath, versionedRecipe, 'utf-8');
+    const versionedRes = await tool.resolveExecution({ input_file: versionedRecipePath }).execute({ turnId: 0, toolCallId: 'test-recipe-history', signal: new AbortController().signal });
+    const versionedReport = JSON.parse(versionedRes.output) as { errors: Array<{ path: string }>; normalized_recipe: { versione_ricetta?: number; changelog?: Array<{ versione: number; data: string; modifica: string }> } };
+    assert(versionedReport.normalized_recipe.versione_ricetta === 2 && versionedReport.normalized_recipe.changelog?.[1]?.modifica === 'Aggiornati i parametri di fermentazione', 'validator should preserve recipe revision metadata in normalized_recipe');
+    assert(versionedReport.errors.length === 0, 'valid recipe version history should not produce errors');
+
+    const invalidVersionHistoryPath = join(dir, 'invalid-version-history.yaml');
+    writeFileSync(invalidVersionHistoryPath, versionedRecipe.replace('2026-10-05', '2026-02-30'), 'utf-8');
+    const invalidVersionHistoryRes = await tool.resolveExecution({ input_file: invalidVersionHistoryPath }).execute({ turnId: 0, toolCallId: 'test-invalid-recipe-history', signal: new AbortController().signal });
+    assert(invalidVersionHistoryRes.isError && invalidVersionHistoryRes.output.includes('changelog[1].data'), 'validator should reject invalid ISO calendar dates and identify the changelog entry');
+
     // 1. Valid recipe → success result, no critical issues
     const validPath = join(dir, 'valid.yaml');
     writeFileSync(validPath, VALID_RECIPE, 'utf-8');
@@ -307,7 +320,7 @@ async function main(): Promise<void> {
     assert(unknownFieldRes.isError, 'unknown top-level field should return isError');
     assertIncludes(
       unknownFieldRes.output,
-      'Campo non riconosciuto. Campi validi: schema_version, nome, stile, codice_bjcp, descrizione, note, parametri, grist, luppolatura, aggiunte_speciali, lievito, mash, fermentazione, bollitura, acqua, agua, sparge, sales, mash_salts, sparge_salts, carbonazione, spezie, zuccheri, confezionamento, obiettivi_sensoriali, vincoli_produzione, fonte, note_critiche, alternative.',
+      'Campo non riconosciuto. Campi validi: schema_version, versione_ricetta, changelog, nome, stile, codice_bjcp, descrizione, note, parametri, grist, luppolatura, aggiunte_speciali, lievito, mash, fermentazione, bollitura, acqua, agua, sparge, sales, mash_salts, sparge_salts, carbonazione, spezie, zuccheri, confezionamento, obiettivi_sensoriali, vincoli_produzione, fonte, note_critiche, alternative.',
       'unknown field error should include all accepted top-level fields',
     );
 

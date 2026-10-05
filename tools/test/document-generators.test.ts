@@ -235,6 +235,19 @@ async function main(): Promise<void> {
     assert(sectionNotesXml.indexOf('Nota parametri') < sectionNotesXml.lastIndexOf('Preparazione degli ingredienti')
       && sectionNotesXml.indexOf('Nota acqua') < sectionNotesXml.lastIndexOf('Mash-in e ammostamento')
       && sectionNotesXml.indexOf('Nota bollitura') < sectionNotesXml.lastIndexOf('Post-boil e whirlpool'), 'DOCX should place summary, water, and boil notes at the end of their related content');
+    const versionedFixture = join(workDir, 'versioned-recipe.yaml');
+    const versionedYaml = `versione_ricetta: 2\nchangelog:\n  - versione: 1\n    data: "2026-09-30"\n    modifica: "Prima revisione"\n  - versione: 2\n    data: "2026-10-05"\n    modifica: "Aggiornati i parametri di fermentazione"\n\n${VALID_RECIPE}`;
+    writeFileSync(versionedFixture, versionedYaml, 'utf-8');
+    const versionedModel = buildRecipeDocumentModel(versionedFixture).model;
+    assert(versionedModel.recipeVersion === 2 && versionedModel.changelog.length === 2, 'document model should preserve the current recipe version and changelog');
+    const versionedDocx = join(workDir, 'versioned-recipe.docx');
+    const versionedPdf = join(workDir, 'versioned-recipe.pdf');
+    await new YamlToDocxTool().resolveExecution({ input_file: versionedFixture, output_file: versionedDocx }).execute({ turnId: 7, toolCallId: 'versioned-docx', signal: new AbortController().signal });
+    await new YamlToPdfTool().resolveExecution({ input_file: versionedFixture, output_file: versionedPdf }).execute({ turnId: 7, toolCallId: 'versioned-pdf', signal: new AbortController().signal });
+    const versionedXml = execFileSync('unzip', ['-p', versionedDocx, 'word/document.xml']).toString();
+    const versionedPdfText = execFileSync('strings', [versionedPdf]).toString('latin1');
+    assert(['Versione ricetta', 'Cronologia della ricetta', 'Aggiornati i parametri di fermentazione'].every(value => versionedXml.includes(value)), 'DOCX should render the current recipe version and changelog');
+    assert(['Versione ricetta', 'Cronologia della ricetta', 'Aggiornati i parametri di fermentazione'].every(value => versionedPdfText.includes(value)), 'PDF should render the current recipe version and changelog');
     assert(documentXml.includes('Lampone') && documentXml.includes('1.25 kg') && documentXml.includes('5-7 giorni di contatto'), 'DOCX XML should render the special fruit addition, amount, and contact time');
     assert(documentXml.includes('Acido lattico') && documentXml.includes('1.50 mL') && documentXml.includes('0.60 mL'), 'DOCX XML should render conventional mash and sparge acid fields');
       const derivedSpargeFixture = join(workDir, 'derived-sparge.yaml');

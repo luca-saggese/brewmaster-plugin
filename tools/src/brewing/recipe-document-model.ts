@@ -184,11 +184,11 @@ function displayUnmappedValue(value: unknown): string {
 function collectUnmappedFieldDetails(raw: RecordValue): Array<{ name: string; value: string }> {
   const allowed: Record<string, string[]> = {
     parametri: ['batch_size_litri', 'og', 'fg', 'ibu', 'ebc', 'abv_percent', 'efficienza_percent', 'bollitura_min', 'pre_boil_litri', 'post_boil_litri', 'fermentatore_litri', 'confezionamento_litri', 'carbonazione_vol', 'priming_gl', 'priming_totale_g', 'priming_total_g', 'impianto', 'bu_gu', 'colore', 'corpo', 'volume_fermentatore', 'note', 'nota'],
-    mash: ['tipo', 'temperatura_c', 'temperatura_in_c', 'temperatura_strike_c', 'durata_min', 'steps', 'acqua_strike_litri', 'spessore_l_kg', 'ph_target', 'sparge', 'note', 'nota'],
+    mash: ['tipo', 'temperatura_c', 'temperatura_in_c', 'temperatura_strike_c', 'durata_min', 'step', 'steps', 'acqua_strike_litri', 'spessore_l_kg', 'ph_target', 'sparge', 'note', 'nota'],
     bollitura: ['durata_min', 'volume_pre_boil_litri', 'volume_post_boil_litri', 'evaporazione_litri', 'perdita_evaporazione_litri', 'perdita_trub_litri', 'og_pre_boil', 'og_post_boil', 'irish_moss', 'whirlpool', 'whirlpool_temperatura_c', 'whirlpool_temp_c', 'whirlpool_durata_min', 'hop_stand_temperatura_c', 'aggiunte_bollitura', 'note', 'nota'],
     fermentazione: ['temperatura_c', 'temperatura_controllo', 'primaria_giorni', 'madurazione_giorni', 'cold_crash', 'cold_crash_giorni', 'cold_crash_temp_c', 'dry_hop_giorno', 'steps', 'note', 'nota'],
     carbonazione: ['metodo', 'zucchero_tipo', 'zucchero_grammi', 'zucchero_g_per_litro', 'co2_volumi', 'temperatura_servizio_c', 'tipo_botella', 'priming_gl', 'priming_totale_g', 'priming_total_g', 'zucchero_totale_g', 'preparazione', 'note', 'nota'],
-    lievito: ['ceppo', 'forma', 'quantita_ml', 'quantita_g', 'quantita', 'attenuazione_percent', 'laboratorio', 'temp_min_c', 'temp_max_c', 'temperatura_inoculo_c', 'temp_inoculo_c', 'temperatura_fermentazione', 'durata_primaria_giorni', 'note'],
+    lievito: ['ceppo', 'forma', 'quantita_ml', 'quantita_g', 'quantita_bustine', 'quantita', 'attenuazione_percent', 'laboratorio', 'temp_min_c', 'temp_max_c', 'temperatura_inoculo_c', 'temp_inoculo_c', 'temperatura_fermentazione', 'durata_primaria_giorni', 'note'],
     acqua: ['fonte', 'profilo_originale', 'sales', 'mash_litri', 'mash_agua_litri', 'strike_litri', 'sparge_litri', 'sparge_agua_litri', 'total_litri', 'total_agua_litri', 'ca', 'mg', 'na', 'cl', 'so4', 'hco3', 'ca_mg_l', 'mg_mg_l', 'na_mg_l', 'cl_mg_l', 'so4_mg_l', 'hco3_mg_l', 'rapporto_so4_cl', 'ph_target', 'note', 'nota'],
     sparge: ['sparge_litri', 'volumen_litri', 'litri', 'temperatura_c', 'temperature_c', 'procedura'],
     mash_salts: ['gesso_g', 'gypsum_g', 'gesso', 'cacl2_g', 'cacl2', 'epsom_g', 'epsom', 'nahco3_g', 'nahco3', 'acido_lactico_ml', 'lactic_acid_ml', 'acido_lactico'],
@@ -290,8 +290,9 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
       target('Temperatura mash-in', recipe.mash_in_temp_c, ' °C'), target('Temperatura mash', recipe.mash_temp_c, ' °C'), target('Volume acqua mash', recipe.mash_water_liters, ' L'),
       target('Spessore mash', firstNumber(mashRaw, ['spessore_l_kg']), ' L/kg'),
     ].filter((item): item is TargetValue => item !== undefined));
-    const steps = Array.isArray(mashRaw['steps']) ? mashRaw['steps'] as RecordValue[] : [];
-    if (steps.length > 0) steps.forEach((step, index) => mash.actions.push({ phase: 'mash', order: 20 + index, moment: `Step ${index + 1}`, action: 'Mantenere il mash', temperature: quantity(step['temperatura_c'], '°C'), duration: quantity(step['tempo_min'], 'min'), note: text(step['note']) }));
+    const rawSteps = mashRaw['steps'] ?? mashRaw['step'];
+    const steps = Array.isArray(rawSteps) ? rawSteps as RecordValue[] : [];
+    if (steps.length > 0) steps.forEach((step, index) => mash.actions.push({ phase: 'mash', order: 20 + index, moment: `Step ${index + 1}`, action: 'Mantenere il mash', temperature: quantity(step['temperatura_c'], '°C'), duration: quantity(step['tempo_min'] ?? step['durata_min'], 'min'), note: text(step['note']) }));
     else if (recipe.mash_temp_c !== undefined && firstNumber(mashRaw, ['durata_min']) !== undefined) mash.actions.push({ phase: 'mash', order: 20, moment: 'Mash', action: 'Mantenere il mash', temperature: quantity(recipe.mash_temp_c, '°C'), duration: quantity(firstNumber(mashRaw, ['durata_min']), 'min'), note: recipe.mash_temp_c ? text(mashRaw['note']) : undefined });
     mash.measurements.push(measurement('pH mash reale', 'pH'));
     if (text(mashRaw['tipo']) || text(mashRaw['note']) || text(mashRaw['nota'])) mash.notes.push(...[text(mashRaw['tipo']) ? `Metodo: ${text(mashRaw['tipo'])}` : undefined, text(mashRaw['note']) ?? text(mashRaw['nota'])].filter((item): item is string => Boolean(item)));
@@ -355,8 +356,11 @@ function buildModel(recipe: ParsedRecipe, raw: RecordValue): RecipeDocumentModel
       cooling.actions.push({ phase: 'cooling', order: 10, moment: 'Raffreddamento', action: 'Definire la temperatura target di inoculo prima di raffreddare' });
       cooling.warnings.push('Temperatura target di inoculo non dichiarata: completare il dato prima della cotta.');
     }
-    const yeastQuantity = firstNumber(yeastRaw, ['quantita_ml', 'quantita_g', 'quantita']);
-    if (recipe.yeast.strain) cooling.actions.push({ phase: 'cooling', order: 20, moment: 'Inoculo', action: 'Inoculare il lievito', ingredient: recipe.yeast.strain, quantity: quantity(yeastQuantity, yeastRaw['forma']?.toString().toLowerCase().includes('slurry') ? 'mL' : 'g'), note: [text(yeastRaw['forma']), yeastQuantity === undefined ? 'Quantità da determinare; non presumere un dosaggio.' : undefined].filter(Boolean).join(' — ') || undefined });
+    const yeastQuantity = firstNumber(yeastRaw, ['quantita_ml', 'quantita_g', 'quantita_bustine', 'quantita']);
+    const yeastQuantityUnit = yeastRaw['quantita_bustine'] !== undefined
+      ? yeastQuantity === 1 ? 'bustina' : 'bustine'
+      : yeastRaw['forma']?.toString().toLowerCase().includes('slurry') ? 'mL' : 'g';
+    if (recipe.yeast.strain) cooling.actions.push({ phase: 'cooling', order: 20, moment: 'Inoculo', action: 'Inoculare il lievito', ingredient: recipe.yeast.strain, quantity: quantity(yeastQuantity, yeastQuantityUnit), note: [text(yeastRaw['forma']), yeastQuantity === undefined ? 'Quantità da determinare; non presumere un dosaggio.' : undefined].filter(Boolean).join(' — ') || undefined });
     cooling.measurements.push(measurement('Volume effettivo nel fermentatore', 'L'), measurement('OG effettiva', 'SG'), measurement('Temperatura di inoculo', '°C'), measurement('Ora inoculo'));
     sections.push(cooling);
   }

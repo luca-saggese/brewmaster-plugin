@@ -150,6 +150,28 @@ async function main(): Promise<void> {
     const validation = validateYamlFile(validFixture);
     assert(validation.validation_status === 'incomplete', 'fixture without calculator results should be incomplete, not valid');
     const validModel = buildRecipeDocumentModel(validFixture).model;
+    const compatibilityFixture = join(workDir, 'step-aliases.yaml');
+    const compatibilityYaml = VALID_RECIPE
+      .replace('  steps:\n    - temperatura_c: 64\n      tempo_min: 30\n    - temperatura_c: 68\n      tempo_min: 30\n', '  step:\n    - temperatura_c: 52\n      durata_min: 15\n      note: "Protein rest"\n    - temperatura_c: 67\n      durata_min: 60\n      note: "Saccarificazione"\n')
+      .replace('  ceppo: "US-05"\n', '  ceppo: "US-05"\n  quantita_bustine: 1\n')
+      .replace('  whirlpool_durata_min: 20\n', '  whirlpool_durata_min: 20\n  note: "Nota bollitura"\n')
+      .replace('  total_litri: 36\n', '  total_litri: 36\n  note: "Nota acqua"\n')
+      .replace('  gesso_g: 1\n', '');
+    writeFileSync(compatibilityFixture, compatibilityYaml, 'utf-8');
+    const compatibilityModel = buildRecipeDocumentModel(compatibilityFixture).model;
+    const compatibilityMash = compatibilityModel.sections.find(section => section.phase === 'mash');
+    assert(compatibilityMash?.actions.length === 2, 'singular mash.step should render every mash step');
+    assert(compatibilityMash?.actions[0].temperature === '52 °C' && compatibilityMash.actions[0].duration === '15 min' && compatibilityMash.actions[0].note === 'Protein rest', 'mash step should map temperature, durata_min, and note');
+    assert(compatibilityMash?.actions[1].temperature === '67 °C' && compatibilityMash.actions[1].duration === '60 min', 'second mash step should preserve its temperature and duration');
+    assert(!compatibilityModel.unmappedFields.some(field => ['mash.step', 'lievito.quantita_bustine', 'bollitura.note', 'acqua.note'].includes(field)), 'example fields should not be reported as unmapped');
+    const compatibilityCooling = compatibilityModel.sections.find(section => section.phase === 'cooling');
+    assert(compatibilityCooling?.actions.some(action => action.ingredient === 'US-05' && action.quantity === '1 bustina'), 'yeast quantity should render as one packet');
+    const compatibilityDocx = join(workDir, 'step-aliases.docx');
+    const compatibilityResult = await new YamlToDocxTool().resolveExecution({ input_file: compatibilityFixture, output_file: compatibilityDocx }).execute({ turnId: 7, toolCallId: 'step-aliases-docx', signal: new AbortController().signal });
+    const compatibilityPayload = JSON.parse(compatibilityResult.output) as { unmapped_fields: string[] };
+    const compatibilityXml = execFileSync('unzip', ['-p', compatibilityDocx, 'word/document.xml']).toString();
+    assert(compatibilityPayload.unmapped_fields.length === 0, `DOCX response should not report supported fields as unmapped: ${compatibilityPayload.unmapped_fields.join(', ')}`);
+    assert(['Step 1', '52 °C', '15 min', 'Protein rest', 'Step 2', '67 °C', '60 min', '1 bustina', 'Nota acqua', 'Nota bollitura'].every(value => compatibilityXml.includes(value)), 'DOCX should render mash steps, yeast packet count, and section notes');
     const fruitAction = validModel.sections.find(section => section.phase === 'fermentation')?.actions.find(action => action.ingredient === 'Lampone');
     assert(fruitAction?.quantity === '1.25 kg' && fruitAction.duration === '5-7 giorni di contatto', 'special fruit should appear in fermentation timeline with quantity and contact time');
     const packaging = validModel.sections.find(section => section.phase === 'packaging');

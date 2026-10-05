@@ -704,9 +704,10 @@ export function parseYamlRecipe(filePath: string): ParsedRecipe {
   const mash = (d['mash'] ?? {}) as Record<string, unknown>;
   const mash_temp_c = mash['temperatura_c'] != null
     ? Number(mash['temperatura_c']) : undefined;
-  const mash_steps = Array.isArray(mash['steps']) ? (mash['steps'] as Array<Record<string, unknown>>).map(s => ({
+  const rawMashSteps = mash['steps'] ?? mash['step'];
+  const mash_steps = Array.isArray(rawMashSteps) ? (rawMashSteps as Array<Record<string, unknown>>).map(s => ({
     temperature_c: Number(s['temperatura_c'] ?? 0),
-    time_minutes: Number(s['tempo_min'] ?? 0),
+    time_minutes: Number(s['tempo_min'] ?? s['durata_min'] ?? 0),
     note: typeof s['note'] === 'string' ? s['note'] : undefined,
   })) : undefined;
 

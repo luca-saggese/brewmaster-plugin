@@ -11578,9 +11578,10 @@ function parseYamlRecipe(filePath) {
 	};
 	const mash = d["mash"] ?? {};
 	const mash_temp_c = mash["temperatura_c"] != null ? Number(mash["temperatura_c"]) : void 0;
-	const mash_steps = Array.isArray(mash["steps"]) ? mash["steps"].map((s) => ({
+	const rawMashSteps = mash["steps"] ?? mash["step"];
+	const mash_steps = Array.isArray(rawMashSteps) ? rawMashSteps.map((s) => ({
 		temperature_c: Number(s["temperatura_c"] ?? 0),
-		time_minutes: Number(s["tempo_min"] ?? 0),
+		time_minutes: Number(s["tempo_min"] ?? s["durata_min"] ?? 0),
 		note: typeof s["note"] === "string" ? s["note"] : void 0
 	})) : void 0;
 	const ferm = d["fermentazione"] ?? {};
@@ -13666,6 +13667,7 @@ function collectUnmappedFieldDetails(raw) {
 			"temperatura_in_c",
 			"temperatura_strike_c",
 			"durata_min",
+			"step",
 			"steps",
 			"acqua_strike_litri",
 			"spessore_l_kg",
@@ -13727,6 +13729,7 @@ function collectUnmappedFieldDetails(raw) {
 			"forma",
 			"quantita_ml",
 			"quantita_g",
+			"quantita_bustine",
 			"quantita",
 			"attenuazione_percent",
 			"laboratorio",
@@ -13999,14 +14002,15 @@ function buildModel(recipe, raw) {
 			target("Volume acqua mash", recipe.mash_water_liters, " L"),
 			target("Spessore mash", firstNumber(mashRaw, ["spessore_l_kg"]), " L/kg")
 		].filter((item) => item !== void 0));
-		const steps = Array.isArray(mashRaw["steps"]) ? mashRaw["steps"] : [];
+		const rawSteps = mashRaw["steps"] ?? mashRaw["step"];
+		const steps = Array.isArray(rawSteps) ? rawSteps : [];
 		if (steps.length > 0) steps.forEach((step, index) => mash.actions.push({
 			phase: "mash",
 			order: 20 + index,
 			moment: `Step ${index + 1}`,
 			action: "Mantenere il mash",
 			temperature: quantity(step["temperatura_c"], "°C"),
-			duration: quantity(step["tempo_min"], "min"),
+			duration: quantity(step["tempo_min"] ?? step["durata_min"], "min"),
 			note: text(step["note"])
 		}));
 		else if (recipe.mash_temp_c !== void 0 && firstNumber(mashRaw, ["durata_min"]) !== void 0) mash.actions.push({
@@ -14166,15 +14170,17 @@ function buildModel(recipe, raw) {
 		const yeastQuantity = firstNumber(yeastRaw, [
 			"quantita_ml",
 			"quantita_g",
+			"quantita_bustine",
 			"quantita"
 		]);
+		const yeastQuantityUnit = yeastRaw["quantita_bustine"] !== void 0 ? yeastQuantity === 1 ? "bustina" : "bustine" : yeastRaw["forma"]?.toString().toLowerCase().includes("slurry") ? "mL" : "g";
 		if (recipe.yeast.strain) cooling.actions.push({
 			phase: "cooling",
 			order: 20,
 			moment: "Inoculo",
 			action: "Inoculare il lievito",
 			ingredient: recipe.yeast.strain,
-			quantity: quantity(yeastQuantity, yeastRaw["forma"]?.toString().toLowerCase().includes("slurry") ? "mL" : "g"),
+			quantity: quantity(yeastQuantity, yeastQuantityUnit),
 			note: [text(yeastRaw["forma"]), yeastQuantity === void 0 ? "Quantità da determinare; non presumere un dosaggio." : void 0].filter(Boolean).join(" — ") || void 0
 		});
 		cooling.measurements.push(measurement("Volume effettivo nel fermentatore", "L"), measurement("OG effettiva", "SG"), measurement("Temperatura di inoculo", "°C"), measurement("Ora inoculo"));

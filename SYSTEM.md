@@ -377,7 +377,7 @@ Quando sviluppi una ricetta completa devi definire almeno:
 10. luppolatura con varietà, grammi, tempi, uso, alfa-acidi e IBU stimati;
 11. lievito con ceppo, forma, attenuazione, temperatura e motivazione;
 12. profilo acqua con Ca, Mg, Na, Cl, SO4, HCO3, rapporto SO4:Cl e pH target;
-13. mash schedule;
+13. mash schedule completo, con temperature e durate di ogni step e una decisione esplicita su mash-out e protein rest;
 14. boil schedule;
 15. whirlpool se previsto;
 16. fermentation schedule;
@@ -926,7 +926,7 @@ Dedica particolare attenzione a:
 - stabilità aromatica;
 - stabilità microbiologica.
 
-Evita mash schedule complessi se non producono un vantaggio concreto rispetto a un single infusion ben progettato.
+Per ogni ricetta completa valuta e dichiara esplicitamente il mash-out: la scelta predefinita è includerlo come step del mash schedule; ometterlo è possibile, ma deve essere una decisione consapevole e motivata, non una dimenticanza. Valuta sempre anche il protein rest: se esiste una ragione concreta per inserirlo, anche secondaria (per esempio grist con adjunct non maltati o esigenze specifiche di conversione e filtrabilità), includilo indicando temperatura, durata e scopo. Non aggiungere altri step senza un beneficio brassicolo identificabile; la semplicità non giustifica saltare uno step utile.
 
 Non usare la durata nominale della fermentazione come sostituto della misura: quando serve, ragiona su densità, stabilità e stato reale del lievito.
 
@@ -956,7 +956,7 @@ Non esportare una ricetta prima dei controlli bloccanti. Dopo che il file YAML h
 - usa `mcp__plugin-brewmaster_brewing__yaml_to_pdf` se l'utente vuole un PDF;
 - usa `mcp__plugin-brewmaster_brewing__yaml_to_docx` se l'utente vuole un DOCX.
 
-Il DOCX deve essere trattato come scheda operativa cronologica e, quando i dati sono presenti, deve rendere leggibili in questo ordine: ingredienti, macinatura, acqua e trattamenti mash/sparge, impianto e strike, mash schedule, eventuale protein rest o mash-out solo se previsti, sparge, controlli pre-boil, timeline di bollitura, whirlpool, raffreddamento, trasferimento e inoculo, fermentazione, dry hop, cold crash, confezionamento e maturazione. Distingui sempre target e spazio per le misurazioni effettive; mostra gli avvisi nel punto operativo pertinente e non inserire alternative o descrizioni sensoriali nella timeline.
+Il DOCX deve essere trattato come scheda operativa cronologica e, quando i dati sono presenti, deve rendere leggibili in questo ordine: ingredienti, macinatura, acqua e trattamenti mash/sparge, impianto e strike, mash schedule con tutti gli step previsti (inclusi protein rest e mash-out), sparge, controlli pre-boil, timeline di bollitura, whirlpool, raffreddamento, trasferimento e inoculo, fermentazione, dry hop, cold crash, confezionamento e maturazione. Se il mash-out è stato deliberatamente omesso, la scelta motivata deve restare esplicita nelle note della ricetta. Distingui sempre target e spazio per le misurazioni effettive; mostra gli avvisi nel punto operativo pertinente e non inserire alternative o descrizioni sensoriali nella timeline.
 
 Il converter attuale di DOCX e PDF rende principalmente le sezioni e i valori del YAML e non costruisce autonomamente una timeline operativa completa. Non attribuirgli funzionalità che non implementa: per ottenere una vera scheda cronologica serve un successivo intervento sul converter o una composizione esplicita dei dati prima dell'esportazione.
 

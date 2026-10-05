@@ -1,7 +1,7 @@
 {
   "name": "brewmaster-mcp-tools",
   "private": true,
-  "version": "1.1.9",
+  "version": "1.1.10",
   "type": "module",
   "description": "Standalone MCP stdio server bundling the brewmaster plugin's brewing tools. Not part of the kimi-code pnpm workspace — built independently and its dist/server.js output is committed for the plugin to run.",
   "scripts": {

@@ -56,6 +56,45 @@ async function main(): Promise<void> {
   }
   assert(payload.display.report.includes('Aggiunte consigliate') && payload.display.report.includes('Acido lattico'), 'JSON should retain the human-readable addition report');
 
+  const automaticVolumeResponse = await tool.resolveExecution({
+    source_water: { ca: 35.2, mg: 5.6, na: 3.8, cl: 8, so4: 1.6, hco3: 136 },
+    target_profile: 'brown_ale',
+    grain_kg: 2.85,
+    fermenter_target_l: 11,
+    boil_off_l_per_hour: 3,
+    boil_duration_h: 1,
+    trub_loss_l: 0.5,
+  }).execute({
+    turnId: 4,
+    toolCallId: 'water-automatic-volume-test',
+    signal: new AbortController().signal,
+  });
+  const automaticVolumePayload = JSON.parse(automaticVolumeResponse.output) as {
+    result: { recipe_yaml: { acqua: { mash_litri: number; sparge_litri: number } } };
+  };
+  assert(!automaticVolumeResponse.isError, 'automatic water volumes should accept the documented default mash ratio');
+  assert(Math.abs(automaticVolumePayload.result.recipe_yaml.acqua.mash_litri - 16.475) < 0.01, 'automatic mash volume should use 3.5 L/kg for a fermenter target up to 20 L');
+  assert(Math.abs(automaticVolumePayload.result.recipe_yaml.acqua.sparge_litri - 0.59) < 0.001, 'automatic sparge volume should meet the derived pre-boil target');
+
+  const largeBatchResponse = await tool.resolveExecution({
+    source_water: { ca: 35.2, mg: 5.6, na: 3.8, cl: 8, so4: 1.6, hco3: 136 },
+    target_profile: 'brown_ale',
+    grain_kg: 2.85,
+    fermenter_target_l: 21,
+    boil_off_l_per_hour: 3,
+    boil_duration_h: 1,
+    trub_loss_l: 0.5,
+  }).execute({
+    turnId: 5,
+    toolCallId: 'water-large-batch-volume-test',
+    signal: new AbortController().signal,
+  });
+  const largeBatchPayload = JSON.parse(largeBatchResponse.output) as {
+    result: { recipe_yaml: { acqua: { mash_litri: number; sparge_litri: number } } };
+  };
+  assert(!largeBatchResponse.isError, 'automatic water volumes should accept a fermenter target above 20 L');
+  assert(Math.abs(largeBatchPayload.result.recipe_yaml.acqua.mash_litri - 19.325) < 0.01, 'automatic mash volume should use 4.5 L/kg above 20 L');
+
   const spargeOnlyResponse = await tool.resolveExecution({
     source_water: { ca: 0, mg: 0, na: 0, cl: 0, so4: 0, hco3: 200 },
     target_profile: 'american_ipa',

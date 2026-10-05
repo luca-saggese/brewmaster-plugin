@@ -5209,7 +5209,7 @@ const WaterProfileCalculatorInputSchema = object({
 	mash_water_liters: number().positive().optional().describe("Volume acqua di ammostamento in litri. Se omesso, calcolato automaticamente da grain_kg + mash_ratio_l_per_kg + dead_space_l."),
 	sparge_water_liters: number().nonnegative().optional().describe("Volume acqua di sparge in litri. Se omesso, calcolato automaticamente da pre_boil_target_l + grain_kg × grain_absorption_l_per_kg − mash_water_liters."),
 	grain_kg: number().positive().optional().describe("Peso totale dei grani in kg. Necessario per il calcolo automatico dei volumi di mash e sparge."),
-	mash_ratio_l_per_kg: number().positive().optional().describe("Rapporto acqua/malto in L/kg. Default: 3.0."),
+	mash_ratio_l_per_kg: number().positive().optional().describe("Rapporto acqua/malto in L/kg. Default automatico: 3.5 fino a 20 L, 4.5 oltre 20 L di target fermentatore."),
 	dead_space_l: number().nonnegative().optional().describe("Spazio morto sotto/intorno al cestello in litri (es. BrewZilla Gen 3.1.1: ~6.5 L, Gen 4: ~5–6 L). Default: 6.5."),
 	grain_absorption_l_per_kg: number().positive().optional().describe("Assorbimento delle trebbie in L/kg. Default: 0.9 (range tipico 0.8–0.95 per sistemi single-vessel)."),
 	pre_boil_target_l: number().positive().optional().describe("Volume pre-boil target in litri. Se omesso, calcolato da fermenter_target_l + boil_off_l_per_hour × boil_duration_h + trub_loss_l."),
@@ -6032,7 +6032,8 @@ var WaterProfileCalculatorTool = class {
 				output: `Unknown: "${args.target_profile}"`
 			});
 			const s = args.source_water;
-			const MASH_RATIO = args.mash_ratio_l_per_kg ?? 4.5;
+			const defaultMashRatio = (args.fermenter_target_l ?? 0) > 20 ? 4.5 : 3.5;
+			const MASH_RATIO = args.mash_ratio_l_per_kg ?? defaultMashRatio;
 			const DEAD_SPACE = args.dead_space_l ?? 6.5;
 			const ABSORPTION = args.grain_absorption_l_per_kg ?? .9;
 			const BOIL_OFF = args.boil_off_l_per_hour ?? 3;

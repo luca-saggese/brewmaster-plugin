@@ -49,7 +49,7 @@ export const WaterProfileCalculatorInputSchema = z.object({
   grain_kg: z.number().positive().optional()
     .describe('Peso totale dei grani in kg. Necessario per il calcolo automatico dei volumi di mash e sparge.'),
   mash_ratio_l_per_kg: z.number().positive().optional()
-    .describe('Rapporto acqua/malto in L/kg. Default: 3.0.'),
+    .describe('Rapporto acqua/malto in L/kg. Default automatico: 3.5 fino a 20 L, 4.5 oltre 20 L di target fermentatore.'),
   dead_space_l: z.number().nonnegative().optional()
     .describe('Spazio morto sotto/intorno al cestello in litri (es. BrewZilla Gen 3.1.1: ~6.5 L, Gen 4: ~5–6 L). Default: 6.5.'),
   grain_absorption_l_per_kg: z.number().positive().optional()
@@ -186,7 +186,8 @@ export class WaterProfileCalculatorTool implements BuiltinTool<WaterProfileCalcu
 
       // ── Water volume ──────────────────────────────────────────────────
       // Defaults are retained for compatibility, but are identified in the output.
-      const MASH_RATIO = args.mash_ratio_l_per_kg ?? 4.5;
+      const defaultMashRatio = (args.fermenter_target_l ?? 0) > 20 ? 4.5 : 3.5;
+      const MASH_RATIO = args.mash_ratio_l_per_kg ?? defaultMashRatio;
       const DEAD_SPACE = args.dead_space_l ?? 6.5;
       const ABSORPTION = args.grain_absorption_l_per_kg ?? 0.9;
       const BOIL_OFF = args.boil_off_l_per_hour ?? 3.0;

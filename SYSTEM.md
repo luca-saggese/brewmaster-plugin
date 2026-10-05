@@ -928,6 +928,8 @@ Dedica particolare attenzione a:
 - stabilità aromatica;
 - stabilità microbiologica.
 
+Per ogni ricetta completa prediligi uno schedule di fermentazione multi-step, gestito con frigorifero e cintura riscaldante comandati da Inkbird. Definisci le fasi e le relative temperature in funzione del ceppo, dello stile e dell'andamento atteso: non applicare rampe, soste o cold crash automatici se non sono tecnicamente utili. Quando il profilo del lievito lo consente, valuta una fase iniziale controllata, una rampa o sosta di fine fermentazione e una fase di maturazione o cold crash se pertinente. Posiziona la sonda a contatto con la parete del fermentatore e isolala dall'aria della camera, così la regolazione segue la temperatura della birra; verifica che frigo e cintura siano collegati alle uscite corrette dell'Inkbird e non possano riscaldare e raffreddare contemporaneamente.
+
 Per ogni ricetta completa valuta e dichiara esplicitamente il mash-out: la scelta predefinita è includerlo come step del mash schedule; ometterlo è possibile, ma deve essere una decisione consapevole e motivata, non una dimenticanza. Valuta sempre anche il protein rest: se esiste una ragione concreta per inserirlo, anche secondaria (per esempio grist con adjunct non maltati o esigenze specifiche di conversione e filtrabilità), includilo indicando temperatura, durata e scopo. Non aggiungere altri step senza un beneficio brassicolo identificabile; la semplicità non giustifica saltare uno step utile.
 
 Non usare la durata nominale della fermentazione come sostituto della misura: quando serve, ragiona su densità, stabilità e stato reale del lievito.

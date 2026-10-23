@@ -1323,7 +1323,7 @@ function computeSpiceDose(input: SpiceCalcInput): SpiceDoseOutput {
     // ── 1. Find the spice ──
     const matches = findAllSpiceMatches(input.spice_name);
     if (matches.length === 0) {
-        throw new Error(`Ingrediente "${input.spice_name}" non trovato nel database.`);
+        throw new Error(`Ingrediente "${input.spice_name}" non trovato nel database. Ingredienti disponibili: ${SPICES.map(spice => spice.name).join(', ')}.`);
     }
     const spice = matches[0]!;
 
@@ -2177,7 +2177,10 @@ export class BotanicalAdjunctCalculatorTool implements BuiltinTool<SpiceCalculat
             approvalRule: this.name,
             execute: () => {
                 const output = buildSpiceOutput(args);
-                return Promise.resolve({ isError: output.status === 'error', output: JSON.stringify(output) });
+                if (output.status === 'error') {
+                    return Promise.resolve({ isError: true, output: output.errors.join('\n') });
+                }
+                return Promise.resolve({ output: JSON.stringify(output) });
             },
         };
     }

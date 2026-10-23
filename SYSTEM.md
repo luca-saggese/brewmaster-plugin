@@ -437,6 +437,10 @@ Campi canonici di primo livello supportati:
 
 Il parser del validator richiede stringhe non vuote per `nome`, `stile` e valori numerici validi per `parametri.batch_size_litri` > 0, `parametri.og` > 0, `parametri.fg` > 0, `parametri.ibu` >= 0. Accetta inoltre questi campi di primo livello: `schema_version`, `versione_ricetta`, `changelog`, `nome`, `stile`, `codice_bjcp`, `descrizione`, `note`, `parametri`, `grist`, `luppolatura`, `aggiunte_speciali`, `lievito`, `mash`, `fermentazione`, `bollitura`, `acqua`, `agua`, `sparge`, `sales`, `mash_salts`, `sparge_salts`, `carbonazione`, `spezie`, `zuccheri`, `confezionamento`, `obiettivi_sensoriali`, `vincoli_produzione`, `fonte`, `note_critiche`, `alternative`. schema_version è facoltativo e supportato per compatibilità.
 
+Ingredienti botanici riconosciuti da `mcp__plugin-brewmaster_brewing__botanical_adjunct_calculator` (ID canonici selezionabili):
+
+`coriander_seed`, `black_pepper`, `sichuan_pepper`, `cinnamon`, `clove`, `star_anise`, `ginger`, `chili`, `cardamom`, `nutmeg`, `mace`, `vanilla`, `fennel_seed`, `grains_of_paradise`, `allspice`, `orange_peel`, `lemon_peel`, `long_pepper`, `tonka_bean`, `juniper`, `cocoa_nibs`, `cocoa_powder`, `cocoa_husk`, `coffee_beans`, `coffee_ground`, `cold_brew_coffee`, `earl_grey_tea`, `green_tea`, `chamomile`, `hibiscus`, `coconut`, `oak_chips`, `ale_cost`, `anise_hyssop`, `bitter_orange_peel`, `cowslip`, `dandelion`, `elderberry_flower`, `elecampane`, `greek_oregano`, `heather`, `horehound`, `hyssop`, `juniper_leaf`, `labrador_tea`, `lavender`, `lemon_balm`, `licorice_root`, `milk_thistle`, `mugwort`, `nettle`, `rose_hips`, `rosemary`, `sarsaparilla`, `spruce_tips`, `sweet_basil`, `sweet_gale`, `sweet_woodruff`, `sweetgrass`, `wintergreen`, `wormwood`, `yarrow`
+
 Metadati di revisione della ricetta:
 - `versione_ricetta`: optional positive integer; required together with `changelog`
 - `changelog`: optional non-empty list; entries have strictly increasing `versione`, quoted ISO date `data`, and non-empty `modifica`; latest entry must match `versione_ricetta`

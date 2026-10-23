@@ -22178,7 +22178,7 @@ function findSpice(raw) {
 }
 function computeSpiceDose(input) {
 	const matches = findAllSpiceMatches(input.spice_name);
-	if (matches.length === 0) throw new Error(`Ingrediente "${input.spice_name}" non trovato nel database.`);
+	if (matches.length === 0) throw new Error(`Ingrediente "${input.spice_name}" non trovato nel database. Ingredienti disponibili: ${SPICES.map((spice) => spice.name).join(", ")}.`);
 	const spice = matches[0];
 	const isChili = spice.id === "chili";
 	const refRange = spice[input.intensity];
@@ -22793,10 +22793,11 @@ var BotanicalAdjunctCalculatorTool = class {
 			approvalRule: this.name,
 			execute: () => {
 				const output = buildSpiceOutput(args);
-				return Promise.resolve({
-					isError: output.status === "error",
-					output: JSON.stringify(output)
+				if (output.status === "error") return Promise.resolve({
+					isError: true,
+					output: output.errors.join("\n")
 				});
+				return Promise.resolve({ output: JSON.stringify(output) });
 			}
 		};
 	}

@@ -19,6 +19,7 @@ if (start < 0 || end < 0 || end <= start) {
 }
 
 const fields = schema.canonical_fields.map(field => `- \`${field}\``).join('\n');
+const botanicalIngredients = schema.botanical_adjunct_ingredients.map(value => `\`${value}\``).join(', ');
 const acceptedFields = schema.validator.accepted_top_level_fields.map(field => `\`${field}\``).join(', ');
 const requiredStrings = schema.validator.required_string_fields.map(field => `\`${field}\``).join(', ');
 const requiredNumbers = Object.entries(schema.validator.required_numeric_parameters)
@@ -48,6 +49,10 @@ const generated = [
   fields,
   '',
   `Il parser del validator richiede stringhe non vuote per ${requiredStrings} e valori numerici validi per ${requiredNumbers}. Accetta inoltre questi campi di primo livello: ${acceptedFields}. schema_version è facoltativo e supportato per compatibilità.`,
+  '',
+  'Ingredienti botanici riconosciuti da `mcp__plugin-brewmaster_brewing__botanical_adjunct_calculator` (ID canonici selezionabili):',
+  '',
+  botanicalIngredients,
   '',
   'Metadati di revisione della ricetta:',
   ...historyRequirements,

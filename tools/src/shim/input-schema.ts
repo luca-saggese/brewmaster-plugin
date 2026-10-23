@@ -11,7 +11,10 @@ export function toInputJsonSchema(schema: z.ZodType): Record<string, unknown> {
     target: 'draft-7',
     io: 'input',
   });
-  closeObjectNodes(jsonSchema);
+  // The MCP host may send useful context fields that are not consumed by a
+  // particular tool. Validate declared properties and required fields, while
+  // allowing those additional properties through to the tool.
+  allowAdditionalProperties(jsonSchema);
   // The MCP host validates every tool inputSchema as a JSON object schema and
   // rejects roots without `type: "object"`. zod renders a `discriminatedUnion`
   // as a bare `{ "oneOf": [...] }` with no root type, so force the root type
@@ -22,17 +25,15 @@ export function toInputJsonSchema(schema: z.ZodType): Record<string, unknown> {
   return jsonSchema;
 }
 
-function closeObjectNodes(value: unknown): void {
+function allowAdditionalProperties(value: unknown): void {
   if (Array.isArray(value)) {
     for (const item of value) closeObjectNodes(item);
     return;
   }
   if (typeof value !== 'object' || value === null) return;
   const node = value as Record<string, unknown>;
-  if (node['type'] === 'object' && node['additionalProperties'] === undefined) {
-    node['additionalProperties'] = false;
-  }
+  if (node['type'] === 'object') node['additionalProperties'] = true;
   for (const child of Object.values(node)) {
-    closeObjectNodes(child);
+    allowAdditionalProperties(child);
   }
 }

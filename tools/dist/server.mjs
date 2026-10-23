@@ -4218,19 +4218,19 @@ function toInputJsonSchema(schema) {
 		target: "draft-7",
 		io: "input"
 	});
-	closeObjectNodes(jsonSchema);
+	allowAdditionalProperties(jsonSchema);
 	if ((jsonSchema["oneOf"] !== void 0 || jsonSchema["anyOf"] !== void 0) && jsonSchema["type"] === void 0) jsonSchema["type"] = "object";
 	return jsonSchema;
 }
-function closeObjectNodes(value) {
+function allowAdditionalProperties(value) {
 	if (Array.isArray(value)) {
 		for (const item of value) closeObjectNodes(item);
 		return;
 	}
 	if (typeof value !== "object" || value === null) return;
 	const node = value;
-	if (node["type"] === "object" && node["additionalProperties"] === void 0) node["additionalProperties"] = false;
-	for (const child of Object.values(node)) closeObjectNodes(child);
+	if (node["type"] === "object") node["additionalProperties"] = true;
+	for (const child of Object.values(node)) allowAdditionalProperties(child);
 }
 
 //#endregion
